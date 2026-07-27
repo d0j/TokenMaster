@@ -1,5 +1,38 @@
 # TokenMaster handoff
 
+## Exact replay batching and schema-v15 compatibility (2026-07-27)
+
+Product state: UI is frozen. The accepted backend slice batches bounded current replay
+commands across sources/chunks, fast-paths exact root sessions, avoids redundant
+observation/selection writes, and prefetches only one bounded next source batch. The
+single ordered SQLite writer, 256-command/event/relation caps, exact observations,
+lineage, checkpoints, and FULL durability remain.
+
+Audit/evidence state: the sole final Sol review found one High compatibility defect:
+removing an index without a schema migration rejected existing v14 archives. Schema
+v15 now drops that unused write-heavy index atomically, preserves an exact v14
+validator, proves successful reopen/data preservation and injected rollback, and
+advances v13/fresh archives directly to v15 without exposing an intermediate committed
+schema. Focused migration/schema/replay/open/query/live suites pass. The final real
+122-second receipt reached 435/4,008 sources, 265,386 observations, and 34.6 MiB peak
+private memory: +6.1% sources and +10.4% observations over the comparable pre-slice
+receipt.
+
+Release blockers: the exact cold import still does not complete within the WMT
+aggregate importer’s roughly 262-second receipt, so no cross-product speed superiority
+is claimed. WMT retains compact aggregate state; TokenMaster retains exact facts and
+durable replay authority. Do not reopen cache, PRAGMA, parser, index, or multi-reader
+tuning. The next backend performance slice, if selected, must separate exact ingestion
+from expensive live projection using bounded deferred/set-based materialization.
+Signing, authenticated DPI/accessibility acceptance, and the operator-deferred soak
+remain external.
+
+Git state: clean-root, format, strict workspace Clippy, the complete app workspace
+segment, the complete Store package, and workspace doc-tests pass. Closeout is pending
+only the local commit.
+`AUDIT_HARDENING_LOOP` is not active; the 60-minute performance stop is active and no
+further tuning belongs to this slice. No interactive UI was opened.
+
 ## Active partial publication and cold-import boundary (2026-07-27)
 
 Product state: UI remains frozen. `LiveRuntime` now publishes each durable initial

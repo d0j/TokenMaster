@@ -5,10 +5,12 @@ use tokenmaster_engine::{
     ScopeIdentity, ScopeManifest, ScopeSink, SinkControl, SourceBatchReader, SourceSink,
     canonicalize_batch,
 };
-use tokenmaster_store::{ArchivePublicationQuality, MAX_SCAN_SCOPES};
+use tokenmaster_store::{
+    ArchivePublicationQuality, MAX_APPEND_EVENTS, MAX_APPEND_RELATIONS, MAX_SCAN_SCOPES,
+};
 
 use crate::StoreArchive;
-use crate::store_archive::CurrentCursor;
+use crate::store_archive::{CurrentCursor, PreparedCurrentBatch};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IncrementalRefreshOutcome {
@@ -296,6 +298,9 @@ fn run_tail_passes(
             control,
             cursor: *cursor,
             counts,
+            pending: Vec::new(),
+            pending_events: 0,
+            pending_relations: 0,
         };
         let completion = match adapter.visit_replay_sources(scope, control, &mut sink) {
             Ok(completion) => completion,
@@ -305,6 +310,7 @@ fn run_tail_passes(
             }
             Err(error) => return Err(error),
         };
+        sink.flush_pending()?;
         *cursor = sink.cursor;
         if completion.quality() != CompletionQuality::Complete {
             return Ok(IncrementalRefreshOutcome::Partial);
@@ -405,6 +411,55 @@ struct ApplySink<'a> {
     control: &'a OperationControl<'a>,
     cursor: CurrentCursor,
     counts: &'a mut RefreshCounts,
+    pending: Vec<PreparedCurrentBatch>,
+    pending_events: usize,
+    pending_relations: usize,
+}
+
+impl ApplySink<'_> {
+    fn flush_pending(&mut self) -> Result<(), PortError> {
+        if self.pending.is_empty() {
+            return Ok(());
+        }
+        let (cursor, remaining_work) = self
+            .archive
+            .apply_prepared_current_batches(self.cursor, &self.pending)?;
+        self.cursor = cursor;
+        self.pending.clear();
+        self.pending_events = 0;
+        self.pending_relations = 0;
+        if remaining_work {
+            let _ = settle_current(self.archive, &mut self.cursor, self.control)?;
+        }
+        Ok(())
+    }
+
+    fn queue_final_batch(&mut self, batch: PreparedCurrentBatch) -> Result<(), PortError> {
+        let next_events = self
+            .pending_events
+            .checked_add(batch.event_count())
+            .ok_or_else(|| PortError::new(PortErrorCode::CapacityExceeded))?;
+        let next_relations = self
+            .pending_relations
+            .checked_add(batch.relation_count())
+            .ok_or_else(|| PortError::new(PortErrorCode::CapacityExceeded))?;
+        if self.pending.len() == MAX_APPEND_EVENTS
+            || next_events > MAX_APPEND_EVENTS
+            || next_relations > MAX_APPEND_RELATIONS
+        {
+            self.flush_pending()?;
+        }
+        self.pending_events = self
+            .pending_events
+            .checked_add(batch.event_count())
+            .ok_or_else(|| PortError::new(PortErrorCode::CapacityExceeded))?;
+        self.pending_relations = self
+            .pending_relations
+            .checked_add(batch.relation_count())
+            .ok_or_else(|| PortError::new(PortErrorCode::CapacityExceeded))?;
+        self.pending.push(batch);
+        Ok(())
+    }
 }
 
 impl ReplaySourceSink for ApplySink<'_> {
@@ -432,6 +487,7 @@ impl ReplaySourceSink for ApplySink<'_> {
                     } else {
                         let repaired =
                             reset_resume_progress(reader, &initial_state, &progress, self.control)?;
+                        self.flush_pending()?;
                         let (next_cursor, remaining_work) =
                             self.archive.repair_current_source_resume(
                                 self.cursor,
@@ -464,6 +520,7 @@ impl ReplaySourceSink for ApplySink<'_> {
                 && counters.events_observed() == 0
                 && counters.diagnostics() == 0;
             if unchanged {
+                self.flush_pending()?;
                 let (next_cursor, remaining_work) = if let Some(repaired) = fresh_start_repair {
                     self.archive.repair_current_source_resume(
                         self.cursor,
@@ -485,19 +542,29 @@ impl ReplaySourceSink for ApplySink<'_> {
                 checked_add(self.counts.events_observed, counters.events_observed())?;
             self.counts.diagnostics = checked_add(self.counts.diagnostics, counters.diagnostics())?;
             let canonical = canonicalize_batch(source.identity(), batch)?;
+            self.counts.batches_committed = checked_add(self.counts.batches_committed, 1)?;
+            if state == BatchState::SnapshotEnd {
+                let prepared = self.archive.prepare_current_batch(
+                    self.cursor,
+                    source.identity(),
+                    canonical,
+                )?;
+                if !prepared.source_caught_up() {
+                    return Ok(SinkControl::Stop);
+                }
+                self.queue_final_batch(prepared)?;
+                break;
+            }
+            self.flush_pending()?;
             let (next_cursor, remaining_work, source_caught_up) = self
                 .archive
                 .append_current_batch(self.cursor, source.identity(), canonical)?;
             self.cursor = next_cursor;
-            self.counts.batches_committed = checked_add(self.counts.batches_committed, 1)?;
             if remaining_work {
                 let _ = settle_current(self.archive, &mut self.cursor, self.control)?;
             }
-            if state == BatchState::SnapshotEnd {
-                if !source_caught_up {
-                    return Ok(SinkControl::Stop);
-                }
-                break;
+            if source_caught_up {
+                return Err(PortError::new(PortErrorCode::InvalidData));
             }
         }
         Ok(SinkControl::Continue)

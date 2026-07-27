@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-pub const USAGE_SCHEMA_VERSION: i64 = 14;
+pub const USAGE_SCHEMA_VERSION: i64 = 15;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
@@ -14,6 +14,7 @@ pub(super) const V10_SCHEMA_VERSION: i64 = 10;
 pub(super) const V11_SCHEMA_VERSION: i64 = 11;
 pub(super) const V12_SCHEMA_VERSION: i64 = 12;
 pub(super) const V13_SCHEMA_VERSION: i64 = 13;
+pub(super) const V14_SCHEMA_VERSION: i64 = 14;
 
 #[derive(Clone, Copy)]
 pub(super) struct TableContract {
@@ -58,7 +59,7 @@ pub(super) const V1_INDEX_CONTRACTS: &[IndexContract] = &[
     },
 ];
 
-pub(super) const USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
+pub(super) const V14_USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
     IndexContract {
         name: "usage_event_model_time",
         sql: "CREATE INDEX usage_event_model_time ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
@@ -90,6 +91,57 @@ pub(super) const USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
     IndexContract {
         name: "usage_replay_observation_children",
         sql: "CREATE INDEX usage_replay_observation_children ON usage_replay_observation(revision_id, provider_id, profile_id, parent_session_id, session_ordinal, disposition, session_id)",
+    },
+    IndexContract {
+        name: "usage_replay_observation_disposition",
+        sql: "CREATE INDEX usage_replay_observation_disposition ON usage_replay_observation(revision_id, disposition)",
+    },
+    IndexContract {
+        name: "usage_replay_observation_fingerprint",
+        sql: "CREATE INDEX usage_replay_observation_fingerprint ON usage_replay_observation(revision_id, fingerprint, disposition, file_key, generation, source_offset)",
+    },
+    IndexContract {
+        name: "usage_replay_observation_parent",
+        sql: "CREATE INDEX usage_replay_observation_parent ON usage_replay_observation(revision_id, provider_id, profile_id, session_id, session_ordinal)",
+    },
+    IndexContract {
+        name: "usage_replay_revision_one_current",
+        sql: "CREATE UNIQUE INDEX usage_replay_revision_one_current ON usage_replay_revision(status) WHERE status = 'current'",
+    },
+    IndexContract {
+        name: "usage_replay_revision_one_staging",
+        sql: "CREATE UNIQUE INDEX usage_replay_revision_one_staging ON usage_replay_revision(status) WHERE status = 'staging'",
+    },
+];
+
+pub(super) const USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
+    IndexContract {
+        name: "usage_event_model_time",
+        sql: "CREATE INDEX usage_event_model_time ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_event_time_desc",
+        sql: "CREATE INDEX usage_event_time_desc ON usage_event(timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_generation_one_current",
+        sql: "CREATE UNIQUE INDEX usage_generation_one_current ON usage_generation(file_key) WHERE status = 'current'",
+    },
+    IndexContract {
+        name: "usage_generation_one_staging",
+        sql: "CREATE UNIQUE INDEX usage_generation_one_staging ON usage_generation(file_key) WHERE status = 'staging'",
+    },
+    IndexContract {
+        name: "usage_legacy_event_model_time",
+        sql: "CREATE INDEX usage_legacy_event_model_time ON usage_legacy_event(snapshot_id, model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_legacy_event_time_desc",
+        sql: "CREATE INDEX usage_legacy_event_time_desc ON usage_legacy_event(snapshot_id, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_observation_fingerprint",
+        sql: "CREATE INDEX usage_observation_fingerprint ON usage_observation(fingerprint, profile_id, file_key, generation, source_offset)",
     },
     IndexContract {
         name: "usage_replay_observation_disposition",

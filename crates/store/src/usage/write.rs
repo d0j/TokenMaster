@@ -156,7 +156,7 @@ impl UsageStore {
             {
                 return Err(StoreError::new(StoreErrorCode::InvalidValue));
             }
-            insert_observation(
+            let _ = insert_observation(
                 &transaction,
                 parts.source_key,
                 parts.expected_generation,
@@ -365,7 +365,7 @@ pub(super) fn insert_observation(
     source_key: super::SourceKey,
     generation: u64,
     event: &CanonicalUsageEvent,
-) -> Result<(), StoreError> {
+) -> Result<bool, StoreError> {
     let activity = event.activity().as_array();
     let mut statement = transaction.prepare_cached(
         "INSERT OR IGNORE INTO usage_observation(
@@ -382,7 +382,7 @@ pub(super) fn insert_observation(
            ?27, ?28, ?29, ?30, ?31
          )",
     )?;
-    statement.execute(params![
+    let changed = statement.execute(params![
         source_key.as_bytes().as_slice(),
         sql_u64(generation)?,
         sql_u64(event.source_offset())?,
@@ -418,7 +418,7 @@ pub(super) fn insert_observation(
             .map(|cost| sql_u64(cost.get()))
             .transpose()?,
     ])?;
-    Ok(())
+    Ok(changed == 1)
 }
 
 fn refresh_canonical(

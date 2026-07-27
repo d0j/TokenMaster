@@ -50,6 +50,14 @@ fn registration(seed: u8) -> SourceRegistration {
 }
 
 fn event(session: &str, source_offset: u64) -> CanonicalUsageEvent {
+    event_in_session(session, 0, source_offset)
+}
+
+fn event_in_session(
+    session: &str,
+    session_ordinal: u64,
+    source_offset: u64,
+) -> CanonicalUsageEvent {
     let usage = TokenUsage::new(
         TokenCount::Available(10),
         TokenCount::Unavailable,
@@ -62,7 +70,7 @@ fn event(session: &str, source_offset: u64) -> CanonicalUsageEvent {
         profile_id: UsageProfileId::new("default").unwrap(),
         session_id: UsageSessionId::new(session).unwrap(),
         parent_session_id: None,
-        session_ordinal: 0,
+        session_ordinal,
         lineage_conflict: false,
         source_id: UsageSourceId::new("fixture-23").unwrap(),
         source_offset,
@@ -223,6 +231,95 @@ fn current_tail_append_is_atomic_and_advances_both_cas_tokens() {
         stale.code(),
         StoreErrorCode::StaleRevision | StoreErrorCode::StaleCheckpoint
     ));
+}
+
+#[test]
+fn sequential_same_source_batches_commit_as_one_checked_transition() {
+    let (mut store, revision) = promoted_store();
+    let publication = store.archive_publication().unwrap();
+    let first = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            100,
+            200,
+            Vec::new(),
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    let second = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            200,
+            300,
+            vec![event("second", 210)],
+            Some(StoredSourceChunk::new(0, 200, [SEED + 4; 32]).unwrap()),
+            [SEED + 5; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+
+    let committed = store
+        .apply_current_replay_append_batches(&[first, second])
+        .unwrap();
+
+    assert_eq!(committed.epoch().get(), revision.epoch().get() + 1);
+    assert_eq!(
+        committed.archive_generation().get(),
+        publication.generation().get() + 1
+    );
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 2);
+    let generation = store
+        .generation_snapshot(SourceKey::from_bytes([SEED; 32]))
+        .unwrap()
+        .unwrap();
+    assert_eq!(generation.checkpoint().committed_offset(), 300);
+    assert_eq!(generation.checkpoint().scan_offset(), 300);
+}
+
+#[test]
+fn current_root_session_batch_materializes_every_exact_event() {
+    const EVENT_COUNT: u64 = 64;
+
+    let (mut store, revision) = promoted_store();
+    let publication = store.archive_publication().unwrap();
+    let events = (0..EVENT_COUNT)
+        .map(|ordinal| event_in_session("batched-root", ordinal, 101 + ordinal))
+        .collect();
+    let batch = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            100,
+            200,
+            events,
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+
+    let committed = store.apply_current_replay_append_batch(&batch).unwrap();
+
+    assert_eq!(committed.quality(), ArchivePublicationQuality::Complete);
+    assert!(!committed.remaining_work());
+    assert_eq!(
+        store.event_page_before(None, 256).unwrap().len(),
+        usize::try_from(EVENT_COUNT + 1).unwrap()
+    );
+    assert_eq!(store.counts().unwrap().canonical_events(), EVENT_COUNT + 1);
 }
 
 #[test]

@@ -229,7 +229,7 @@ impl UsageStore {
         if schema_version != USAGE_SCHEMA_VERSION {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
-        migration::validate_v14(&connection)?;
+        migration::validate_v15(&connection)?;
         apply_runtime_policy(&connection, false)?;
 
         let store = Self {

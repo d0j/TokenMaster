@@ -131,7 +131,7 @@ fn fresh_schema_has_strict_bounded_benefit_objects_and_recommended_profile() {
     drop(UsageStore::open(&path).expect("create current schema"));
     let connection = raw_connection(&path);
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 14);
+    assert_eq!(USAGE_SCHEMA_VERSION, 15);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))

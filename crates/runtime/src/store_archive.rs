@@ -4,8 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokenmaster_engine::{
     AdapterCompletion, AdapterSourceProgress, AdapterSourceState, Archive, ArchiveEpoch,
     ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, CanonicalBatch, CompletionQuality,
-    DiscoveredSource, PortError, PortErrorCode, ReplayContinuation, ReplayContinuationState,
-    ReplaySourceStart, ScopeIdentity, ScopeManifest, SourceIdentity,
+    DiscoveredSource, MAX_OBSERVATIONS_PER_BATCH, MAX_RELATIONS_PER_BATCH, PortError,
+    PortErrorCode, ReplayContinuation, ReplayContinuationState, ReplaySourceStart, ScopeIdentity,
+    ScopeManifest, SourceIdentity,
 };
 use tokenmaster_store::{
     AccountingVersions, AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode,
@@ -24,8 +25,41 @@ pub struct StoreArchive {
     store: UsageStore,
     last_timestamp_ms: i64,
     pending_discovered: Vec<SourceKey>,
+    pending_current_batches: Vec<PreparedCurrentBatch>,
+    pending_current_events: usize,
+    pending_current_relations: usize,
     scan_kind: Option<ScanKind>,
     progress_publication: Option<Arc<Mutex<EnginePublicationState>>>,
+}
+
+const MAX_PENDING_CURRENT_SOURCES: usize = 256;
+
+pub(crate) struct PreparedCurrentBatch {
+    command: CurrentReplayAppendBatch,
+    source_key: SourceKey,
+    generation: u64,
+    next_checkpoint: StoredCheckpoint,
+    event_count: usize,
+    relation_count: usize,
+    source_caught_up: bool,
+}
+
+impl PreparedCurrentBatch {
+    pub(crate) const fn event_count(&self) -> usize {
+        self.event_count
+    }
+
+    pub(crate) const fn relation_count(&self) -> usize {
+        self.relation_count
+    }
+
+    pub(crate) const fn source_caught_up(&self) -> bool {
+        self.source_caught_up
+    }
+
+    fn matches_source(&self, source_key: SourceKey) -> bool {
+        self.source_key == source_key
+    }
 }
 
 impl StoreArchive {
@@ -35,6 +69,9 @@ impl StoreArchive {
             store,
             last_timestamp_ms: 0,
             pending_discovered: Vec::new(),
+            pending_current_batches: Vec::new(),
+            pending_current_events: 0,
+            pending_current_relations: 0,
             scan_kind: None,
             progress_publication: None,
         }
@@ -177,6 +214,7 @@ impl StoreArchive {
         manifest: &ScopeManifest,
         scan_kind: ScanKind,
     ) -> Result<ArchiveScanSetId, PortError> {
+        self.clear_pending_current_batches();
         self.pending_discovered.clear();
         let scopes = manifest
             .scopes()
@@ -266,13 +304,36 @@ impl StoreArchive {
         source: &SourceIdentity,
         batch: CanonicalBatch,
     ) -> Result<(CurrentCursor, bool, bool), PortError> {
+        let prepared = self.prepare_current_batch(cursor, source, batch)?;
+        let source_caught_up = prepared.source_caught_up();
+        let (cursor, remaining_work) =
+            self.apply_prepared_current_batches(cursor, std::slice::from_ref(&prepared))?;
+        Ok((cursor, remaining_work, source_caught_up))
+    }
+
+    pub(crate) fn prepare_current_batch(
+        &mut self,
+        cursor: CurrentCursor,
+        source: &SourceIdentity,
+        batch: CanonicalBatch,
+    ) -> Result<PreparedCurrentBatch, PortError> {
         let source_key = source_key(source);
         let current = self
             .store
             .generation_snapshot(source_key)
             .map_err(|error| store_port_error(&error))?
             .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let pending = self
+            .pending_current_batches
+            .iter()
+            .rev()
+            .find(|pending| pending.matches_source(source_key));
+        let expected_generation = pending.map_or(current.generation(), |batch| batch.generation);
+        let expected_checkpoint =
+            pending.map_or(current.checkpoint(), |batch| &batch.next_checkpoint);
         let parts = batch.into_parts();
+        let event_count = parts.events.len();
+        let relation_count = parts.relations.len();
         let next_checkpoint =
             stored_checkpoint_from_progress(&parts.next_progress, CheckpointStorage::Progress)?;
         let source_caught_up = progress_is_caught_up(&parts.next_progress);
@@ -290,13 +351,13 @@ impl StoreArchive {
             .into_boxed_slice();
         let append = AppendBatch::new(AppendBatchParts {
             source_key,
-            expected_generation: current.generation(),
-            expected_committed_offset: current.checkpoint().committed_offset(),
-            expected_scan_offset: current.checkpoint().scan_offset(),
+            expected_generation,
+            expected_committed_offset: expected_checkpoint.committed_offset(),
+            expected_scan_offset: expected_checkpoint.scan_offset(),
             events: parts.events,
             previous_partial_chunk,
             chunk_updates,
-            next_checkpoint,
+            next_checkpoint: next_checkpoint.clone(),
             diagnostic_count_delta: parts.counters.diagnostics(),
         })
         .map_err(|error| store_port_error(&error))?;
@@ -308,9 +369,29 @@ impl StoreArchive {
             relations: parts.relations,
         })
         .map_err(|error| store_port_error(&error))?;
+        Ok(PreparedCurrentBatch {
+            command,
+            source_key,
+            generation: expected_generation,
+            next_checkpoint,
+            event_count,
+            relation_count,
+            source_caught_up,
+        })
+    }
+
+    pub(crate) fn apply_prepared_current_batches(
+        &mut self,
+        cursor: CurrentCursor,
+        batches: &[PreparedCurrentBatch],
+    ) -> Result<(CurrentCursor, bool), PortError> {
+        let commands = batches
+            .iter()
+            .map(|batch| batch.command.clone())
+            .collect::<Vec<_>>();
         let committed = self
             .store
-            .apply_current_replay_append_batch(&command)
+            .apply_current_replay_append_batches(&commands)
             .map_err(|error| store_port_error(&error))?;
         Ok((
             CurrentCursor {
@@ -319,8 +400,44 @@ impl StoreArchive {
                 archive_generation: committed.archive_generation(),
             },
             committed.remaining_work(),
-            source_caught_up,
         ))
+    }
+
+    fn pending_current_batch_fits(&self, event_count: usize, relation_count: usize) -> bool {
+        self.pending_current_batches.len() < MAX_PENDING_CURRENT_SOURCES
+            && self
+                .pending_current_events
+                .checked_add(event_count)
+                .is_some_and(|count| count <= MAX_OBSERVATIONS_PER_BATCH)
+            && self
+                .pending_current_relations
+                .checked_add(relation_count)
+                .is_some_and(|count| count <= MAX_RELATIONS_PER_BATCH)
+    }
+
+    fn clear_pending_current_batches(&mut self) {
+        self.pending_current_batches.clear();
+        self.pending_current_events = 0;
+        self.pending_current_relations = 0;
+    }
+
+    fn flush_pending_current_batches(
+        &mut self,
+        replay: ArchiveReplay,
+    ) -> Result<ArchiveReplay, PortError> {
+        if self.pending_current_batches.is_empty() {
+            return Ok(replay);
+        }
+        let cursor = self
+            .current_cursor_for_replay(replay)?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let pending = core::mem::take(&mut self.pending_current_batches);
+        self.pending_current_events = 0;
+        self.pending_current_relations = 0;
+        let (next, _) = self.apply_prepared_current_batches(cursor, &pending)?;
+        let replay = archive_replay(store_revision_id(replay.revision_id())?, next.epoch)?;
+        self.publish_progress();
+        Ok(replay)
     }
 
     pub(crate) fn complete_current_source(
@@ -677,14 +794,26 @@ impl Archive for StoreArchive {
 
     fn append_replay_batch(
         &mut self,
-        replay: ArchiveReplay,
+        mut replay: ArchiveReplay,
         source: &SourceIdentity,
         batch: CanonicalBatch,
     ) -> Result<ArchiveReplay, PortError> {
-        if let Some(cursor) = self.current_cursor_for_replay(replay)? {
-            let (next, _, _) = self.append_current_batch(cursor, source, batch)?;
-            let replay = archive_replay(store_revision_id(replay.revision_id())?, next.epoch)?;
-            self.publish_progress();
+        if self.current_cursor_for_replay(replay)?.is_some() {
+            let event_count = batch.events().len();
+            let relation_count = batch.relations().len();
+            if !self.pending_current_batch_fits(event_count, relation_count) {
+                replay = self.flush_pending_current_batches(replay)?;
+            }
+            let cursor = self
+                .current_cursor_for_replay(replay)?
+                .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+            let prepared = self.prepare_current_batch(cursor, source, batch)?;
+            self.pending_current_events += prepared.event_count();
+            self.pending_current_relations += prepared.relation_count();
+            self.pending_current_batches.push(prepared);
+            if !self.pending_current_batch_fits(0, 0) {
+                return self.flush_pending_current_batches(replay);
+            }
             return Ok(replay);
         }
         let source_key = source_key(source);
@@ -738,6 +867,7 @@ impl Archive for StoreArchive {
     }
 
     fn continue_replay(&mut self, replay: ArchiveReplay) -> Result<ReplayContinuation, PortError> {
+        let replay = self.flush_pending_current_batches(replay)?;
         if let Some(cursor) = self.current_cursor_for_replay(replay)? {
             let publication = self
                 .store
@@ -789,6 +919,7 @@ impl Archive for StoreArchive {
     }
 
     fn seal_replay(&mut self, replay: ArchiveReplay) -> Result<ArchiveReplay, PortError> {
+        let replay = self.flush_pending_current_batches(replay)?;
         if self.current_cursor_for_replay(replay)?.is_some() {
             let quality = self
                 .store
@@ -809,6 +940,7 @@ impl Archive for StoreArchive {
     }
 
     fn promote_replay(&mut self, replay: ArchiveReplay) -> Result<(), PortError> {
+        let replay = self.flush_pending_current_batches(replay)?;
         if self.current_cursor_for_replay(replay)?.is_some() {
             let quality = self
                 .store
@@ -831,6 +963,7 @@ impl Archive for StoreArchive {
     }
 
     fn discard_replay(&mut self, replay: ArchiveReplay) -> Result<(), PortError> {
+        self.clear_pending_current_batches();
         self.store
             .discard_replay_revision(
                 store_revision_id(replay.revision_id())?,

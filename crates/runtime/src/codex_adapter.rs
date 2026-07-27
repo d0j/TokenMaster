@@ -1,10 +1,11 @@
 use std::path::PathBuf;
+use std::thread::JoinHandle;
 
 use tokenmaster_codex::{
     BoundaryAnchor, CodexCheckpointV1, CodexProvider, EnumerationCompletion, LogicalFileIdentity,
     ParserDiagnosticCode, ParserResumeState, ReaderCheckpointParts, ReaderCheckpointV1,
-    ReaderDiagnosticCode, ReaderErrorCode, ReaderOutcome, SinkDecision, SourceCheckpointStatus,
-    SourceChunkDigest, SourceFileDescriptor, enumerate_profile_sources,
+    ReaderDiagnosticCode, ReaderError, ReaderErrorCode, ReaderOutcome, SinkDecision,
+    SourceCheckpointStatus, SourceChunkDigest, SourceFileDescriptor, enumerate_profile_sources,
     initialize_source_checkpoint, logical_file_identity, read_source_batch,
     validate_source_checkpoint,
 };
@@ -248,6 +249,7 @@ impl Adapter for CodexAdapter {
                 source: source.identity().clone(),
                 latest_repository_activity_hint: None,
                 repository_hint_ingress: self.repository_hint_ingress.clone(),
+                prefetched: None,
             };
             sink.on_source(source, state, &mut reader)
         })
@@ -278,6 +280,34 @@ struct CodexSourceBatchReader {
     source: SourceIdentity,
     latest_repository_activity_hint: Option<tokenmaster_provider::RepositoryActivityHint>,
     repository_hint_ingress: Option<crate::GitRepositoryHintIngress>,
+    prefetched: Option<PrefetchedBatch>,
+}
+
+struct PrefetchedBatch {
+    checkpoint: ReaderCheckpointV1,
+    handle: JoinHandle<Result<ReaderOutcome, ReaderError>>,
+}
+
+impl CodexSourceBatchReader {
+    fn start_prefetch(&mut self, checkpoint: ReaderCheckpointV1) {
+        let descriptor = self.descriptor.clone();
+        let worker_checkpoint = checkpoint.clone();
+        let Ok(handle) = std::thread::Builder::new()
+            .name("tokenmaster-codex-prefetch".into())
+            .spawn(move || read_source_batch(&descriptor, Some(&worker_checkpoint), || false))
+        else {
+            return;
+        };
+        self.prefetched = Some(PrefetchedBatch { checkpoint, handle });
+    }
+}
+
+impl Drop for CodexSourceBatchReader {
+    fn drop(&mut self) {
+        if let Some(prefetched) = self.prefetched.take() {
+            let _ = prefetched.handle.join();
+        }
+    }
 }
 
 impl SourceBatchReader for CodexSourceBatchReader {
@@ -355,19 +385,31 @@ impl SourceBatchReader for CodexSourceBatchReader {
         let reader_checkpoint = CodexCheckpointV1::decode(checkpoint.as_bytes(), logical)
             .map_err(|_| PortError::new(PortErrorCode::InvalidData))?
             .into_reader();
-        let outcome = read_source_batch(&self.descriptor, Some(&reader_checkpoint), || {
-            control.check().is_err()
-        })
-        .map_err(|error| {
-            if error.code() == ReaderErrorCode::Cancelled {
-                control
-                    .check()
-                    .err()
-                    .unwrap_or_else(|| PortError::new(PortErrorCode::Cancelled))
-            } else {
-                reader_port_error(error.code())
+        let outcome = if let Some(prefetched) = self.prefetched.take() {
+            if prefetched.checkpoint != reader_checkpoint {
+                let _ = prefetched.handle.join();
+                return Err(PortError::new(PortErrorCode::InvalidData));
             }
-        })?;
+            prefetched
+                .handle
+                .join()
+                .map_err(|_| PortError::new(PortErrorCode::Failed))?
+                .map_err(|error| reader_port_error(error.code()))?
+        } else {
+            read_source_batch(&self.descriptor, Some(&reader_checkpoint), || {
+                control.check().is_err()
+            })
+            .map_err(|error| {
+                if error.code() == ReaderErrorCode::Cancelled {
+                    control
+                        .check()
+                        .err()
+                        .unwrap_or_else(|| PortError::new(PortErrorCode::Cancelled))
+                } else {
+                    reader_port_error(error.code())
+                }
+            })?
+        };
 
         match outcome {
             ReaderOutcome::RebuildRequired(_) => {
@@ -389,6 +431,8 @@ impl SourceBatchReader for CodexSourceBatchReader {
             )
             .map_err(PortError::from),
             ReaderOutcome::Batch(mut batch) => {
+                let prefetch_checkpoint =
+                    (!batch.reached_snapshot_end()).then(|| batch.checkpoint().clone());
                 let mut diagnostics = AdapterDiagnostics::default();
                 map_batch_diagnostics(&batch, &mut diagnostics)?;
                 if has_blocking_input_diagnostic(&diagnostics) {
@@ -433,6 +477,9 @@ impl SourceBatchReader for CodexSourceBatchReader {
                         self.latest_repository_activity_hint.as_ref(),
                     ) {
                         let _ = ingress.submit(hint.clone());
+                    }
+                    if let Some(checkpoint) = prefetch_checkpoint {
+                        self.start_prefetch(checkpoint);
                     }
                 }
                 result

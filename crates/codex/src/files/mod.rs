@@ -208,6 +208,7 @@ impl FileMetadataHint {
     }
 }
 
+#[derive(Clone)]
 pub struct SourceFileDescriptor {
     profile_id: Arc<UsageProfileId>,
     source_id: Arc<UsageSourceId>,

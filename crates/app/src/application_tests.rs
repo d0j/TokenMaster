@@ -28,7 +28,10 @@ use tokenmaster_state::{
     PresentationSettings, PresentationSkin, PriorRunCondition, ReminderPolicy, RestoreMode,
     RunStateStore, SETTINGS_SCHEMA_VERSION, SettingsStore, SettingsValue, SystemMaintenanceClock,
 };
-use tokenmaster_store::{USAGE_SCHEMA_VERSION, UsageStore};
+use tokenmaster_store::{
+    StartupArchiveStatus, StartupValidationMode, USAGE_SCHEMA_VERSION, UsageStore,
+    inspect_startup_archive,
+};
 
 use super::*;
 use crate::command::{
@@ -131,6 +134,11 @@ fn create_exact_v12_archive(path: &std::path::Path) {
         )
         .expect("strip v13 Git schema");
     restore_v12_time_triggers(&connection);
+    connection
+        .execute_batch(
+            "CREATE INDEX usage_replay_observation_children ON usage_replay_observation(revision_id, provider_id, profile_id, parent_session_id, session_ordinal, disposition, session_id);",
+        )
+        .expect("restore exact v12 replay children index");
     connection
         .pragma_update(None, "user_version", 12_i64)
         .expect("publish exact v12 version");
@@ -2257,6 +2265,15 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let migration_environment = application_environment(&migration_temporary);
     let migration_root = DataRoot::resolve(&migration_environment).expect("migration data root");
     create_exact_v12_archive(migration_root.archive_path());
+    assert_eq!(
+        inspect_startup_archive(
+            migration_root.validated_directory(),
+            StartupValidationMode::Normal,
+        )
+        .expect("exact v12 startup inspection")
+        .status(),
+        StartupArchiveStatus::SupportedLegacy,
+    );
     disable_periodic_backups(&migration_root);
     let mut migration_application =
         Application::start(&migration_environment).expect("guarded migration startup");

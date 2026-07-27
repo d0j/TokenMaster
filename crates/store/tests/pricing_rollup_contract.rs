@@ -17,7 +17,7 @@ fn current_schema_reserves_reported_cost_and_strict_price_rollups() {
     drop(UsageStore::open(&path).expect("create archive"));
     let connection = Connection::open(&path).expect("inspect archive");
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 14);
+    assert_eq!(USAGE_SCHEMA_VERSION, 15);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))

@@ -14,12 +14,12 @@ separate external acceptance boundaries.
 
 ## Shortest critical path
 
-1. Keep UI frozen and close one bounded transactional bulk-ingest backend slice for
-   the real 4,007-source cold-import workload.
-2. Prove materially faster complete or resumable real-history progress without
-   weakening FULL durability, 256-observation batches, lineage truth, or bounded
-   memory.
-3. Run one complete workspace gate and then resume the bounded UI correction.
+1. Close the accepted bounded exact-replay batching slice with a clean local commit;
+   the required decomposed workspace gate is green.
+2. Keep further parser/index/cache/parallel-reader tuning closed. If cold completion is
+   still a release blocker, design one bounded deferred/set-based exact projection
+   slice without weakening FULL durability, lineage truth, or bounded memory.
+3. Resume the bounded UI correction only after that explicit architecture decision.
 4. Build and verify the deterministic unsigned portable package, run pinned secret
    scans, and obtain one physical Windows UI confirmation.
 
@@ -46,6 +46,14 @@ the preceding step is closed.
   durable Partial generation. A real 60-second run exposed 21,369 safe canonical
   events from 236 of 4,007 completed sources at about 27.7 MiB peak private memory
   instead of reporting false Empty state until terminal completion.
+- Schema v15 atomically removes the unused replay-children write index and preserves
+  exact v14 reopen plus rollback compatibility.
+- The final compatible real 122-second receipt reached 435 of 4,008 sources and
+  265,386 exact observations at 34.6 MiB peak private memory. This is +6.1% sources
+  and +10.4% observations over the comparable pre-slice receipt.
+- The pinned WMT aggregate-ledger importer completed its materially lighter compact
+  aggregate workload in about 262 seconds. TokenMaster has not yet proved equal or
+  better complete-import wall time; do not claim cross-product superiority.
 - Complete cold import remains too slow. Five bounded parser/SQL/cache alternatives
   produced no meaningful source-throughput gain and were reverted. Do not reopen
   parameter tuning; the next backend work is transactional bulk ingest.

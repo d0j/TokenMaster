@@ -1,5 +1,21 @@
 # TokenMaster project history
 
+## 2026-07-27 — Bounded exact replay batching improved real cold progress
+
+The cold-import writer now groups bounded current replay commands across sources and
+sequential chunks, fast-paths root-session facts, skips redundant exact verification
+and unchanged selection materialization, and prefetches one bounded next read. A
+four-reader experiment regressed throughput and was removed.
+
+The final review caught that simply deleting the write-heavy replay-children index
+would reject existing schema-v14 archives. Schema v15 now removes it through an atomic,
+rollback-tested migration and keeps read-only current opens exact. The final real
+122-second run reached 435 of 4,008 sources and 265,386 observations at 34.6 MiB peak
+private memory, improving the comparable baseline by 6.1% sources and 10.4%
+observations. It did not complete the import or beat WMT’s compact aggregate-ledger
+receipt, so tuning stopped and deferred/set-based exact projection remains the next
+architectural performance boundary.
+
 ## 2026-07-27 — Durable Partial truth reached the runtime snapshot
 
 Real-history diagnostics showed that TokenMaster was not hung: it was durably

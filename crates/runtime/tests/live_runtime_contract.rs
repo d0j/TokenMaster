@@ -23,7 +23,7 @@ use tokenmaster_runtime::{
     CodexAdapter, LivePhase, LiveRefreshKind, LiveRuntime, RuntimeWriterLease, StoreArchive,
     refresh_incremental,
 };
-use tokenmaster_store::{ArchivePublicationQuality, UsageStore};
+use tokenmaster_store::{ArchivePublicationQuality, StoreErrorCode, UsageStore};
 
 static LIVE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -580,7 +580,7 @@ fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
             );
         }
         let snapshot = runtime.snapshot().expect("real import snapshot");
-        let store = UsageStore::open_current(&archive_path).expect("open real import archive");
+        let store = open_real_import_store(&archive_path, started + Duration::from_secs(5));
         let publication = store
             .archive_publication()
             .expect("real import publication");
@@ -643,6 +643,22 @@ fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
         "TM-REAL-IMPORT-RECEIPT|elapsed_ms={}|events={final_events}|archive_bytes={final_archive_bytes}|baseline_private_bytes={baseline_private_bytes}|peak_private_bytes={peak_private_bytes}|final_private_bytes={final_private_bytes}|completions={completion_count}",
         elapsed.as_millis()
     );
+}
+
+#[cfg(windows)]
+fn open_real_import_store(path: &Path, migration_deadline: Instant) -> UsageStore {
+    loop {
+        match UsageStore::open_current(path) {
+            Ok(store) => return store,
+            Err(error)
+                if error.code() == StoreErrorCode::SchemaMismatch
+                    && Instant::now() < migration_deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("open real import archive: {error:?}"),
+        }
+    }
 }
 
 #[cfg(windows)]

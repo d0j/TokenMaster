@@ -363,124 +363,145 @@ impl UsageStore {
             &append.chunk_updates,
         )?;
 
-        for event in &append.events {
-            validate_event_scope(event, &source, revision.versions)?;
-            insert_observation(
-                &transaction,
-                append.source_key,
-                append.expected_generation,
-                event,
-            )?;
-            if !observation_matches(
-                &transaction,
-                append.source_key,
-                append.expected_generation,
-                event,
-            )? {
-                return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
-            }
-
-            let relation = reconcile_session_relation(
+        let root_batch_applied = replay_parts.relations.is_empty()
+            && apply_root_session_batch(
                 &transaction,
                 replay_parts.revision_id,
                 append.source_key,
-                event,
+                append.expected_generation,
+                &append.events,
+                &source,
+                revision.versions,
                 next_epoch,
+                false,
             )?;
-            let (disposition, next_state, parent_missing, depth_exhausted) =
-                if relation.relation_conflict {
-                    (
-                        ReplayDisposition::Conflict,
-                        SessionReplayState::Conflict,
-                        false,
-                        false,
-                    )
-                } else {
-                    let parent = load_parent_facts(
+        if !root_batch_applied {
+            for event in &append.events {
+                validate_event_scope(event, &source, revision.versions)?;
+                let inserted = insert_observation(
+                    &transaction,
+                    append.source_key,
+                    append.expected_generation,
+                    event,
+                )?;
+                if !inserted
+                    && !observation_matches(
+                        &transaction,
+                        append.source_key,
+                        append.expected_generation,
+                        event,
+                    )?
+                {
+                    return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+                }
+
+                let relation = reconcile_session_relation(
+                    &transaction,
+                    replay_parts.revision_id,
+                    append.source_key,
+                    event,
+                    next_epoch,
+                )?;
+                let (disposition, next_state, parent_missing, depth_exhausted) =
+                    if relation.relation_conflict {
+                        (
+                            ReplayDisposition::Conflict,
+                            SessionReplayState::Conflict,
+                            false,
+                            false,
+                        )
+                    } else {
+                        let parent = load_parent_facts(
+                            &transaction,
+                            replay_parts.revision_id,
+                            event,
+                            revision.versions,
+                        )?;
+                        let parent_missing =
+                            event.lineage().parent_session_id().is_some() && parent.is_none();
+                        let parent_ordinal = match parent.as_ref() {
+                            Some(parent) => ParentOrdinal::Present(parent.as_facts()),
+                            None if event.lineage().parent_session_id().is_some() => {
+                                ParentOrdinal::MissingOpen
+                            }
+                            None => ParentOrdinal::NotApplicable,
+                        };
+                        let traversal =
+                            replay_traversal(&transaction, replay_parts.revision_id, event, false)?;
+                        let classification =
+                            ReplayClassifier::new().classify(ReplayClassificationInput::new(
+                                relation.prior_state,
+                                ReplayEventFacts::from_event(event),
+                                parent_ordinal,
+                                traversal.facts,
+                            ));
+                        (
+                            classification.disposition(),
+                            classification.next_state(),
+                            parent_missing,
+                            traversal.depth_exhausted,
+                        )
+                    };
+                upsert_replay_observation(
+                    &transaction,
+                    replay_parts.revision_id,
+                    append.source_key,
+                    append.expected_generation,
+                    event,
+                    disposition,
+                    next_epoch,
+                )?;
+                update_session_classification(
+                    &transaction,
+                    replay_parts.revision_id,
+                    event,
+                    next_state,
+                    next_epoch,
+                )?;
+                if disposition != ReplayDisposition::Conflict {
+                    refresh_replay_selection(
+                        &transaction,
+                        replay_parts.revision_id,
+                        event.fingerprint().as_bytes(),
+                    )?;
+                }
+                if parent_missing && disposition == ReplayDisposition::Pending {
+                    enqueue_missing_parent(
                         &transaction,
                         replay_parts.revision_id,
                         event,
-                        revision.versions,
+                        next_epoch,
                     )?;
-                    let parent_missing =
-                        event.lineage().parent_session_id().is_some() && parent.is_none();
-                    let parent_ordinal = match parent.as_ref() {
-                        Some(parent) => ParentOrdinal::Present(parent.as_facts()),
-                        None if event.lineage().parent_session_id().is_some() => {
-                            ParentOrdinal::MissingOpen
-                        }
-                        None => ParentOrdinal::NotApplicable,
-                    };
-                    let traversal =
-                        replay_traversal(&transaction, replay_parts.revision_id, event, false)?;
-                    let classification =
-                        ReplayClassifier::new().classify(ReplayClassificationInput::new(
-                            relation.prior_state,
-                            ReplayEventFacts::from_event(event),
-                            parent_ordinal,
-                            traversal.facts,
-                        ));
-                    (
-                        classification.disposition(),
-                        classification.next_state(),
-                        parent_missing,
-                        traversal.depth_exhausted,
-                    )
-                };
-            upsert_replay_observation(
-                &transaction,
-                replay_parts.revision_id,
-                append.source_key,
-                append.expected_generation,
-                event,
-                disposition,
-                next_epoch,
-            )?;
-            update_session_classification(
-                &transaction,
-                replay_parts.revision_id,
-                event,
-                next_state,
-                next_epoch,
-            )?;
-            if disposition != ReplayDisposition::Conflict {
-                refresh_replay_selection(
-                    &transaction,
-                    replay_parts.revision_id,
-                    event.fingerprint().as_bytes(),
-                )?;
-            }
-            if parent_missing && disposition == ReplayDisposition::Pending {
-                enqueue_missing_parent(&transaction, replay_parts.revision_id, event, next_epoch)?;
-            } else if depth_exhausted {
-                enqueue_classification(
-                    &transaction,
-                    replay_parts.revision_id,
-                    event.provider_id().as_str(),
-                    event.profile_id().as_str(),
-                    event.session_id().as_str(),
-                    "depth_bound",
-                    event.lineage().session_ordinal(),
-                    next_epoch,
-                )?;
-            }
-            if (!relation.relation_conflict || relation.conflict_changed)
-                && replay_session_has_children(
-                    &transaction,
-                    replay_parts.revision_id,
-                    event.provider_id().as_str(),
-                    event.profile_id().as_str(),
-                    event.session_id().as_str(),
-                )?
-            {
-                enqueue_child_scan(
-                    &transaction,
-                    replay_parts.revision_id,
-                    event.provider_id().as_str(),
-                    event.profile_id().as_str(),
-                    event.session_id().as_str(),
-                    next_epoch,
-                )?;
+                } else if depth_exhausted {
+                    enqueue_classification(
+                        &transaction,
+                        replay_parts.revision_id,
+                        event.provider_id().as_str(),
+                        event.profile_id().as_str(),
+                        event.session_id().as_str(),
+                        "depth_bound",
+                        event.lineage().session_ordinal(),
+                        next_epoch,
+                    )?;
+                }
+                if (!relation.relation_conflict || relation.conflict_changed)
+                    && replay_session_has_children(
+                        &transaction,
+                        replay_parts.revision_id,
+                        event.provider_id().as_str(),
+                        event.profile_id().as_str(),
+                        event.session_id().as_str(),
+                    )?
+                {
+                    enqueue_child_scan(
+                        &transaction,
+                        replay_parts.revision_id,
+                        event.provider_id().as_str(),
+                        event.profile_id().as_str(),
+                        event.session_id().as_str(),
+                        next_epoch,
+                    )?;
+                }
             }
         }
 
@@ -568,7 +589,17 @@ impl UsageStore {
         &mut self,
         batch: &CurrentReplayAppendBatch,
     ) -> Result<CurrentReplayCommit, StoreError> {
-        self.apply_current_replay_append_batch_inner(batch, CurrentAppendFault::Never)
+        self.apply_current_replay_append_batches_inner(
+            std::slice::from_ref(batch),
+            CurrentAppendFault::Never,
+        )
+    }
+
+    pub fn apply_current_replay_append_batches(
+        &mut self,
+        batches: &[CurrentReplayAppendBatch],
+    ) -> Result<CurrentReplayCommit, StoreError> {
+        self.apply_current_replay_append_batches_inner(batches, CurrentAppendFault::Never)
     }
 
     /// Records a proven no-op end-of-file read for a source in a partial current replay.
@@ -753,13 +784,40 @@ impl UsageStore {
         })
     }
 
-    fn apply_current_replay_append_batch_inner(
+    fn apply_current_replay_append_batches_inner(
         &mut self,
-        batch: &CurrentReplayAppendBatch,
+        batches: &[CurrentReplayAppendBatch],
         fault: CurrentAppendFault,
     ) -> Result<CurrentReplayCommit, StoreError> {
-        let current_parts = batch.parts();
-        let append = current_parts.append_batch.parts();
+        if batches.is_empty() || batches.len() > MAX_APPEND_EVENTS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_APPEND_EVENTS as u64,
+            ));
+        }
+        let current_parts = batches[0].parts();
+        let total_events = batches.iter().try_fold(0_usize, |total, batch| {
+            total
+                .checked_add(batch.parts().append_batch.parts().events.len())
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))
+        })?;
+        let total_relations = batches.iter().try_fold(0_usize, |total, batch| {
+            total
+                .checked_add(batch.parts().relations.len())
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))
+        })?;
+        if total_events > MAX_APPEND_EVENTS || total_relations > MAX_APPEND_RELATIONS {
+            return Err(StoreError::new(StoreErrorCode::CapacityExceeded));
+        }
+        for batch in batches {
+            let parts = batch.parts();
+            if parts.revision_id != current_parts.revision_id
+                || parts.expected_epoch != current_parts.expected_epoch
+                || parts.expected_archive_generation != current_parts.expected_archive_generation
+            {
+                return Err(StoreError::new(StoreErrorCode::InvalidValue));
+            }
+        }
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -790,17 +848,20 @@ impl UsageStore {
                 // not actionable until every source has been ingested. Do not block later
                 // sources behind that deferred work, or a partial import deadlocks after its
                 // first event-bearing source.
-                let source_present: i64 = transaction.query_row(
-                    "SELECT count(*) FROM usage_replay_source
-                     WHERE revision_id = ?1 AND file_key = ?2",
-                    params![
-                        current_parts.revision_id.as_sql()?,
-                        append.source_key.as_bytes().as_slice()
-                    ],
-                    |row| row.get(0),
-                )?;
-                if source_present != 1 {
-                    return Err(StoreError::new(StoreErrorCode::PendingContinuation));
+                for batch in batches {
+                    let append = batch.parts().append_batch.parts();
+                    let source_present: i64 = transaction.query_row(
+                        "SELECT count(*) FROM usage_replay_source
+                         WHERE revision_id = ?1 AND file_key = ?2",
+                        params![
+                            current_parts.revision_id.as_sql()?,
+                            append.source_key.as_bytes().as_slice()
+                        ],
+                        |row| row.get(0),
+                    )?;
+                    if source_present != 1 {
+                        return Err(StoreError::new(StoreErrorCode::PendingContinuation));
+                    }
                 }
             }
             ArchivePublicationQuality::Empty | ArchivePublicationQuality::RecoveryPending => {
@@ -815,191 +876,224 @@ impl UsageStore {
                 .checked_add(1)
                 .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
         )?;
-        let source =
-            load_current_replay_source(&transaction, current_parts.revision_id, append.source_key)?;
-        source.matches_current(append)?;
-        verify_chunk_proof(
-            &transaction,
-            append.source_key,
-            append.expected_generation,
-            append.previous_partial_chunk,
-        )?;
-        verify_chunk_conflicts(
-            &transaction,
-            append.source_key,
-            append.expected_generation,
-            append.previous_partial_chunk,
-            &append.chunk_updates,
-        )?;
+        for batch in batches {
+            let current_parts = batch.parts();
+            let append = current_parts.append_batch.parts();
+            let source = load_current_replay_source(
+                &transaction,
+                current_parts.revision_id,
+                append.source_key,
+            )?;
+            source.matches_current(append)?;
+            verify_chunk_proof(
+                &transaction,
+                append.source_key,
+                append.expected_generation,
+                append.previous_partial_chunk,
+            )?;
+            verify_chunk_conflicts(
+                &transaction,
+                append.source_key,
+                append.expected_generation,
+                append.previous_partial_chunk,
+                &append.chunk_updates,
+            )?;
 
-        for event in &append.events {
-            validate_event_scope(event, &source, revision.versions)?;
-            insert_observation(
-                &transaction,
-                append.source_key,
-                append.expected_generation,
-                event,
-            )?;
-            if !observation_matches(
-                &transaction,
-                append.source_key,
-                append.expected_generation,
-                event,
-            )? {
-                return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+            let root_batch_applied = current_parts.relations.is_empty()
+                && apply_root_session_batch(
+                    &transaction,
+                    current_parts.revision_id,
+                    append.source_key,
+                    append.expected_generation,
+                    &append.events,
+                    &source,
+                    revision.versions,
+                    next_epoch,
+                    true,
+                )?;
+            if !root_batch_applied {
+                for event in &append.events {
+                    validate_event_scope(event, &source, revision.versions)?;
+                    let inserted = insert_observation(
+                        &transaction,
+                        append.source_key,
+                        append.expected_generation,
+                        event,
+                    )?;
+                    if !inserted
+                        && !observation_matches(
+                            &transaction,
+                            append.source_key,
+                            append.expected_generation,
+                            event,
+                        )?
+                    {
+                        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+                    }
+                    let relation = reconcile_session_relation(
+                        &transaction,
+                        current_parts.revision_id,
+                        append.source_key,
+                        event,
+                        next_epoch,
+                    )?;
+                    let parent = load_parent_facts(
+                        &transaction,
+                        current_parts.revision_id,
+                        event,
+                        revision.versions,
+                    )?;
+                    let parent_missing =
+                        event.lineage().parent_session_id().is_some() && parent.is_none();
+                    let parent_ordinal = match parent.as_ref() {
+                        Some(parent) => ParentOrdinal::Present(parent.as_facts()),
+                        None if event.lineage().parent_session_id().is_some() => {
+                            ParentOrdinal::MissingOpen
+                        }
+                        None => ParentOrdinal::NotApplicable,
+                    };
+                    let traversal = replay_traversal(
+                        &transaction,
+                        current_parts.revision_id,
+                        event,
+                        relation.relation_conflict,
+                    )?;
+                    let classification =
+                        ReplayClassifier::new().classify(ReplayClassificationInput::new(
+                            relation.prior_state,
+                            ReplayEventFacts::from_event(event),
+                            parent_ordinal,
+                            traversal.facts,
+                        ));
+                    upsert_replay_observation(
+                        &transaction,
+                        current_parts.revision_id,
+                        append.source_key,
+                        append.expected_generation,
+                        event,
+                        classification.disposition(),
+                        next_epoch,
+                    )?;
+                    update_session_classification(
+                        &transaction,
+                        current_parts.revision_id,
+                        event,
+                        classification.next_state(),
+                        next_epoch,
+                    )?;
+                    refresh_replay_selection(
+                        &transaction,
+                        current_parts.revision_id,
+                        event.fingerprint().as_bytes(),
+                    )?;
+                    materialize_current_fingerprint(
+                        &transaction,
+                        current_parts.revision_id,
+                        event.fingerprint().as_bytes(),
+                    )?;
+                    if parent_missing && classification.disposition() == ReplayDisposition::Pending
+                    {
+                        enqueue_missing_parent(
+                            &transaction,
+                            current_parts.revision_id,
+                            event,
+                            next_epoch,
+                        )?;
+                    } else if traversal.depth_exhausted {
+                        enqueue_classification(
+                            &transaction,
+                            current_parts.revision_id,
+                            event.provider_id().as_str(),
+                            event.profile_id().as_str(),
+                            event.session_id().as_str(),
+                            "depth_bound",
+                            event.lineage().session_ordinal(),
+                            next_epoch,
+                        )?;
+                    }
+                    if replay_session_has_children(
+                        &transaction,
+                        current_parts.revision_id,
+                        event.provider_id().as_str(),
+                        event.profile_id().as_str(),
+                        event.session_id().as_str(),
+                    )? {
+                        enqueue_child_scan(
+                            &transaction,
+                            current_parts.revision_id,
+                            event.provider_id().as_str(),
+                            event.profile_id().as_str(),
+                            event.session_id().as_str(),
+                            next_epoch,
+                        )?;
+                    }
+                }
             }
-            let relation = reconcile_session_relation(
+
+            current_append_fault(fault, CurrentAppendFault::AfterEventOverlay)?;
+
+            for relation in &current_parts.relations {
+                let relation = ReplayRelation::new(
+                    current_parts.revision_id,
+                    current_parts.expected_epoch,
+                    append.source_key,
+                    relation,
+                )?;
+                if source.provider_id != relation.provider_id.as_ref()
+                    || source.profile_id != relation.profile_id.as_ref()
+                    || source.source_id != relation.source_id.as_ref()
+                    || relation.source_offset >= append.next_checkpoint.committed_offset()
+                {
+                    return Err(StoreError::new(StoreErrorCode::InvalidValue));
+                }
+                apply_replay_relation_in_transaction(&transaction, &relation, next_epoch)?;
+            }
+
+            current_append_fault(fault, CurrentAppendFault::AfterRelations)?;
+
+            for chunk in &append.chunk_updates {
+                upsert_chunk(
+                    &transaction,
+                    append.source_key,
+                    append.expected_generation,
+                    *chunk,
+                )?;
+            }
+            update_checkpoint_for_status(
                 &transaction,
-                current_parts.revision_id,
                 append.source_key,
-                event,
-                next_epoch,
+                append.expected_generation,
+                append.expected_committed_offset,
+                append.expected_scan_offset,
+                &append.next_checkpoint,
+                "current",
             )?;
-            let parent = load_parent_facts(
+            update_source_metadata(
                 &transaction,
-                current_parts.revision_id,
-                event,
-                revision.versions,
+                append.source_key,
+                append.diagnostic_count_delta,
+                &append.next_checkpoint,
             )?;
-            let parent_missing = event.lineage().parent_session_id().is_some() && parent.is_none();
-            let parent_ordinal = match parent.as_ref() {
-                Some(parent) => ParentOrdinal::Present(parent.as_facts()),
-                None if event.lineage().parent_session_id().is_some() => ParentOrdinal::MissingOpen,
-                None => ParentOrdinal::NotApplicable,
+            let source_state = if checkpoint_is_caught_up(&append.next_checkpoint) {
+                "complete"
+            } else {
+                "pending"
             };
-            let traversal = replay_traversal(
-                &transaction,
-                current_parts.revision_id,
-                event,
-                relation.relation_conflict,
-            )?;
-            let classification = ReplayClassifier::new().classify(ReplayClassificationInput::new(
-                relation.prior_state,
-                ReplayEventFacts::from_event(event),
-                parent_ordinal,
-                traversal.facts,
-            ));
-            upsert_replay_observation(
-                &transaction,
-                current_parts.revision_id,
-                append.source_key,
-                append.expected_generation,
-                event,
-                classification.disposition(),
-                next_epoch,
-            )?;
-            update_session_classification(
-                &transaction,
-                current_parts.revision_id,
-                event,
-                classification.next_state(),
-                next_epoch,
-            )?;
-            refresh_replay_selection(
-                &transaction,
-                current_parts.revision_id,
-                event.fingerprint().as_bytes(),
-            )?;
-            materialize_current_fingerprint(
-                &transaction,
-                current_parts.revision_id,
-                event.fingerprint().as_bytes(),
-            )?;
-            if parent_missing && classification.disposition() == ReplayDisposition::Pending {
-                enqueue_missing_parent(&transaction, current_parts.revision_id, event, next_epoch)?;
-            } else if traversal.depth_exhausted {
-                enqueue_classification(
-                    &transaction,
-                    current_parts.revision_id,
-                    event.provider_id().as_str(),
-                    event.profile_id().as_str(),
-                    event.session_id().as_str(),
-                    "depth_bound",
-                    event.lineage().session_ordinal(),
-                    next_epoch,
-                )?;
-            }
-            if replay_session_has_children(
-                &transaction,
-                current_parts.revision_id,
-                event.provider_id().as_str(),
-                event.profile_id().as_str(),
-                event.session_id().as_str(),
-            )? {
-                enqueue_child_scan(
-                    &transaction,
-                    current_parts.revision_id,
-                    event.provider_id().as_str(),
-                    event.profile_id().as_str(),
-                    event.session_id().as_str(),
-                    next_epoch,
-                )?;
-            }
-        }
-
-        current_append_fault(fault, CurrentAppendFault::AfterEventOverlay)?;
-
-        for relation in &current_parts.relations {
-            let relation = ReplayRelation::new(
-                current_parts.revision_id,
-                current_parts.expected_epoch,
-                append.source_key,
-                relation,
-            )?;
-            if source.provider_id != relation.provider_id.as_ref()
-                || source.profile_id != relation.profile_id.as_ref()
-                || source.source_id != relation.source_id.as_ref()
-                || relation.source_offset >= append.next_checkpoint.committed_offset()
-            {
-                return Err(StoreError::new(StoreErrorCode::InvalidValue));
-            }
-            apply_replay_relation_in_transaction(&transaction, &relation, next_epoch)?;
-        }
-
-        current_append_fault(fault, CurrentAppendFault::AfterRelations)?;
-
-        for chunk in &append.chunk_updates {
-            upsert_chunk(
-                &transaction,
-                append.source_key,
-                append.expected_generation,
-                *chunk,
-            )?;
-        }
-        update_checkpoint_for_status(
-            &transaction,
-            append.source_key,
-            append.expected_generation,
-            append.expected_committed_offset,
-            append.expected_scan_offset,
-            &append.next_checkpoint,
-            "current",
-        )?;
-        update_source_metadata(
-            &transaction,
-            append.source_key,
-            append.diagnostic_count_delta,
-            &append.next_checkpoint,
-        )?;
-        let source_state = if checkpoint_is_caught_up(&append.next_checkpoint) {
-            "complete"
-        } else {
-            "pending"
-        };
-        let source_updated = transaction.execute(
-            "UPDATE usage_replay_source SET state = ?1
+            let source_updated = transaction.execute(
+                "UPDATE usage_replay_source SET state = ?1
              WHERE revision_id = ?2 AND file_key = ?3 AND generation = ?4",
-            params![
-                source_state,
-                current_parts.revision_id.as_sql()?,
-                append.source_key.as_bytes().as_slice(),
-                sql_u64(append.expected_generation)?,
-            ],
-        )?;
-        if source_updated != 1 {
-            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+                params![
+                    source_state,
+                    current_parts.revision_id.as_sql()?,
+                    append.source_key.as_bytes().as_slice(),
+                    sql_u64(append.expected_generation)?,
+                ],
+            )?;
+            if source_updated != 1 {
+                return Err(StoreError::new(StoreErrorCode::StaleRevision));
+            }
+            current_append_fault(fault, CurrentAppendFault::AfterCheckpoint)?;
         }
-        current_append_fault(fault, CurrentAppendFault::AfterCheckpoint)?;
         advance_current_revision_epoch(
             &transaction,
             current_parts.revision_id,
@@ -1037,7 +1131,7 @@ impl UsageStore {
         current_append_fault(fault, CurrentAppendFault::AfterPublication)?;
         transaction.commit()?;
         Ok(CurrentReplayCommit {
-            processed_count: u16::try_from(append.events.len())
+            processed_count: u16::try_from(total_events)
                 .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
             remaining_work,
             epoch: next_epoch,
@@ -3106,6 +3200,218 @@ fn validate_event_scope(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn apply_root_session_batch(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    source_key: SourceKey,
+    generation: u64,
+    events: &[CanonicalUsageEvent],
+    source: &ReplaySource,
+    versions: AccountingVersions,
+    epoch: ReplayEpoch,
+    materialize_current: bool,
+) -> Result<bool, StoreError> {
+    let Some(first) = events.first() else {
+        return Ok(false);
+    };
+    if first.lineage().parent_session_id().is_some()
+        || first.lineage().declared_conflict()
+        || events.iter().any(|event| {
+            event.provider_id() != first.provider_id()
+                || event.profile_id() != first.profile_id()
+                || event.session_id() != first.session_id()
+                || event.lineage().parent_session_id().is_some()
+                || event.lineage().declared_conflict()
+        })
+    {
+        return Ok(false);
+    }
+
+    let existing: Option<(Option<String>, i64, String)> = transaction
+        .prepare_cached(
+            "SELECT parent_session_id, relation_conflict, state
+             FROM usage_replay_session
+             WHERE revision_id = ?1 AND provider_id = ?2
+               AND profile_id = ?3 AND session_id = ?4",
+        )?
+        .query_row(
+            params![
+                revision_id.as_sql()?,
+                first.provider_id().as_str(),
+                first.profile_id().as_str(),
+                first.session_id().as_str(),
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    if let Some((parent, conflict, state)) = existing
+        && (parent.is_some() || stored_bool(conflict)? || state != "root")
+    {
+        return Ok(false);
+    }
+
+    for event in events {
+        validate_event_scope(event, source, versions)?;
+    }
+    let relation = reconcile_session_relation(transaction, revision_id, source_key, first, epoch)?;
+    if relation.relation_conflict || relation.prior_state != SessionReplayState::Root {
+        return Ok(false);
+    }
+
+    for event in events {
+        let inserted = insert_observation(transaction, source_key, generation, event)?;
+        if !inserted && !observation_matches(transaction, source_key, generation, event)? {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        upsert_replay_observation(
+            transaction,
+            revision_id,
+            source_key,
+            generation,
+            event,
+            ReplayDisposition::Eligible,
+            epoch,
+        )?;
+        let selection_changed =
+            update_root_replay_selection(transaction, revision_id, source_key, generation, event)?;
+        if materialize_current && selection_changed {
+            let changed = transaction
+                .prepare_cached(MATERIALIZE_CURRENT_FINGERPRINT_SQL)?
+                .execute(params![
+                    revision_id.as_sql()?,
+                    event.fingerprint().as_bytes().as_slice()
+                ])?;
+            if changed != 1 {
+                return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+            }
+        }
+    }
+
+    let last = events
+        .last()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    update_session_classification(
+        transaction,
+        revision_id,
+        last,
+        SessionReplayState::Root,
+        epoch,
+    )?;
+    if replay_session_has_children(
+        transaction,
+        revision_id,
+        first.provider_id().as_str(),
+        first.profile_id().as_str(),
+        first.session_id().as_str(),
+    )? {
+        enqueue_child_scan(
+            transaction,
+            revision_id,
+            first.provider_id().as_str(),
+            first.profile_id().as_str(),
+            first.session_id().as_str(),
+            epoch,
+        )?;
+    }
+    Ok(true)
+}
+
+fn update_root_replay_selection(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    source_key: SourceKey,
+    generation: u64,
+    event: &CanonicalUsageEvent,
+) -> Result<bool, StoreError> {
+    let revision = revision_id.as_sql()?;
+    let fingerprint = event.fingerprint().as_bytes().as_slice();
+    let selected: Option<(Vec<u8>, i64, i64, Option<String>)> = transaction
+        .prepare_cached(
+            "SELECT selection.file_key, selection.generation, selection.source_offset,
+                    observation.profile_id
+             FROM usage_replay_selection AS selection
+             LEFT JOIN usage_observation AS observation
+               ON observation.file_key = selection.file_key
+              AND observation.generation = selection.generation
+              AND observation.source_offset = selection.source_offset
+              AND observation.fingerprint = selection.fingerprint
+             WHERE selection.revision_id = ?1 AND selection.fingerprint = ?2",
+        )?
+        .query_row(params![revision, fingerprint], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .optional()?;
+    let replace = match selected {
+        None => false,
+        Some((file_key, selected_generation, selected_offset, selected_profile)) => {
+            let selected_profile = selected_profile
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+            let selected_file_key = stored_digest(&file_key)?;
+            let selected_generation = stored_nonnegative(selected_generation)?;
+            let selected_offset = stored_nonnegative(selected_offset)?;
+            let candidate = (
+                event.profile_id().as_str(),
+                source_key.as_bytes(),
+                generation,
+                event.source_offset(),
+            );
+            let current = (
+                selected_profile.as_str(),
+                &selected_file_key,
+                selected_generation,
+                selected_offset,
+            );
+            if candidate >= current {
+                return Ok(false);
+            }
+            true
+        }
+    };
+    let changed = if replace {
+        transaction
+            .prepare_cached(
+                "UPDATE usage_replay_selection SET
+                   file_key = ?1, generation = ?2, source_offset = ?3,
+                   canonicalizer_version = ?4, fingerprint_version = ?5,
+                   replay_signature_version = ?6
+                 WHERE revision_id = ?7 AND fingerprint = ?8",
+            )?
+            .execute(params![
+                source_key.as_bytes().as_slice(),
+                sql_u64(generation)?,
+                sql_u64(event.source_offset())?,
+                i64::from(event.canonicalizer_version()),
+                i64::from(event.fingerprint_version()),
+                i64::from(event.replay_signature_version()),
+                revision,
+                fingerprint,
+            ])?
+    } else {
+        transaction
+            .prepare_cached(
+                "INSERT INTO usage_replay_selection(
+                   revision_id, fingerprint, file_key, generation, source_offset,
+                   canonicalizer_version, fingerprint_version, replay_signature_version
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )?
+            .execute(params![
+                revision,
+                fingerprint,
+                source_key.as_bytes().as_slice(),
+                sql_u64(generation)?,
+                sql_u64(event.source_offset())?,
+                i64::from(event.canonicalizer_version()),
+                i64::from(event.fingerprint_version()),
+                i64::from(event.replay_signature_version()),
+            ])?
+    };
+    if changed != 1 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(true)
+}
+
 fn observation_matches(
     transaction: &Transaction<'_>,
     source_key: SourceKey,
@@ -5110,7 +5416,9 @@ mod tests {
             let (mut store, batch) = current_append_fault_fixture()?;
             let before = current_append_atomic_state(&store)?;
 
-            let error = match store.apply_current_replay_append_batch_inner(&batch, fault) {
+            let error = match store
+                .apply_current_replay_append_batches_inner(std::slice::from_ref(&batch), fault)
+            {
                 Ok(_) => return Err("faulted current append committed".into()),
                 Err(error) => error,
             };

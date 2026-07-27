@@ -1,4 +1,5 @@
 use rusqlite::{Connection, params};
+use std::time::Instant;
 use tempfile::TempDir;
 use tokenmaster_accounting::{
     CANONICALIZER_VERSION, CanonicalUsageEvent, Canonicalizer, EVENT_FINGERPRINT_VERSION,
@@ -1853,6 +1854,56 @@ fn replay_append_derives_root_eligibility_and_keeps_staging_invisible() {
     assert_eq!(
         store.counts().expect("counts after stale append"),
         counts_before_stale
+    );
+}
+
+#[test]
+#[ignore = "release-only transactional replay benchmark"]
+fn root_session_replay_batch_benchmark_receipt() {
+    const EVENT_COUNT: u64 = 256;
+
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("root-session-benchmark.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(3))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(vec![SourceKey::from_bytes([3; 32])].into_boxed_slice())
+        .expect("manifest");
+    let revision = store
+        .begin_replay_revision(&manifest)
+        .expect("begin replay revision");
+    let events = (0..EVENT_COUNT)
+        .map(|ordinal| {
+            replay_event(
+                3,
+                "benchmark-root",
+                None,
+                ordinal,
+                ordinal,
+                Some(10_000 + ordinal),
+                false,
+            )
+        })
+        .collect();
+    let batch = replay_append_to(3, revision.id(), revision.epoch(), events, 1_000);
+
+    let started = Instant::now();
+    let epoch = store
+        .apply_replay_append_batch(&batch)
+        .expect("apply root replay batch");
+    let elapsed = started.elapsed();
+    let quality = store.replay_quality(revision.id()).expect("replay quality");
+
+    assert_eq!(epoch.get(), 1);
+    assert_eq!(quality.eligible(), EVENT_COUNT);
+    assert_eq!(quality.replay(), 0);
+    assert_eq!(quality.pending(), 0);
+    assert_eq!(quality.conflict(), 0);
+    println!(
+        "TM-ROOT-BATCH-BENCH|events={EVENT_COUNT}|elapsed_ms={:.3}|events_per_second={:.1}",
+        elapsed.as_secs_f64() * 1_000.0,
+        EVENT_COUNT as f64 / elapsed.as_secs_f64(),
     );
 }
 

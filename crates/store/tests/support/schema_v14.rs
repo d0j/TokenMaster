@@ -25,6 +25,11 @@ fn combine_update(name: &str, delete_trigger: &str, insert_trigger: &str) -> Str
 }
 
 pub fn restore_v13_time_triggers(connection: &Connection) {
+    connection
+        .execute_batch(
+            "CREATE INDEX usage_replay_observation_children ON usage_replay_observation(revision_id, provider_id, profile_id, parent_session_id, session_ordinal, disposition, session_id);",
+        )
+        .expect("restore pre-v15 replay children index");
     let aggregate_insert = trigger_sql(connection, "usage_event_aggregate_time_after_insert");
     let price_insert = trigger_sql(connection, "usage_event_price_time_after_insert");
     connection

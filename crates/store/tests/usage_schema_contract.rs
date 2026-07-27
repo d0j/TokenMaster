@@ -372,8 +372,8 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 14);
-    assert_eq!(version, 14);
+    assert_eq!(USAGE_SCHEMA_VERSION, 15);
+    assert_eq!(version, 15);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
 
     let publication_sql = table_sql(&path, "usage_archive_state")

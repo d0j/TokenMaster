@@ -1,5 +1,30 @@
 # TokenMaster current state
 
+## 2026-07-27 — Exact cold replay batching accepted; absolute WMT speed remains open
+
+Product behavior changed only in the import/store path; UI stays frozen. Current replay
+now commits bounded batches across sources and sequential chunks, uses a root-session
+fast path, avoids redundant exact-row and selection rewrites, and overlaps at most one
+bounded next read with the single SQLite writer. Schema v15 atomically removes the
+unused write-heavy replay-children index while migrating existing v14 archives without
+data loss; v13/fresh upgrades reach v15 in one transaction.
+
+On the real 4,008-source history, the final compatible build reached 435 completed
+sources and 265,386 exact observations in about 122 seconds with 34.6 MiB peak private
+memory. Against the comparable pre-slice 410-source/240,382-observation receipt this is
++6.1% sources and +10.4% observations. Migration 27/27, schema 23/23, replay 52/52,
+read-only open 8/8, query 11/11, and live 3/3 focused contracts pass.
+Clean-root, format, warnings-as-errors workspace Clippy, the complete app workspace
+segment, the complete Store package, and all workspace doc-tests pass after correcting
+the exact pre-v15 downgrade fixtures.
+
+This does not prove that TokenMaster is faster than WhereMyTokens. The pinned WMT
+aggregate-ledger importer completed its materially lighter compact-aggregate workload
+in about 262 seconds, while TokenMaster remains Partial because it retains exact
+observations, lineage, checkpoints, and FULL durability. Parameter and parallel-reader
+tuning is closed under the anti-loop rule. The next performance milestone is a separate
+deferred/set-based exact projection architecture, not another micro-optimization.
+
 ## 2026-07-27 — Partial data is published during active cold import
 
 Product behavior changed in the runtime publication boundary; UI is unchanged and
