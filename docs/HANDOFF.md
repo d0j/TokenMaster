@@ -29,10 +29,10 @@ the same source set, followed by the already planned package path. WMT superiori
 signing, authenticated accessibility/DPI acceptance, and the operator-deferred soak
 remain unproven.
 
-Git state: this performance correction is uncommitted and shares the worktree with the
-previous uncommitted UI acceptance slice. Stage and commit the backend/test files
-intentionally; do not absorb or revert unrelated work. No interactive process was
-created by this correction. `AUDIT_HARDENING_LOOP` is not active.
+Git state: the prior UI acceptance and this performance correction are recorded in two
+separate intentional commits, and the worktree is clean at this handoff. No interactive
+process was created by this correction. The operator-retained pre-fix application is
+the only remaining TokenMaster process. `AUDIT_HARDENING_LOOP` is not active.
 
 ## WMT-inspired Windows UI acceptance (2026-07-27)
 
@@ -57,13 +57,13 @@ output remains degraded when its scan is stale/incomplete. The remaining shortes
 path is the exact-clean deterministic Windows package/secret receipt pair, attribution
 and signing/publication acceptance; the 24-hour soak remains operator-deferred.
 
-Git state: this UI slice is not yet committed at this handoff entry. It changes desktop
-presentation and its fixed palette contract only. `AUDIT_HARDENING_LOOP` is not active;
-the backend/P4 performance freeze remains active.
+Git state: this UI slice is committed separately from the later reader correction. It
+changes desktop presentation and its fixed palette contract only.
+`AUDIT_HARDENING_LOOP` is not active.
 
-Next action: close this slice with one intentional commit, then resume only the
-minimum Windows package/release path. Do not reopen importer tuning or speculative UI
-polish unless a reproduced release blocker requires it.
+Next action: after the operator closes the retained pre-fix application, run one real
+modified-binary cold-import receipt, then resume only the minimum Windows
+package/release path. Do not reopen speculative importer or UI tuning.
 
 ## Exact replay batching and schema-v15 compatibility (2026-07-27)
 
