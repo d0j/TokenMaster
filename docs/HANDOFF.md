@@ -1,5 +1,33 @@
 # TokenMaster handoff
 
+## Ten-minute idle receipt handoff (2026-07-27)
+
+Product state: Task 2 needed no production change. With a healthy watcher, the
+15-minute periodic interval already leaves the required 10-minute zero-change window
+idle. Event-driven known-source updates remain on the Task 1 targeted path; forced,
+inventory-changing, overflow, startup, and recovery work retains authoritative
+reconciliation.
+
+Audit/evidence state: the release-only real-history contract uses an isolated empty
+watch root so the active Codex task cannot manufacture its own watcher events. After
+Complete, the exact 600-second receipt passed at `0.0003%` CPU, zero process reads,
+zero process writes, 23,814,144 private bytes, unchanged archive generation and
+scheduler submission count, and zero active/pending worker requests. The debug import
+also reached 4,013/4,013 sources, 611,416 observations, and 128,976 selected events.
+Its 1,315-second cold duration is not release performance evidence. This is one
+required acceptance-evidence slice, not an audit-hardening correction round.
+The final clean-root, format, warnings-denied workspace Clippy, and complete locked
+workspace test/doc-test gate finished with exit 0 in 869.6 seconds.
+
+Release blockers: Task 3 cold parsing/fact persistence and Task 4 set-based final
+projection/WAL lifecycle must still close the release cold target before Task 5.
+Package/M0/signing/soak remain separate; UI/P4 and speculative parser/PRAGMA work stay
+frozen until the measured cold bottleneck selects them.
+
+Git state: Task 2 is one clean feature-branch evidence commit containing only the
+bounded release-only idle receipt contract and its source-of-truth updates. No commit
+hash is stored in tracked documents.
+
 ## Targeted warm refresh handoff (2026-07-27)
 
 Product state: Task 1 of the locked ingestion plan is complete. A normal filesystem

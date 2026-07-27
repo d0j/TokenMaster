@@ -1,5 +1,29 @@
 # TokenMaster current state
 
+## 2026-07-27 — Ten-minute real-history idle receipt complete
+
+Task 2 of the locked ingestion plan required evidence before any scheduler or
+reconciliation rewrite. The healthy watcher already polls at 15 minutes, so a
+10-minute zero-change interval should perform no work. The release-only real-history
+contract now isolates its watched directory from the active Codex log root while the
+adapter still imports the real history, preventing the acceptance harness itself from
+creating watcher events.
+
+After authoritative import reached Complete, the exact 600-second receipt measured
+`0.0003%` normalized CPU, zero process read bytes, zero process write bytes,
+23,814,144 private bytes, unchanged archive generation, unchanged scheduler submission
+count, and no active or pending worker. The same debug acceptance imported 4,013
+sources and 611,416 observations and published 128,976 selected events; its 1,315-second
+cold time is diagnostic/debug evidence only and is not a release throughput claim.
+
+No production behavior changed, and no speculative optimization was justified.
+This is required release evidence, not audit hardening; `AUDIT_HARDENING_LOOP` did not
+trigger. Task 3, bounded cold parse and durable fact load, is now the sole open
+ingestion slice. UI/P4, package, M0, signing, and soak remain frozen or separately
+blocked.
+The final clean-root, format, warnings-denied workspace Clippy, and complete locked
+workspace test/doc-test gate finished with exit 0 in 869.6 seconds.
+
 ## 2026-07-27 — Targeted warm refresh complete
 
 Product behavior changed: an ordinary watcher append to an already known Codex JSONL

@@ -1,6 +1,6 @@
 # TokenMaster 10/10 Ingestion Plan
 
-**Status:** Task 1 complete; Task 2 is next. Later tasks remain locked.
+**Status:** Tasks 1-2 complete; Task 3 is next. Later tasks remain locked.
 
 **Goal:** Make TokenMaster's local-history ingestion faster and quieter than the
 pinned WhereMyTokens reference without weakening exact accounting, crash recovery,
@@ -110,6 +110,14 @@ Clippy contracts pass. Cold import is deliberately unchanged.
   bytes plus 1 MiB. Re-profile before another implementation round.
 
 ### Task 2 — Idle and reconciliation path
+
+**Completed 2026-07-27 without a production change.** The healthy watcher already
+uses a 15-minute reconciliation interval, so the required 10-minute zero-change idle
+window must remain quiet. The isolated real-history receipt proved unchanged archive
+generation and scheduler submission count, no active/pending worker, `0.0003%` average
+CPU, zero process read/write bytes, and 23,814,144 private bytes. The test watches a
+separate empty directory while the adapter reads real Codex history, preventing this
+acceptance harness from manufacturing its own source events.
 
 - Separate event-driven refresh from periodic/full reconciliation.
 - Use metadata first; open source bytes only when identity/length/mtime/proof requires

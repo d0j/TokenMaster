@@ -18,14 +18,101 @@ use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, ReplaySourceSink, ScopeIdentity, ScopeSink, SinkControl,
     SourceBatchReader, SourceSink, WorkerCompletion, WriterLease,
 };
-use tokenmaster_provider::DiscoveryRequest;
+use tokenmaster_provider::{DiscoveryRequest, ProviderDescriptor};
 use tokenmaster_runtime::{
-    CodexAdapter, LivePhase, LiveRefreshKind, LiveRuntime, RuntimeWriterLease, StoreArchive,
-    refresh_incremental,
+    CodexAdapter, CodexUsageProviderFactory, GitRepositoryHintIngress, LivePhase,
+    LiveProviderAdapter, LiveRefreshKind, LiveRuntime, ProviderWatchRoots, RuntimeError,
+    RuntimeWriterLease, StoreArchive, UsageProviderFactory, refresh_incremental,
 };
 use tokenmaster_store::{ArchivePublicationQuality, StoreErrorCode, UsageStore};
 
 static LIVE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+struct IsolatedWatchFactory {
+    inner: CodexUsageProviderFactory,
+    descriptor: ProviderDescriptor,
+    watch_roots: ProviderWatchRoots,
+}
+
+impl IsolatedWatchFactory {
+    fn new(request: DiscoveryRequest, watch_root: &Path) -> Self {
+        let inner = CodexUsageProviderFactory::new(request).expect("Codex provider factory");
+        let descriptor = inner.descriptor().clone();
+        let watch_roots =
+            ProviderWatchRoots::try_new(vec![watch_root.to_path_buf()]).expect("watch roots");
+        Self {
+            inner,
+            descriptor,
+            watch_roots,
+        }
+    }
+}
+
+impl UsageProviderFactory for IsolatedWatchFactory {
+    fn descriptor(&self) -> &ProviderDescriptor {
+        &self.descriptor
+    }
+
+    fn build(
+        self: Box<Self>,
+        repository_hints: Option<GitRepositoryHintIngress>,
+    ) -> Result<Box<dyn LiveProviderAdapter>, RuntimeError> {
+        let inner = Box::new(self.inner).build(repository_hints)?;
+        Ok(Box::new(IsolatedWatchAdapter {
+            inner,
+            watch_roots: self.watch_roots,
+        }))
+    }
+}
+
+struct IsolatedWatchAdapter {
+    inner: Box<dyn LiveProviderAdapter>,
+    watch_roots: ProviderWatchRoots,
+}
+
+impl Adapter for IsolatedWatchAdapter {
+    fn visit_scopes(
+        &mut self,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ScopeSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_scopes(control, sink)
+    }
+
+    fn visit_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn SourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_sources(scope, control, sink)
+    }
+
+    fn visit_replay_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_replay_sources(scope, control, sink)
+    }
+}
+
+impl LiveProviderAdapter for IsolatedWatchAdapter {
+    fn watch_roots(&self) -> ProviderWatchRoots {
+        self.watch_roots.clone()
+    }
+
+    fn visit_changed_replay_sources(
+        &mut self,
+        paths: &[&Path],
+        control: &OperationControl<'_>,
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner
+            .visit_changed_replay_sources(paths, control, sink)
+    }
+}
 
 fn serial() -> MutexGuard<'static, ()> {
     LIVE_TEST_LOCK
@@ -560,15 +647,25 @@ fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
         (60..=3_600).contains(&timeout_seconds),
         "real import timeout must remain between 60 and 3600 seconds"
     );
+    let idle_seconds = std::env::var("TOKENMASTER_REAL_IDLE_SECONDS")
+        .ok()
+        .map(|value| value.parse::<u64>().expect("real idle seconds"))
+        .unwrap_or(0);
+    assert!(
+        matches!(idle_seconds, 0 | 600),
+        "real idle receipt must be disabled or exactly 600 seconds"
+    );
 
     let archive_root = TempDir::new().expect("real import archive root");
+    let isolated_watch_root = TempDir::new().expect("isolated idle watch root");
     let archive_path = archive_root.path().join("usage.sqlite3");
     let baseline_private_bytes = current_private_bytes();
     let mut peak_private_bytes = baseline_private_bytes;
     let started = Instant::now();
     let deadline = started + Duration::from_secs(timeout_seconds);
     let mut completion_count = 0_u64;
-    let mut runtime = LiveRuntime::start(&archive_path, request(&source_root))
+    let factory = IsolatedWatchFactory::new(request(&source_root), isolated_watch_root.path());
+    let mut runtime = LiveRuntime::start_with_provider(&archive_path, Box::new(factory))
         .expect("start real import runtime");
 
     let (elapsed, final_events, final_archive_bytes) = loop {
@@ -617,6 +714,61 @@ fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
         }
         std::thread::sleep(Duration::from_secs(15));
     };
+
+    if idle_seconds != 0 {
+        wait_quiescent(&runtime);
+        let idle_before_runtime = runtime.snapshot().expect("idle start snapshot");
+        let idle_before = current_idle_sample();
+        std::thread::sleep(Duration::from_secs(idle_seconds));
+        let idle_after = current_idle_sample();
+        let idle_after_runtime = runtime.snapshot().expect("idle end snapshot");
+        let cpu_percent = idle_cpu_percent(idle_before, idle_after);
+        let read_bytes = idle_after
+            .read_bytes
+            .checked_sub(idle_before.read_bytes)
+            .expect("idle read counter order");
+        let write_bytes = idle_after
+            .write_bytes
+            .checked_sub(idle_before.write_bytes)
+            .expect("idle write counter order");
+
+        assert_eq!(
+            idle_after_runtime.engine().archive_generation(),
+            idle_before_runtime.engine().archive_generation(),
+            "idle archive generation must remain unchanged"
+        );
+        assert_eq!(
+            idle_after_runtime.scheduler().submitted_count(),
+            idle_before_runtime.scheduler().submitted_count(),
+            "idle scheduler must not submit refresh work"
+        );
+        assert!(!idle_after_runtime.scheduler().dirty());
+        assert!(idle_after_runtime.worker().active_request_id().is_none());
+        assert_eq!(idle_after_runtime.worker().pending_count(), 0);
+        assert!(
+            cpu_percent < 0.5,
+            "idle CPU {cpu_percent:.4}% must remain below 0.5%"
+        );
+        assert!(
+            read_bytes <= 1_048_576,
+            "idle process reads {read_bytes} bytes exceed the fixed 1 MiB noise ceiling"
+        );
+        assert!(
+            write_bytes <= 1_048_576,
+            "idle process writes {write_bytes} bytes exceed the fixed 1 MiB noise ceiling"
+        );
+        assert!(
+            idle_after.private_bytes <= 64 * 1024 * 1024,
+            "idle private memory {} bytes exceeds 64 MiB",
+            idle_after.private_bytes
+        );
+        println!(
+            "TM-REAL-IDLE-RECEIPT|seconds={idle_seconds}|cpu_percent={cpu_percent:.4}|read_bytes={read_bytes}|write_bytes={write_bytes}|private_bytes={}|archive_generation={}|scheduler_submissions={}",
+            idle_after.private_bytes,
+            idle_after_runtime.engine().archive_generation(),
+            idle_after_runtime.scheduler().submitted_count(),
+        );
+    }
 
     assert_eq!(
         runtime.shutdown().expect("real import shutdown"),
@@ -740,6 +892,77 @@ fn current_private_bytes() -> usize {
     }
     .expect("process memory");
     memory.PrivateUsage
+}
+
+#[cfg(windows)]
+#[derive(Clone, Copy)]
+struct IdleProcessSample {
+    monotonic: Instant,
+    private_bytes: usize,
+    kernel_time_100ns: u64,
+    user_time_100ns: u64,
+    read_bytes: u64,
+    write_bytes: u64,
+}
+
+#[cfg(windows)]
+fn current_idle_sample() -> IdleProcessSample {
+    use windows::Win32::Foundation::FILETIME;
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, GetProcessIoCounters, GetProcessTimes, IO_COUNTERS,
+    };
+
+    let process = unsafe { GetCurrentProcess() };
+    let mut creation = FILETIME::default();
+    let mut exit = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    unsafe {
+        GetProcessTimes(
+            process,
+            &raw mut creation,
+            &raw mut exit,
+            &raw mut kernel,
+            &raw mut user,
+        )
+    }
+    .expect("process times");
+    let mut io = IO_COUNTERS::default();
+    unsafe { GetProcessIoCounters(process, &raw mut io) }.expect("process I/O counters");
+    IdleProcessSample {
+        monotonic: Instant::now(),
+        private_bytes: current_private_bytes(),
+        kernel_time_100ns: filetime_ticks(kernel),
+        user_time_100ns: filetime_ticks(user),
+        read_bytes: io.ReadTransferCount,
+        write_bytes: io.WriteTransferCount,
+    }
+}
+
+#[cfg(windows)]
+fn idle_cpu_percent(before: IdleProcessSample, after: IdleProcessSample) -> f64 {
+    let elapsed = after
+        .monotonic
+        .duration_since(before.monotonic)
+        .as_secs_f64();
+    assert!(elapsed > 0.0, "idle elapsed time must be positive");
+    let kernel = after
+        .kernel_time_100ns
+        .checked_sub(before.kernel_time_100ns)
+        .expect("kernel time order");
+    let user = after
+        .user_time_100ns
+        .checked_sub(before.user_time_100ns)
+        .expect("user time order");
+    let processors = std::thread::available_parallelism()
+        .expect("available processors")
+        .get() as f64;
+    ((kernel + user) as f64 / 10_000_000.0) * 100.0 / elapsed / processors
+}
+
+#[cfg(windows)]
+const fn filetime_ticks(value: windows::Win32::Foundation::FILETIME) -> u64 {
+    ((value.dwHighDateTime as u64) << 32) | value.dwLowDateTime as u64
 }
 
 #[cfg(windows)]

@@ -4676,3 +4676,29 @@ measurement is next; UI, parser replacement, PRAGMA tuning, P4, and audit harden
 remain frozen.
 The final clean-root, format, warnings-denied workspace Clippy, and complete locked
 workspace test/doc-test gate finished with exit 0 in 987.4 seconds.
+
+## 2026-07-27 — Healthy ten-minute idle proved without a scheduler rewrite
+
+Task 2 first audited the existing cadence rather than changing it speculatively.
+Healthy watcher polling is 15 minutes, so the locked 10-minute zero-change acceptance
+should submit no reconciliation. The existing real-history release-only contract now
+supports an exact 600-second idle phase after Complete and captures Windows process
+CPU times, I/O counters, private memory, scheduler/worker state, and archive
+generation.
+
+The harness initially watched the active Codex history and could therefore observe
+its own chat/tool log writes. Root stopped that invalid pre-acceptance run, terminated
+only its exact child test process, and deleted only its exact temporary archive.
+The corrected harness still imports real Codex history but registers the watcher on a
+separate empty temporary directory, so the measured interval has truly zero source
+changes and no UI process.
+
+The valid receipt completed 4,013 sources and 611,416 observations, published 128,976
+selected events, then remained idle for exactly 600 seconds. CPU was 0.0003%, process
+read/write deltas were both zero, private memory was 23,814,144 bytes, archive
+generation and scheduler submissions were unchanged, and the worker had no active or
+pending request. The debug cold phase took 1,315 seconds and is deliberately not used
+as release throughput evidence. No production code changed; Task 3 is the next locked
+slice.
+The final clean-root, format, warnings-denied workspace Clippy, and complete locked
+workspace test/doc-test gate finished with exit 0 in 869.6 seconds.
