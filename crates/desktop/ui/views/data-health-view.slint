@@ -27,7 +27,7 @@ export component DataHealthView inherits Rectangle {
     in property <string> restore-confirmation-detail;
     in property <bool> high-contrast;
     in property <bool> reduced-motion;
-    out property <string> data-health-layout-mode: root.width < 760px ? "narrow" : "wide";
+    out property <string> data-health-layout-mode: root.width < 944px ? "narrow" : "wide";
 
     callback backup-normal();
     callback backup-compact();

@@ -208,7 +208,7 @@ export component ActivityView inherits Rectangle {
     in property <string> rhythm-range-label;
     in property <[ActivityRhythmRow]> hour-rows;
     in property <[ActivityRhythmRow]> weekday-rows;
-    out property <bool> narrow: root.width < 800px;
+    out property <bool> narrow: root.width < 984px;
     out property <string> layout-mode: root.narrow ? "narrow" : "wide";
 
     background: UiTokens.background;

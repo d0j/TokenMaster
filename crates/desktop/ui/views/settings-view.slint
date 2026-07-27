@@ -41,7 +41,7 @@ export component SettingsView inherits Rectangle {
     in property <string> config-import-changes-label;
     in property <bool> high-contrast;
     in property <bool> reduced-motion;
-    out property <string> settings-layout-mode: root.width < 760px ? "narrow" : "wide";
+    out property <string> settings-layout-mode: root.width < 944px ? "narrow" : "wide";
     out property <length> reminder-card-bottom: reminder-card.y + reminder-card.height;
     out property <length> backup-card-top: backup-card.y;
     out property <length> config-card-top: config-card.y;

@@ -22,6 +22,40 @@ import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
 import { Button, Palette } from "std-widgets.slint";
 
+component ShellTab inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> selected;
+    callback activated();
+
+    background: tab-touch.has-hover ? UiTokens.surface-raised : transparent;
+    border-radius: UiTokens.radius-sm;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.activated(); }
+
+    VerticalLayout {
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 1px;
+        Text {
+            text: root.glyph;
+            color: root.selected ? UiTokens.accent : UiTokens.text-secondary;
+            font-size: 13px;
+            font-weight: 750;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.label;
+            color: root.selected ? UiTokens.text-primary : UiTokens.text-secondary;
+            font-size: 10px;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+    tab-touch := TouchArea { clicked => { root.activated(); } }
+}
+
 export component MainWindow inherits Window {
     in-out property <UiPalette> presentation-palette <=> UiTokens.palette;
     in-out property <int> presentation-density-id <=> UiTokens.density-id;
@@ -190,14 +224,14 @@ export component MainWindow inherits Window {
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> dashboard-layout-preset: root.presentation-layout-key;
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
-    out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
-    out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
-    out property <string> activity-layout-mode: root.width < 800px ? "narrow" : "wide";
+    out property <string> models-layout-mode: root.width < 984px ? "narrow" : "wide";
+    out property <string> projects-layout-mode: root.width < 984px ? "narrow" : "wide";
+    out property <string> activity-layout-mode: root.width < 984px ? "narrow" : "wide";
     out property <string> settings-layout-mode: settings-view.settings-layout-mode;
     out property <length> settings-reminder-card-bottom: settings-view.reminder-card-bottom;
     out property <length> settings-backup-card-top: settings-view.backup-card-top;
     out property <length> settings-config-card-top: settings-view.config-card-top;
-    out property <string> notifications-layout-mode: root.width < 800px ? "narrow" : "wide";
+    out property <string> notifications-layout-mode: root.width < 984px ? "narrow" : "wide";
     out property <string> help-about-layout-mode: help-view.layout-mode;
     out property <int> help-about-section-count: help-view.section-count;
     out property <int> compact-widget-quota-count: compact-view.quota-count;
@@ -302,9 +336,9 @@ export component MainWindow inherits Window {
     changed observed-system-color-scheme-id => { root.system-color-scheme-observed(root.observed-system-color-scheme-id); }
 
     title: @tr("TokenMaster");
-    preferred-width: root.compact-widget-visible ? 420px : 1120px;
-    preferred-height: root.compact-widget-visible ? 560px : 720px;
-    min-width: root.compact-widget-visible ? 360px : 560px;
+    preferred-width: root.compact-widget-visible ? 420px : 880px;
+    preferred-height: root.compact-widget-visible ? 560px : 760px;
+    min-width: root.compact-widget-visible ? 360px : 640px;
     min-height: root.compact-widget-visible ? 320px : 480px;
     background: UiTokens.background;
     forward-focus: shell-focus;
@@ -329,7 +363,7 @@ export component MainWindow inherits Window {
         height: parent.height;
         visible: !root.compact-widget-visible;
         Rectangle {
-            height: 58px;
+            height: 52px;
             background: UiTokens.surface;
             border-color: UiTokens.border;
             border-width: 1px;
@@ -337,20 +371,22 @@ export component MainWindow inherits Window {
             HorizontalLayout {
                 padding-left: UiTokens.space;
                 padding-right: UiTokens.space;
-                spacing: 12px;
+                spacing: 8px;
 
                 Text {
                     text: @tr("TokenMaster");
-                    color: UiTokens.text-primary;
-                    font-size: 22px;
+                    color: UiTokens.degraded;
+                    font-size: 17px;
                     font-weight: 800;
                     vertical-alignment: center;
                 }
                 Text {
-                    text: @tr("Local usage intelligence");
+                    text: @tr("Local usage intelligence") + " · " + root.active-route-label;
                     color: UiTokens.text-secondary;
+                    font-size: 10px;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
+                    overflow: elide;
                 }
                 Button {
                     text: @tr("Go to route");
@@ -371,7 +407,8 @@ export component MainWindow inherits Window {
             vertical-stretch: 1;
 
             Rectangle {
-                width: 184px;
+                width: 0px;
+                visible: false;
                 background: UiTokens.surface;
                 border-color: UiTokens.border;
                 border-width: 1px;
@@ -683,6 +720,47 @@ export component MainWindow inherits Window {
                 }
             }
         }
+
+        Rectangle {
+            height: root.dashboard-visible || root.notifications-visible ? 54px : 0px;
+            visible: root.dashboard-visible || root.notifications-visible;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: 1px;
+            HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-xs;
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "●";
+                    label: @tr("Dashboard");
+                    selected: root.dashboard-visible;
+                    activated => { root.select-route("dashboard"); }
+                }
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "!";
+                    label: @tr("Alerts");
+                    selected: root.notifications-visible;
+                    activated => { root.select-route("notifications"); }
+                }
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "⚙";
+                    label: @tr("Settings");
+                    selected: root.settings-visible;
+                    activated => { root.select-route("settings"); }
+                }
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "≡";
+                    label: @tr("Go to route");
+                    selected: !root.dashboard-visible && !root.notifications-visible && !root.settings-visible;
+                    activated => { root.open-command-palette(); }
+                }
+            }
+        }
     }
 
     compact-view := CompactWidgetView {
@@ -697,9 +775,9 @@ export component MainWindow inherits Window {
 
     if root.in-app-notification-visible: InAppNotificationPanel {
         x: parent.width - self.width - UiTokens.space;
-        y: 58px + UiTokens.space;
+        y: 52px + UiTokens.space;
         width: min(440px, parent.width - 2 * UiTokens.space);
-        height: min(460px, parent.height - 58px - 2 * UiTokens.space);
+        height: min(460px, parent.height - 52px - 54px - 2 * UiTokens.space);
         rows: root.in-app-notification-rows;
         count-label: root.in-app-notification-count-label;
         dismiss => { root.dismiss-in-app-notifications(); }

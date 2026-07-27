@@ -13,15 +13,16 @@ component CardHeader inherits Rectangle {
     in property <string> state;
     in property <string> reasons;
 
-    height: 28px;
+    height: 24px;
     background: transparent;
     HorizontalLayout {
         spacing: UiTokens.space-sm;
         Text {
             text: root.title;
-            color: UiTokens.text-primary;
-            font-size: 15px;
-            font-weight: 750;
+            color: UiTokens.text-secondary;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
             horizontal-stretch: 1;
             vertical-alignment: center;
         }
@@ -35,8 +36,8 @@ component DashboardHeaderCard inherits Rectangle {
     in property <string> events;
     in property <string> evidence;
 
-    min-height: 142px;
-    background: UiTokens.background;
+    min-height: 118px;
+    background: UiTokens.surface;
     border-color: UiTokens.border;
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
@@ -51,8 +52,9 @@ component DashboardHeaderCard inherits Rectangle {
             Text {
                 text: @tr("Today");
                 color: UiTokens.text-primary;
-                font-size: 17px;
+                font-size: 11px;
                 font-weight: 800;
+                letter-spacing: 1.1px;
                 horizontal-stretch: 1;
             }
             Text { text: root.evidence; color: UiTokens.text-secondary; font-size: 11px; vertical-alignment: center; }
@@ -68,7 +70,7 @@ component DashboardHeaderCard inherits Rectangle {
                 Text {
                     text: root.cost;
                     color: root.cost == "—" ? UiTokens.text-secondary : UiTokens.text-primary;
-                    font-size: 40px;
+                    font-size: 30px;
                     font-weight: 800;
                     overflow: elide;
                 }
@@ -99,7 +101,7 @@ component InitialImportCard inherits Rectangle {
 
     min-height: 62px;
     background: UiTokens.surface-raised;
-    border-color: UiTokens.accent;
+    border-color: UiTokens.degraded;
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
@@ -116,7 +118,7 @@ component InitialImportCard inherits Rectangle {
         }
         VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: root.phase-label; color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
+            Text { text: root.phase-label; color: UiTokens.degraded; font-size: 11px; font-weight: 750; letter-spacing: 0.6px; }
             if root.progress-known: HorizontalLayout {
                 spacing: UiTokens.space-sm;
                 Rectangle {
@@ -566,7 +568,7 @@ export component DashboardView inherits Rectangle {
     in property <string> code-net;
     in property <string> code-efficiency;
     in property <string> code-evidence;
-    out property <bool> narrow: root.width < 760px;
+    out property <bool> narrow: root.width < 944px;
     out property <bool> initial-import-visible: root.initial-import-in-progress || root.startup-import-in-progress;
     out property <string> initial-import-phase-label: root.initial-import-stage >= 2 ? @tr("Importing local usage history…") : (root.initial-import-stage == 1 ? @tr("Starting safe import…") : @tr("Checking local usage history…"));
     out property <string> layout-mode: root.narrow ? "narrow" : "wide";

@@ -85,7 +85,7 @@ component AttributionCard inherits Rectangle {
 
 export component HelpAboutView inherits Rectangle {
     in property <string> product-version;
-    out property <bool> narrow: root.width < 800px;
+    out property <bool> narrow: root.width < 984px;
     out property <string> layout-mode: root.narrow ? "narrow" : "wide";
     out property <int> section-count: 6;
 

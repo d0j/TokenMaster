@@ -193,21 +193,21 @@ const fn rgb(red: u8, green: u8, blue: u8) -> DesktopRgb {
 
 const fn refined_tokens() -> DesktopColorTokens {
     DesktopColorTokens {
-        background: rgb(11, 15, 23),
-        surface: rgb(17, 24, 39),
-        surface_raised: rgb(24, 34, 52),
-        surface_subtle: rgb(14, 22, 36),
-        border: rgb(41, 53, 72),
-        text_primary: rgb(244, 247, 251),
-        text_secondary: rgb(158, 171, 192),
-        accent: rgb(124, 212, 253),
-        accent_subtle: rgb(23, 48, 68),
-        accent_secondary: rgb(167, 139, 250),
-        accent_tertiary: rgb(240, 171, 252),
-        ready: rgb(112, 214, 165),
-        waiting: rgb(143, 163, 191),
-        degraded: rgb(242, 198, 109),
-        unavailable: rgb(240, 139, 139),
+        background: rgb(13, 15, 19),
+        surface: rgb(22, 25, 32),
+        surface_raised: rgb(30, 34, 48),
+        surface_subtle: rgb(19, 21, 26),
+        border: rgb(37, 41, 52),
+        text_primary: rgb(232, 234, 240),
+        text_secondary: rgb(174, 180, 192),
+        accent: rgb(45, 212, 191),
+        accent_subtle: rgb(18, 58, 55),
+        accent_secondary: rgb(56, 189, 248),
+        accent_tertiary: rgb(167, 139, 250),
+        ready: rgb(52, 211, 153),
+        waiting: rgb(251, 191, 36),
+        degraded: rgb(251, 191, 36),
+        unavailable: rgb(248, 139, 139),
     }
 }
 
