@@ -101,6 +101,9 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Match 'immutable-actions\.Tests\.ps1'
         $Text | Should -Match 'release-artifact-workflow\.Tests\.ps1'
         $Text | Should -Match 'dependency-policy\.Tests\.ps1'
+        $Text | Should -Match 'audit-clean-root\.Tests\.ps1'
+        $Text | Should -Match 'product-package\.Tests\.ps1'
+        $Text | Should -Match 'validate-p3e-interactive\.Tests\.ps1'
         $Text | Should -Match 'validate-immutable-actions\.ps1'
         $Text | Should -Match 'verify-dependency-policy\.ps1'
     }

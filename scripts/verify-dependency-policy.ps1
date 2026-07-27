@@ -13,7 +13,7 @@ $ReportRoot = Join-Path $RepositoryRoot "reports"
 $ScratchRoot = Join-Path $RepositoryRoot "target\dependency-policy"
 $MetadataPath = Join-Path $ScratchRoot "metadata.json"
 $CargoHome = Join-Path $ScratchRoot "cargo-home"
-$Checks = @("advisories", "licenses", "sources")
+$Checks = @("advisories", "licenses", "sources", "bans")
 
 foreach ($RequiredFile in @($Manifest, $LockFile, $Policy)) {
     if (-not (Test-Path -LiteralPath $RequiredFile -PathType Leaf)) {

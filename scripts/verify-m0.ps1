@@ -88,6 +88,9 @@ Invoke-PesterChecked "pester-immutable-actions" (Join-Path $PSScriptRoot "tests\
 Invoke-PesterChecked "pester-release-artifact-workflow" (Join-Path $PSScriptRoot "tests\release-artifact-workflow.Tests.ps1")
 Invoke-PesterChecked "pester-dependency-policy" (Join-Path $PSScriptRoot "tests\dependency-policy.Tests.ps1")
 Invoke-PesterChecked "pester-secret-scan" (Join-Path $PSScriptRoot "tests\secret-scan.Tests.ps1")
+Invoke-PesterChecked "pester-clean-root" (Join-Path $PSScriptRoot "tests\audit-clean-root.Tests.ps1")
+Invoke-PesterChecked "pester-product-package" (Join-Path $PSScriptRoot "tests\product-package.Tests.ps1")
+Invoke-PesterChecked "pester-p3e-interactive" (Join-Path $PSScriptRoot "tests\validate-p3e-interactive.Tests.ps1")
 Invoke-Checked "fmt" $Cargo @("fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
 $PreviousRustFlags = $env:RUSTFLAGS
 try {

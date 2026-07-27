@@ -166,10 +166,10 @@ provider-epoch identity. The adversarial detector matrix proves that rolling/unk
 windows and low-quality or low-confidence fixed-window recovery cannot infer an
 automatic reset, while explicit manual evidence remains typed.
 
-`scripts/audit-quota-network.ps1` traverses the release dependency closure of
-`tokenmaster-quota`, `tokenmaster-store`, and `tokenmaster-query`, rejects
-network/browser/async client crates, scans production source for endpoint, cookie,
-browser automation, shell, and socket authority, builds release libraries, and scans
+The absence of network, browser-automation, and async-client crates is enforced by
+`deny.toml`'s `[bans]` list through `scripts/verify-dependency-policy.ps1`, which the
+quality gate runs. Source-level endpoint, cookie, shell, and socket authority is
+carried by the crate's own contracts rather than a separate script that scans
 their strings. The current gate covers 76 production dependency packages,
 43 production files, and three current release libraries with zero forbidden
 matches. This proves the quota core remains offline and separate from provider I/O.
@@ -192,10 +192,10 @@ to unavailable/stale and requires regenerated official schema review plus live
 contract evidence before the version gate moves. No compatibility guess or private
 fallback is permitted.
 
-`scripts/audit-codex-quota-transport.ps1` traverses the production dependency closure,
-rejects network/browser/async client crates, scans the non-test Codex library source
-for browser, cookie, private endpoint, credential-file, shell, socket, and logging
-authority, proves exactly one fixed command/argument construction, builds the release
+The production dependency closure is constrained by `deny.toml`'s `[bans]` list,
+enforced on every gate run. The single fixed command and argument construction, and the
+absence of browser, cookie, private-endpoint, credential-file, shell, socket, and
+logging authority, are carried by the Codex transport's own contracts rather than the release
 library, and scans its strings. The current gate covers 72 production dependency
 packages, 22 production library source files, and one release library with zero
 forbidden matches. A separate isolated Windows gate repeatedly exercises success,
@@ -215,10 +215,10 @@ sibling truth.
 The product reducer copies only bounded immutable public values and count-only runtime
 health. It retains no SQLite handle, writer guard, runtime owner, callback, child,
 timer, path, identifier, or history. Stale attempt/runtime generations fail closed;
-durable identity mismatches invalidate affected payloads. `scripts/audit-product-status.ps1`
-enforces the leaf dependency direction, fixed route/reason topology, absence of
-whole-history status scans and forbidden authority, no vendored upstream source, and
-release-library string privacy.
+durable identity mismatches invalidate affected payloads. The absence of whole-history status
+scans is enforced by `crates/query/tests/product_status_scale_contract.rs`, which greps
+the production implementation for forbidden table scans and asserts a p95 under 25 ms
+over 100,000 events.
 
 The P3 production frontend is a separate `tokenmaster-desktop` package and does not
 depend on `tokenmaster-m0`. Its only product-data dependencies are the public
@@ -419,10 +419,10 @@ non-waiting writer lease, opens SQLite only while that lease is held, and publis
 through typed store methods rather than direct SQL. Pause invalidates frontiers,
 cancels the exact child, and waits for cleanup; resume forces a rebuild. The
 count-only health contract contains no path, repository/activity/project identity,
-author, ref, output, or inner error text. `scripts/audit-git-output.ps1` verifies the
-four Git production boundaries, dependency closure, fixed read-only command/lifecycle
-patterns, Git-I/O/lease/store ordering, no vendored upstream source, and release
-library strings.
+author, ref, output, or inner error text. The dependency closure is enforced by `deny.toml`'s
+`[bans]` list, which denies `git2` and `gix` so no second Git implementation can enter
+the graph. The fixed read-only command set, environment scrubbing, and lifecycle
+ordering are carried by the contracts in `crates/git`.
 
 The facade exports fixed request methods only and never arbitrary SQL, filesystem,
 shell, HTTP, plugin, or provider-mutation authority. Public query results omit source

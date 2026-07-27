@@ -119,9 +119,9 @@ Pester contracts.
 
 P4-C: `TM-FUNC-005` and `TM-UI-002` extend to schema-v3 complete presentation,
 Refined/Graphite/Ember exact identity, one palette owner, admission-first application,
-and latest-wins complete payload persistence. `audit-desktop-shell` and
-`audit-application-composition` source/Pester mutation rails are the developer receipt;
-interactive and release traceability remains open.
+and latest-wins complete payload persistence. The compiled Slint contracts in
+`crates/desktop/tests` are the developer receipt; interactive and release traceability
+remains open.
 
 P4-D: `TM-FUNC-005`, `TM-UI-002`, `TM-PERF-001`, and `TM-SEC-005` extend to
 schema-v4 complete presentation, strict legacy-Dark migration, independent requested
