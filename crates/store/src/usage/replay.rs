@@ -4308,7 +4308,6 @@ struct StoredReplayObservation {
     versions: AccountingVersions,
     signature: [u8; 32],
     evidence: ReplayEvidence,
-    disposition: ReplayDisposition,
     declared_conflict: bool,
 }
 
@@ -4319,15 +4318,12 @@ fn process_session_classification(
     context: ReplaySessionClassificationContext,
 ) -> Result<ReplayWorkProgress, StoreError> {
     let session = load_replay_session(transaction, revision_id, work)?;
-    let mut state = if session.conflict {
-        SessionReplayState::Conflict
-    } else if session.state == SessionReplayState::Diverged {
-        SessionReplayState::Diverged
-    } else if session.parent.is_some() {
-        SessionReplayState::Matching
-    } else {
-        SessionReplayState::Root
-    };
+    let mut state = initial_walk_state(
+        session.conflict,
+        session.state,
+        session.parent.is_some(),
+        work.next_ordinal,
+    );
     let mut next_ordinal = work.next_ordinal;
     let mut processed_count = 0_usize;
     loop {
@@ -4415,7 +4411,7 @@ fn process_session_classification(
                 traversal.facts,
             ));
             state = merge_session_state(state, classification.next_state());
-            let disposition_changed = update_persisted_classification(
+            update_persisted_classification(
                 transaction,
                 revision_id,
                 observation,
@@ -4423,7 +4419,12 @@ fn process_session_classification(
                 classification.disposition(),
                 context.epoch,
             )?;
-            if disposition_changed && !fingerprints.contains(&observation.fingerprint) {
+            // `invalidate_session_selections` deletes every selection for this
+            // session before the walk, so a fingerprint whose disposition did not
+            // change still needs its selection rebuilt. `refresh_replay_selection`
+            // deletes and reinserts the deterministic minimum, so refreshing an
+            // unchanged fingerprint is idempotent.
+            if !fingerprints.contains(&observation.fingerprint) {
                 fingerprints.push(observation.fingerprint);
             }
         }
@@ -4556,7 +4557,7 @@ fn load_replay_session(
 const LOAD_REPLAY_ORDINAL_SQL: &str = "SELECT file_key, generation, source_offset, fingerprint,
         provider_id, profile_id, session_id, session_ordinal,
         canonicalizer_version, fingerprint_version, replay_signature_version,
-        replay_signature, evidence, disposition, declared_conflict
+        replay_signature, evidence, declared_conflict
  FROM usage_replay_observation INDEXED BY usage_replay_observation_parent
  WHERE revision_id = ?1 AND provider_id = ?2 AND profile_id = ?3
    AND session_id = ?4 AND session_ordinal = ?5
@@ -4593,8 +4594,7 @@ fn load_replay_ordinal(
                 row.get::<_, i64>(10)?,
                 row.get::<_, Vec<u8>>(11)?,
                 row.get::<_, String>(12)?,
-                row.get::<_, String>(13)?,
-                row.get::<_, i64>(14)?,
+                row.get::<_, i64>(13)?,
             ))
         },
     )?;
@@ -4612,8 +4612,7 @@ fn load_replay_ordinal(
             versions: AccountingVersions::from_stored(raw.8, raw.9, raw.10)?,
             signature: stored_digest(&raw.11)?,
             evidence: replay_evidence_from_sql(&raw.12)?,
-            disposition: replay_disposition_from_sql(&raw.13)?,
-            declared_conflict: stored_bool(raw.14)?,
+            declared_conflict: stored_bool(raw.13)?,
         })
     })
     .collect()
@@ -4766,6 +4765,32 @@ fn stored_replay_facts(
     })
 }
 
+/// Seeds the classification walk.
+///
+/// A walk that restarts at ordinal 0 has proved nothing yet, so it must re-derive
+/// the state sequence from the session's initial state. Seeding it with the stored
+/// terminal state re-admits an already-proved replay prefix as eligible and
+/// materializes the ancestor's usage a second time under the fork's own
+/// fingerprint. A resume mid-walk keeps the stored state instead: its prefix was
+/// proved in an earlier pass, and dropping `Diverged` there would let a matching
+/// parent signature relabel post-divergence work as a replay and under-count it.
+const fn initial_walk_state(
+    conflict: bool,
+    stored: SessionReplayState,
+    has_parent: bool,
+    next_ordinal: u64,
+) -> SessionReplayState {
+    if conflict {
+        SessionReplayState::Conflict
+    } else if next_ordinal > 0 && matches!(stored, SessionReplayState::Diverged) {
+        SessionReplayState::Diverged
+    } else if has_parent {
+        SessionReplayState::Matching
+    } else {
+        SessionReplayState::Root
+    }
+}
+
 fn merge_session_state(
     current: SessionReplayState,
     next: SessionReplayState,
@@ -4787,8 +4812,7 @@ fn update_persisted_classification(
     parent: Option<&str>,
     disposition: ReplayDisposition,
     epoch: ReplayEpoch,
-) -> Result<bool, StoreError> {
-    let disposition_changed = observation.disposition != disposition;
+) -> Result<(), StoreError> {
     let updated = transaction.execute(
         "UPDATE usage_replay_observation SET
            parent_session_id = ?1, disposition = ?2, evidence_epoch = ?3
@@ -4808,7 +4832,7 @@ fn update_persisted_classification(
     if updated != 1 {
         return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
     }
-    Ok(disposition_changed)
+    Ok(())
 }
 
 fn update_persisted_session_state(
@@ -5056,16 +5080,6 @@ const fn replay_disposition_sql(disposition: ReplayDisposition) -> &'static str 
     }
 }
 
-fn replay_disposition_from_sql(value: &str) -> Result<ReplayDisposition, StoreError> {
-    match value {
-        "eligible" => Ok(ReplayDisposition::Eligible),
-        "replay" => Ok(ReplayDisposition::Replay),
-        "pending" => Ok(ReplayDisposition::Pending),
-        "conflict" => Ok(ReplayDisposition::Conflict),
-        _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
-    }
-}
-
 const fn session_state_sql(state: SessionReplayState) -> &'static str {
     match state {
         SessionReplayState::Root => "root",
@@ -5120,6 +5134,44 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn a_restarted_walk_re_derives_state_instead_of_inheriting_divergence() {
+        // The stored state is the terminal verdict of an earlier pass. A walk that
+        // starts over at ordinal 0 must not inherit it: the classifier returns
+        // `Eligible` unconditionally for `Diverged`, so an inherited verdict turns
+        // an already-proved replay prefix into canonical work and double-counts the
+        // ancestor's usage.
+        assert_eq!(
+            initial_walk_state(false, SessionReplayState::Diverged, true, 0),
+            SessionReplayState::Matching
+        );
+        assert_eq!(
+            initial_walk_state(false, SessionReplayState::Diverged, false, 0),
+            SessionReplayState::Root
+        );
+    }
+
+    #[test]
+    fn a_resumed_walk_carries_a_proved_divergence_forward() {
+        // The inverse regression. Dropping the stored `Diverged` on a resume lets a
+        // parent ordinal whose signature matches relabel post-divergence work as a
+        // replay, which under-counts the fork.
+        assert_eq!(
+            initial_walk_state(false, SessionReplayState::Diverged, true, 1),
+            SessionReplayState::Diverged
+        );
+    }
+
+    #[test]
+    fn conflict_outranks_every_other_seed() {
+        for ordinal in [0, 1] {
+            assert_eq!(
+                initial_walk_state(true, SessionReplayState::Diverged, true, ordinal),
+                SessionReplayState::Conflict
+            );
+        }
+    }
     use crate::{
         AppendBatchParts, SourceKind, SourceRegistrationParts, StoredCheckpointParts,
         StoredSourceChunk,

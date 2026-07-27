@@ -4171,3 +4171,162 @@ fn eligible_selection_uses_the_smallest_source_key_for_equal_fingerprints() {
         .expect("selected source key");
     assert_eq!(selected_key, [1_u8; 32]);
 }
+
+#[test]
+fn reclassified_diverged_fork_keeps_its_proved_replay_prefix() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(9))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([9; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(
+            9,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                replay_event(9, "parent", None, 0, 10, Some(100), false),
+                replay_event(9, "parent", None, 1, 20, Some(110), false),
+                replay_event(9, "child", Some("parent"), 0, 30, Some(100), false),
+                replay_event(9, "child", Some("parent"), 1, 40, Some(111), false),
+            ],
+        ))
+        .expect("append forked history");
+    let before = store
+        .replay_quality(revision.id())
+        .expect("initial classification quality");
+    assert_eq!(
+        before.replay(),
+        1,
+        "child ordinal 0 repeats the parent prefix"
+    );
+    assert_eq!(before.eligible(), 3);
+
+    // Re-declaring the relation enqueues classification from ordinal 0 while the
+    // session is already persisted as `diverged`. The prefix proved to be a replay
+    // must stay a replay: admitting it again materializes the ancestor's usage a
+    // second time under the fork's own fingerprint.
+    let relation_epoch = store
+        .apply_replay_relation(&replay_relation(
+            9,
+            revision.id(),
+            epoch,
+            "child",
+            "parent",
+            90,
+            false,
+        ))
+        .expect("apply late relation");
+    let mut settled = store
+        .continue_replay(revision.id(), relation_epoch)
+        .expect("re-classify the diverged fork");
+    while settled.remaining_work() {
+        settled = store
+            .continue_replay(revision.id(), settled.epoch())
+            .expect("drain remaining replay work");
+    }
+
+    let after = store
+        .replay_quality(revision.id())
+        .expect("re-classified quality");
+    assert_eq!(
+        after.replay(),
+        1,
+        "the proved replay prefix must not be re-admitted as eligible"
+    );
+    assert_eq!(
+        after.eligible(),
+        3,
+        "re-classification must not create canonical work"
+    );
+    assert_eq!(after.total(), before.total());
+}
+
+#[test]
+fn resumed_diverged_fork_keeps_post_divergence_work_eligible() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(10))
+        .expect("registered first source");
+    store
+        .register_source(&registration(11))
+        .expect("registered second source");
+    // The second manifest source is never appended, so the manifest stays open and
+    // an absent parent ordinal parks the work instead of resolving it.
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(
+                vec![
+                    SourceKey::from_bytes([10; 32]),
+                    SourceKey::from_bytes([11; 32]),
+                ]
+                .into_boxed_slice(),
+            )
+            .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(
+            10,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                replay_event(10, "parent", None, 0, 10, Some(100), false),
+                replay_event(10, "parent", None, 1, 20, Some(110), false),
+                replay_event(10, "child", Some("parent"), 0, 30, Some(100), false),
+                replay_event(10, "child", Some("parent"), 1, 40, Some(111), false),
+                replay_event(10, "child", Some("parent"), 2, 50, Some(120), false),
+            ],
+        ))
+        .expect("append forked history with an unmatched tail");
+    let parked = store
+        .replay_quality(revision.id())
+        .expect("parked classification quality");
+    assert_eq!(parked.replay(), 1);
+    assert_eq!(parked.eligible(), 4);
+
+    // The fork's ordinal 2 has no parent ordinal yet, so its work parks with
+    // `next_ordinal = 2`. Completing the manifest on the second source supplies
+    // that parent ordinal with cumulative usage identical to the fork's, so the
+    // walk that follows sees a present parent whose signature matches and must
+    // still treat the tail as canonical.
+    //
+    // Note this covers the end-to-end result, not the seed in isolation: the append
+    // enqueues a child scan, and `enqueue_classification` keeps the lower ordinal,
+    // so the session is re-walked from 0 rather than resumed at 2. The seed itself
+    // is pinned in both directions by the `initial_walk_state` unit tests in
+    // `crates/store/src/usage/replay.rs`.
+    let completed = store
+        .apply_replay_append_batch(&replay_append(
+            11,
+            revision.id(),
+            epoch,
+            vec![replay_event(11, "parent", None, 2, 60, Some(120), false)],
+        ))
+        .expect("append the awaited parent ordinal on the second source");
+    // Assert on the resume itself, before the follow-up child scan re-enqueues the
+    // session from ordinal 0. A fresh walk re-derives the sequence correctly either
+    // way, so draining first would mask a wrong seed.
+    store
+        .continue_replay(revision.id(), completed)
+        .expect("resume the parked fork");
+
+    let after = store
+        .replay_quality(revision.id())
+        .expect("resumed classification quality");
+    assert_eq!(
+        after.replay(),
+        1,
+        "work after a proved divergence must never be relabelled a replay"
+    );
+    assert_eq!(
+        after.eligible(),
+        5,
+        "the awaited parent ordinal plus the fork tail stay canonical"
+    );
+}
