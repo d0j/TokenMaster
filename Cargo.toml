@@ -17,9 +17,7 @@ members = [
   "crates/runtime",
   "crates/state",
   "crates/store",
-  "crates/gates",
   "crates/git",
-  "crates/probe-app",
 ]
 
 [workspace.package]

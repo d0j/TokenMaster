@@ -40,7 +40,7 @@ jobs:
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
       - name: Install Rust 1.97.0
         shell: pwsh
-        run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt --component clippy --target x86_64-pc-windows-gnu
+        run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt --component clippy --target x86_64-pc-windows-msvc
       - name: Verify TokenMaster M0
         shell: pwsh
         run: ./scripts/verify-m0.ps1 -RepositoryRoot $PWD.Path

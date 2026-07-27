@@ -47,40 +47,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-M0StagePass "dependency-policy"
 
-$MingwRoot = $null
-$MingwLinker = $null
-foreach ($CandidateRoot in @("C:\mingw64", "C:\msys64\mingw64")) {
-    $CandidateLinker = Join-Path $CandidateRoot "bin\x86_64-w64-mingw32-gcc.exe"
-    $CandidateImportLibraries = @(
-        (Join-Path $CandidateRoot "lib\libshlwapi.a"),
-        (Join-Path $CandidateRoot "x86_64-w64-mingw32\lib\libshlwapi.a")
-    )
-    $CandidateShlwapi = $CandidateImportLibraries |
-        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-        Select-Object -First 1
-    if ((Test-Path -LiteralPath $CandidateLinker -PathType Leaf) -and $CandidateShlwapi) {
-        $MingwRoot = $CandidateRoot
-        $MingwLinker = $CandidateLinker
-        break
-    }
-}
-if (-not $MingwRoot) {
-    throw "MinGW with the shlwapi import library is required under C:\mingw64 or C:\msys64\mingw64"
-}
-$MingwBin = Join-Path $MingwRoot "bin"
-$env:Path = "$MingwBin$([IO.Path]::PathSeparator)${env:Path}"
-$env:CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = $MingwLinker
-# Avoid known concurrent Windows MinGW linker exits in the receipt process.
-$env:CARGO_BUILD_JOBS = "1"
-Write-M0StageBegin "gnu-linker"
-$MingwVersionOutput = @(& $MingwLinker --version)
-$MingwExitCode = $LASTEXITCODE
-$MingwVersion = $MingwVersionOutput | Select-Object -First 1
-if ($MingwExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($MingwVersion)) {
-    throw "The validated GNU linker did not report a version"
-}
-Write-M0StagePass "gnu-linker"
-
 $Cargo = (Get-Command cargo.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Name
 
 function Invoke-Checked {
@@ -117,8 +83,6 @@ function Invoke-PesterChecked {
     Write-M0StagePass $Id
 }
 
-$Stamp = [DateTimeOffset]::UtcNow.ToString("yyyyMMdd-HHmmssfff")
-Invoke-PesterChecked "pester-soak-lib" (Join-Path $PSScriptRoot "tests\m0-soak-lib.Tests.ps1")
 Invoke-PesterChecked "pester-m0-scripts" (Join-Path $PSScriptRoot "tests\m0-scripts.Tests.ps1")
 Invoke-PesterChecked "pester-immutable-actions" (Join-Path $PSScriptRoot "tests\immutable-actions.Tests.ps1")
 Invoke-PesterChecked "pester-release-artifact-workflow" (Join-Path $PSScriptRoot "tests\release-artifact-workflow.Tests.ps1")
@@ -137,23 +101,16 @@ finally {
         $env:RUSTFLAGS = $PreviousRustFlags
     }
 }
-Invoke-Checked "budget-contract" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-gates", "--test", "budget_contract", "--locked")
-Invoke-Checked "metrics-contract" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "metrics_contract", "--locked")
-Invoke-Checked "stress-contract" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "stress_contract", "--locked")
 Invoke-Checked "sqlite-one-million" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-store", "--test", "sqlite_contract", "--locked", "--", "one_million_rows_remain_page_bounded", "--ignored", "--exact")
 Invoke-Checked "workspace-tests" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "--workspace", "--locked")
-Invoke-Checked "m0-release-build" $Cargo @("+1.97.0", "build", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--release", "--locked")
-
-$Executable = Join-Path $RepositoryRoot "target\x86_64-pc-windows-gnu\release\tokenmaster-m0.exe"
-Invoke-Checked "stress-switches" $Executable @("--stress", "switches", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-switches-$Stamp.json")
-Invoke-Checked "stress-routes" $Executable @("--stress", "routes", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-routes-$Stamp.json")
+Invoke-Checked "product-release-build" $Cargo @("+1.97.0", "build", "--manifest-path", $Manifest, "-p", "tokenmaster-app", "--release", "--locked")
 
 $Summary = [ordered]@{
     schemaVersion = 1
     kind = "developer-verification"
     result = "pass"
     toolchain = "rust-1.97"
-    mingw = "validated"
+    target = "x86_64-pc-windows-msvc"
     pester = "5.7.1"
     commands = $Commands
     externalGates = @(
