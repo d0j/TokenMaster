@@ -386,6 +386,11 @@ fn startup_append_new_source_burst_pause_resume_and_reopen_are_live() {
     let snapshot = runtime.snapshot().expect("startup snapshot");
     assert_eq!(snapshot.phase(), LivePhase::Running);
     assert_eq!(snapshot.watcher().root_count(), 1);
+    let startup_timings = runtime
+        .last_full_rebuild_timings()
+        .expect("startup timings")
+        .expect("completed full rebuild timings");
+    assert_eq!(startup_timings.total().samples(), 1);
 
     append(&first, &usage_line(2, 5));
     std::fs::write(source_root.path().join("second.jsonl"), usage_line(3, 7)).expect("new source");
@@ -404,6 +409,13 @@ fn startup_append_new_source_burst_pause_resume_and_reopen_are_live() {
         runtime.snapshot()
     );
     wait_quiescent(&runtime);
+    assert_eq!(
+        runtime
+            .last_full_rebuild_timings()
+            .expect("retained startup timings"),
+        Some(startup_timings),
+        "an incremental refresh must not erase the last cold receipt"
+    );
     assert!(
         runtime
             .snapshot()
@@ -668,7 +680,7 @@ fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
     let mut runtime = LiveRuntime::start_with_provider(&archive_path, Box::new(factory))
         .expect("start real import runtime");
 
-    let (elapsed, final_events, final_archive_bytes) = loop {
+    let (elapsed, final_events, final_archive_bytes, final_timings) = loop {
         while let Some(completion) = runtime.try_completion().expect("real import completion") {
             completion_count = completion_count.checked_add(1).expect("completion count");
             eprintln!(
@@ -702,8 +714,12 @@ fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
             diagnostics.5,
         );
 
-        if publication.quality() == ArchivePublicationQuality::Complete {
-            break (elapsed, event_count, archive_bytes);
+        if publication.quality() == ArchivePublicationQuality::Complete
+            && let Some(timings) = runtime
+                .last_full_rebuild_timings()
+                .expect("last full rebuild timings")
+        {
+            break (elapsed, event_count, archive_bytes, timings);
         }
         if Instant::now() >= deadline {
             runtime.shutdown().expect("timeout shutdown");
@@ -791,6 +807,22 @@ fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
     );
     drop(store);
     let final_private_bytes = current_private_bytes();
+    println!(
+        "TM-COLD-STAGE-RECEIPT|total_ns={}|discovery_ns={}|discovery_samples={}|read_parse_ns={}|read_parse_samples={}|canonicalize_ns={}|canonicalize_samples={}|fact_write_ns={}|fact_write_samples={}|project_ns={}|project_samples={}|checkpoint_ns={}|checkpoint_samples={}",
+        final_timings.total().elapsed_nanos(),
+        final_timings.discovery().elapsed_nanos(),
+        final_timings.discovery().samples(),
+        final_timings.read_parse().elapsed_nanos(),
+        final_timings.read_parse().samples(),
+        final_timings.canonicalize().elapsed_nanos(),
+        final_timings.canonicalize().samples(),
+        final_timings.fact_write().elapsed_nanos(),
+        final_timings.fact_write().samples(),
+        final_timings.project().elapsed_nanos(),
+        final_timings.project().samples(),
+        final_timings.checkpoint().elapsed_nanos(),
+        final_timings.checkpoint().samples(),
+    );
     println!(
         "TM-REAL-IMPORT-RECEIPT|elapsed_ms={}|events={final_events}|archive_bytes={final_archive_bytes}|baseline_private_bytes={baseline_private_bytes}|peak_private_bytes={peak_private_bytes}|final_private_bytes={final_private_bytes}|completions={completion_count}",
         elapsed.as_millis()

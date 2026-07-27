@@ -4702,3 +4702,29 @@ as release throughput evidence. No production code changed; Task 3 is the next l
 slice.
 The final clean-root, format, warnings-denied workspace Clippy, and complete locked
 workspace test/doc-test gate finished with exit 0 in 869.6 seconds.
+
+## 2026-07-27 — Real cold profile stopped parser speculation
+
+Added bounded stage timings to `OneShotExecutor`: total, discovery, read/parse,
+canonicalization, fact write, project/replay, and checkpoint work retain only
+nanoseconds plus sample counts. `LiveRuntime` preserves the most recent full-rebuild
+receipt independently from later incremental refreshes.
+
+The first acceptance attempt exposed that keeping timings only in the latest-refresh
+snapshot allowed a subsequent incremental refresh to erase them. Root stopped only
+the exact test/wrapper processes after database writes had ceased, deleted only that
+temporary archive, added a focused retention regression, and reran once. The valid
+release run exited 0 in 766.518 seconds: 574.905 seconds (76.60%) were durable fact
+writes, 137.093 (18.27%) replay/project, and only 22.446 (2.99%) read plus JSON parse.
+Peak private memory was 35,000,320 bytes; all 4,014 sources, 611,945 observations and
+128,976 selected events reached Complete.
+
+The active history changed after the earlier 474-second baseline, so this receipt is
+stage attribution rather than a regression or superiority comparison. The
+project/replay boundary includes the final buffered fact-batch flush. The final
+clean-root, format, warnings-denied workspace Clippy, and complete locked workspace
+test/doc-test gate finished with exit 0 in 1,201 seconds.
+
+The evidence rejects SIMD/parser replacement and reader-worker tuning for the current
+critical path. Task 3 remains open only for bounded two-phase durable fact loading;
+Task 4 remains the later set-based projection slice.

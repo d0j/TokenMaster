@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use tokenmaster_accounting::Canonicalizer;
 
 use crate::{
@@ -83,6 +85,79 @@ impl ExecutionCounts {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ExecutionStageTiming {
+    elapsed_nanos: u64,
+    samples: u64,
+}
+
+impl ExecutionStageTiming {
+    #[must_use]
+    pub const fn elapsed_nanos(self) -> u64 {
+        self.elapsed_nanos
+    }
+
+    #[must_use]
+    pub const fn samples(self) -> u64 {
+        self.samples
+    }
+
+    fn record(&mut self, elapsed: Duration) {
+        self.elapsed_nanos = self
+            .elapsed_nanos
+            .saturating_add(u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX));
+        self.samples = self.samples.saturating_add(1);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ExecutionTimings {
+    total: ExecutionStageTiming,
+    discovery: ExecutionStageTiming,
+    read_parse: ExecutionStageTiming,
+    canonicalize: ExecutionStageTiming,
+    fact_write: ExecutionStageTiming,
+    project: ExecutionStageTiming,
+    checkpoint: ExecutionStageTiming,
+}
+
+impl ExecutionTimings {
+    #[must_use]
+    pub const fn total(self) -> ExecutionStageTiming {
+        self.total
+    }
+
+    #[must_use]
+    pub const fn discovery(self) -> ExecutionStageTiming {
+        self.discovery
+    }
+
+    #[must_use]
+    pub const fn read_parse(self) -> ExecutionStageTiming {
+        self.read_parse
+    }
+
+    #[must_use]
+    pub const fn canonicalize(self) -> ExecutionStageTiming {
+        self.canonicalize
+    }
+
+    #[must_use]
+    pub const fn fact_write(self) -> ExecutionStageTiming {
+        self.fact_write
+    }
+
+    #[must_use]
+    pub const fn project(self) -> ExecutionStageTiming {
+        self.project
+    }
+
+    #[must_use]
+    pub const fn checkpoint(self) -> ExecutionStageTiming {
+        self.checkpoint
+    }
+}
+
 fn checked_count_add(value: u64, amount: u64) -> Result<u64, PortError> {
     value
         .checked_add(amount)
@@ -109,6 +184,7 @@ pub struct OneShotResult {
     scan_set_id: Option<ArchiveScanSetId>,
     published_revision_id: Option<ArchiveRevisionId>,
     counts: ExecutionCounts,
+    timings: ExecutionTimings,
     cleanup: ReplayCleanup,
     error: Option<PortErrorCode>,
 }
@@ -145,6 +221,11 @@ impl OneShotResult {
     }
 
     #[must_use]
+    pub const fn timings(self) -> ExecutionTimings {
+        self.timings
+    }
+
+    #[must_use]
     pub const fn cleanup(self) -> ReplayCleanup {
         self.cleanup
     }
@@ -160,6 +241,7 @@ struct ExecutionState {
     scan_set_id: Option<ArchiveScanSetId>,
     replay: Option<ArchiveReplay>,
     counts: ExecutionCounts,
+    timings: ExecutionTimings,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -221,7 +303,9 @@ impl OneShotExecutor {
             }
         };
         let mut state = ExecutionState::default();
+        let total_started = Instant::now();
         let execution = self.run_with_lease(&control, adapter, archive, &mut state);
+        state.timings.total.record(total_started.elapsed());
         let result = match execution {
             Ok(ExecutionTerminal::Published(published_revision_id)) => OneShotResult {
                 request_id: permit.id(),
@@ -230,6 +314,7 @@ impl OneShotExecutor {
                 scan_set_id: state.scan_set_id,
                 published_revision_id: Some(published_revision_id),
                 counts: state.counts,
+                timings: state.timings,
                 cleanup: ReplayCleanup::NotRequired,
                 error: None,
             },
@@ -240,6 +325,7 @@ impl OneShotExecutor {
                 scan_set_id: state.scan_set_id,
                 published_revision_id: None,
                 counts: state.counts,
+                timings: state.timings,
                 cleanup: ReplayCleanup::NotRequired,
                 error: None,
             },
@@ -265,6 +351,7 @@ impl OneShotExecutor {
         archive: &mut dyn Archive,
         state: &mut ExecutionState,
     ) -> Result<ExecutionTerminal, ExecutionFailure> {
+        let discovery_started = Instant::now();
         let mut scope_sink = BoundedScopeSink::default();
         let scope_completion = adapter.visit_scopes(control, &mut scope_sink)?;
         if scope_completion.quality() != CompletionQuality::Complete {
@@ -324,7 +411,9 @@ impl OneShotExecutor {
                     &manifest.scopes()[scope_index + 1..],
                     completion.quality(),
                 )?;
-                let aggregate = archive.finish_scan_set(scan_set_id)?;
+                let aggregate_result = archive.finish_scan_set(scan_set_id);
+                state.timings.discovery.record(discovery_started.elapsed());
+                let aggregate = aggregate_result?;
                 if aggregate == CompletionQuality::Complete {
                     return Err(PortError::new(PortErrorCode::InvalidData).into());
                 }
@@ -336,7 +425,9 @@ impl OneShotExecutor {
             close_failed_scan(archive, scan_set_id, &[], quality_for_error(error.code()));
             return Err(error.into());
         }
-        let scan_quality = archive.finish_scan_set(scan_set_id)?;
+        let scan_quality_result = archive.finish_scan_set(scan_set_id);
+        state.timings.discovery.record(discovery_started.elapsed());
+        let scan_quality = scan_quality_result?;
         if scan_quality != CompletionQuality::Complete {
             return Ok(ExecutionTerminal::ScanOnly(scan_quality));
         }
@@ -391,57 +482,104 @@ impl OneShotExecutor {
     ) -> Result<(), PortError> {
         control.check()?;
         let current = state.replay.ok_or_else(stale_error)?;
-        let (progress, initial_checkpoint, prepare) =
-            match archive.replay_source_start(current, source)? {
-                ReplaySourceStart::Fresh => (
-                    initial_state.progress().clone(),
-                    Some(initial_state.checkpoint().clone()),
-                    true,
-                ),
-                ReplaySourceStart::Resume(progress) => (progress, None, false),
-                ReplaySourceStart::Complete(progress) => {
-                    let restored = reader.restore_checkpoint(&progress, control)?;
-                    reader.validate_checkpoint(&restored, control)?;
-                    return Ok(());
-                }
-            };
-        let restored_initial = reader.restore_checkpoint(&progress, control)?;
+        let checkpoint_started = Instant::now();
+        let source_start = archive.replay_source_start(current, source);
+        state
+            .timings
+            .checkpoint
+            .record(checkpoint_started.elapsed());
+        let (progress, initial_checkpoint, prepare) = match source_start? {
+            ReplaySourceStart::Fresh => (
+                initial_state.progress().clone(),
+                Some(initial_state.checkpoint().clone()),
+                true,
+            ),
+            ReplaySourceStart::Resume(progress) => (progress, None, false),
+            ReplaySourceStart::Complete(progress) => {
+                let checkpoint_started = Instant::now();
+                let restored = reader.restore_checkpoint(&progress, control);
+                state
+                    .timings
+                    .checkpoint
+                    .record(checkpoint_started.elapsed());
+                let restored = restored?;
+                let checkpoint_started = Instant::now();
+                let validated = reader.validate_checkpoint(&restored, control);
+                state
+                    .timings
+                    .checkpoint
+                    .record(checkpoint_started.elapsed());
+                validated?;
+                return Ok(());
+            }
+        };
+        let checkpoint_started = Instant::now();
+        let restored_initial = reader.restore_checkpoint(&progress, control);
+        state
+            .timings
+            .checkpoint
+            .record(checkpoint_started.elapsed());
+        let restored_initial = restored_initial?;
         if initial_checkpoint.is_some_and(|checkpoint| restored_initial != checkpoint) {
             return Err(PortError::new(PortErrorCode::InvalidData));
         }
         if prepare {
-            let replay = validate_replay_transition(
-                current,
-                archive.prepare_replay_source(current, source, &initial_state)?,
-            )?;
+            let checkpoint_started = Instant::now();
+            let prepared = archive.prepare_replay_source(current, source, &initial_state);
+            state
+                .timings
+                .checkpoint
+                .record(checkpoint_started.elapsed());
+            let replay = validate_replay_transition(current, prepared?)?;
             state.replay = Some(replay);
         } else {
-            reader.validate_checkpoint(&restored_initial, control)?;
+            let checkpoint_started = Instant::now();
+            let validated = reader.validate_checkpoint(&restored_initial, control);
+            state
+                .timings
+                .checkpoint
+                .record(checkpoint_started.elapsed());
+            validated?;
         }
         let mut checkpoint = restored_initial;
 
         loop {
             control.check()?;
-            let batch = reader.read_batch(&checkpoint, control)?;
+            let read_started = Instant::now();
+            let batch = reader.read_batch(&checkpoint, control);
+            state.timings.read_parse.record(read_started.elapsed());
+            let batch = batch?;
             if batch.source_identity() != source.identity() {
                 return Err(PortError::new(PortErrorCode::InvalidData));
             }
             let batch_state = batch.state();
             let next_checkpoint = batch.next_checkpoint().clone();
-            let restored_next = reader.restore_checkpoint(batch.next_progress(), control)?;
+            let checkpoint_started = Instant::now();
+            let restored_next = reader.restore_checkpoint(batch.next_progress(), control);
+            state
+                .timings
+                .checkpoint
+                .record(checkpoint_started.elapsed());
+            let restored_next = restored_next?;
             if restored_next != next_checkpoint {
                 return Err(PortError::new(PortErrorCode::InvalidData));
             }
             if batch_state == BatchState::More && next_checkpoint == checkpoint {
                 return Err(PortError::new(PortErrorCode::InvalidData));
             }
-            let canonical = canonicalize_batch(source.identity(), batch)?;
+            let canonicalize_started = Instant::now();
+            let canonical = canonicalize_batch(source.identity(), batch);
+            state
+                .timings
+                .canonicalize
+                .record(canonicalize_started.elapsed());
+            let canonical = canonical?;
             let event_count = canonical.events().len();
             let current = state.replay.ok_or_else(stale_error)?;
-            let replay = validate_replay_transition(
-                current,
-                archive.append_replay_batch(current, source.identity(), canonical)?,
-            )?;
+            let write_started = Instant::now();
+            let appended = archive.append_replay_batch(current, source.identity(), canonical);
+            state.timings.fact_write.record(write_started.elapsed());
+            let replay = validate_replay_transition(current, appended?)?;
             state.replay = Some(replay);
             state.counts.add_adapter_batch()?;
             state.counts.add_canonical_events(event_count)?;
@@ -464,7 +602,10 @@ impl OneShotExecutor {
                 return Err(PortError::new(PortErrorCode::CapacityExceeded));
             }
             let current = state.replay.ok_or_else(stale_error)?;
-            let continuation = archive.continue_replay(current)?;
+            let project_started = Instant::now();
+            let continuation = archive.continue_replay(current);
+            state.timings.project.record(project_started.elapsed());
+            let continuation = continuation?;
             let replay = validate_replay_transition(current, continuation.replay())?;
             state.replay = Some(replay);
             state.counts.add_replay_continuation()?;
@@ -475,10 +616,22 @@ impl OneShotExecutor {
 
         control.check()?;
         let current = state.replay.ok_or_else(stale_error)?;
-        let replay = validate_replay_transition(current, archive.seal_replay(current)?)?;
+        let checkpoint_started = Instant::now();
+        let sealed = archive.seal_replay(current);
+        state
+            .timings
+            .checkpoint
+            .record(checkpoint_started.elapsed());
+        let replay = validate_replay_transition(current, sealed?)?;
         state.replay = Some(replay);
         control.check()?;
-        archive.promote_replay(replay)?;
+        let checkpoint_started = Instant::now();
+        let promoted = archive.promote_replay(replay);
+        state
+            .timings
+            .checkpoint
+            .record(checkpoint_started.elapsed());
+        promoted?;
         Ok(replay.revision_id())
     }
 }
@@ -637,6 +790,7 @@ fn failure_result(
         scan_set_id: state.scan_set_id,
         published_revision_id: None,
         counts: state.counts,
+        timings: state.timings,
         cleanup,
         error: Some(failure.error.code()),
     }

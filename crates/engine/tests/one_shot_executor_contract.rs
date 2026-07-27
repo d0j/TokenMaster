@@ -1085,6 +1085,14 @@ fn complete_execution_acquires_lease_then_publishes_one_canonical_result() {
     );
     assert_eq!(result.cleanup(), ReplayCleanup::NotRequired);
     assert_eq!(result.error(), None);
+    let timings = result.timings();
+    assert_eq!(timings.total().samples(), 1);
+    assert_eq!(timings.discovery().samples(), 1);
+    assert_eq!(timings.read_parse().samples(), 1);
+    assert_eq!(timings.canonicalize().samples(), 1);
+    assert_eq!(timings.fact_write().samples(), 1);
+    assert_eq!(timings.project().samples(), 1);
+    assert_eq!(timings.checkpoint().samples(), 6);
     assert_eq!(archive.observed_sources, 1);
     assert_eq!(archive.appended_events, 1);
     assert_eq!(archive.finished_scopes, vec![CompletionQuality::Complete]);

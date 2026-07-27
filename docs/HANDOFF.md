@@ -1,5 +1,35 @@
 # TokenMaster handoff
 
+## Cold-stage profiling handoff (2026-07-27)
+
+Product state: Tasks 1-2 remain complete. Task 3 added count-only timing to the
+existing full-rebuild executor and a capacity-one last-full-rebuild runtime receipt;
+it did not change parsing, accounting, persistence, projection, UI, or archive
+durability.
+
+Audit/evidence state: the exact release real-history test passed with 4,014 sources,
+611,945 observations, 128,976 selected events, 35,000,320 peak private bytes, and
+766.518 seconds to Complete. Of 750.556 measured executor seconds, fact writes used
+574.905 (76.60%), project/replay 137.093 (18.27%), read+parse 22.446 (2.99%),
+discovery 13.361 (1.78%), canonicalization 0.957 (0.13%), checkpoint work 0.450
+(0.06%), and unattributed overhead 1.343 (0.18%). The focused engine suite passed
+23/23 and the live cold-receipt retention scenario passed 1/1.
+Because the active history changed after the earlier 474-second baseline, this one
+run is stage attribution rather than a regression/superiority comparison. The
+project/replay timing boundary includes the final buffered fact-batch flush. The
+final clean-root, format, warnings-denied workspace Clippy, and complete locked
+workspace test/doc-test gate finished with exit 0 in 1,201 seconds.
+
+Release blockers: Task 3 must now replace per-batch/per-observation cold persistence
+with bounded two-phase fact loading while preserving FULL durability, truthful
+Partial state, exact checkpoints/fingerprints/lineage, restart behavior, and one
+SQLite writer. Do not benchmark parser engines or 1/2/4/8 reader workers: read+parse
+is only 2.99% and cannot close the cold target. Task 4 set-based final projection/WAL,
+Task 5 real acceptance, package/M0/signing/soak remain later blockers.
+
+Git state: this handoff belongs to one focused profiling commit on the feature branch.
+No commit hash is stored in tracked documents.
+
 ## Ten-minute idle receipt handoff (2026-07-27)
 
 Product state: Task 2 needed no production change. With a healthy watcher, the

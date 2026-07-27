@@ -1,6 +1,7 @@
 # TokenMaster 10/10 Ingestion Plan
 
-**Status:** Tasks 1-2 complete; Task 3 is next. Later tasks remain locked.
+**Status:** Tasks 1-2 complete; Task 3 profiling complete and fact-load implementation
+is next. Later tasks remain locked.
 
 **Goal:** Make TokenMaster's local-history ingestion faster and quieter than the
 pinned WhereMyTokens reference without weakening exact accounting, crash recovery,
@@ -128,14 +129,23 @@ acceptance harness from manufacturing its own source events.
 
 ### Task 3 — Cold parse and durable fact load
 
-- Add instrumentation for discover/read/parse/canonicalize/write/project/checkpoint.
-- Benchmark worker counts 1, 2, 4, and 8 using size-balanced source partitions.
+**Profiling complete 2026-07-27.** The exact release real-history run attributed
+76.60% of executor time to fact writes and 18.27% to project/replay; read plus JSON
+parsing was only 2.99%. The 1/2/4/8 reader-worker matrix and parser replacement are
+therefore rejected for this release-critical slice: even free parsing cannot close
+the cold target. The active history changed since the 474-second baseline, so the
+766.518-second run is used only for stage attribution. The project/replay bucket
+includes the final buffered fact-batch flush at its transition boundary.
+
+- Retain the implemented count-only instrumentation for
+  discover/read+parse/canonicalize/write/project/checkpoint.
 - Reuse prepared statements and commit bounded fact batches; keep one SQLite writer.
 - Defer only derived work whose absence is represented truthfully in Partial state.
 - Validator: identical source checkpoints, observation fingerprints, selected events,
   totals, quality, session lineage, and restart result versus the current implementation.
-- Stop condition: choose the smallest worker count within 5% of best throughput and
-  within the memory/I/O limits; do not keep tuning after the target is met.
+- Stop condition: do not reopen readers/parsers unless a later stage receipt shows
+  read+parse at least 10% of end-to-end time. Implement one bounded fact-load design,
+  then re-profile before any second optimization.
 
 ### Task 4 — Set-based final projection and WAL lifecycle
 

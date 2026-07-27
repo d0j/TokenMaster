@@ -1,5 +1,36 @@
 # TokenMaster current state
 
+## 2026-07-27 — Cold-stage profiling selected durable writes, not JSON
+
+Task 3 now has count-only stage instrumentation around the existing full-rebuild
+pipeline. The timings retain only nanoseconds and sample counts; they contain no
+provider data, paths, identifiers, source content, or database text. The last
+full-rebuild receipt has its own capacity-one runtime slot, so a later incremental
+refresh cannot erase it.
+
+The exact release real-history run completed 4,014 sources, 611,945 observations and
+128,976 selected events in 766.518 seconds with 35,000,320 peak private bytes. Its
+750.556-second executor time split into 574.905 seconds fact writes (76.60%),
+137.093 seconds replay/project work (18.27%), 22.446 seconds read plus JSON parsing
+(2.99%), 13.361 seconds discovery (1.78%), 0.957 seconds canonicalization (0.13%),
+0.450 seconds checkpoint work (0.06%), and 1.343 seconds unattributed executor
+overhead (0.18%).
+
+The active history grew between the earlier 474-second baseline and this run, so this
+single receipt is stage attribution, not evidence of a performance regression or
+improvement. The project/replay bucket also includes the final buffered fact-batch
+flush at the transition boundary; that does not weaken the conclusion that durable
+storage work dominates.
+
+This rejects parser replacement and the 1/2/4/8 reader-worker matrix on the current
+release-critical path: eliminating read and parsing entirely could save only about
+22 seconds, while durable fact persistence plus projection consumes 94.87% of the
+executor. Task 3 remains open specifically for a bounded two-phase fact-write change;
+Task 4 set-based projection remains locked behind it. No product accounting behavior,
+SQLite policy, UI/P4 feature, or audit rule changed.
+The final clean-root, format, warnings-denied workspace Clippy, and complete locked
+workspace test/doc-test gate finished with exit 0 in 1,201 seconds.
+
 ## 2026-07-27 — Ten-minute real-history idle receipt complete
 
 Task 2 of the locked ingestion plan required evidence before any scheduler or

@@ -596,6 +596,11 @@ interfaces. Credential bytes are attached by the host and MUST NOT cross the com
 ABI. Plugin traps, timeouts, OOM, protocol violations, and crashes fail only that
 provider operation and cannot commit a partial staging generation.
 
+Full-rebuild performance receipts retain only bounded stage nanoseconds and sample
+counts. They contain no provider/profile/source/session identity, path, source content,
+prompt, response, reasoning, command, credential, SQL text, or operating-system error,
+and the runtime retains at most one full-rebuild-attempt receipt.
+
 The engine coordinator stores no provider ID, source ID, path, descriptor, payload, or
 request history. One active cancellation token uses an atomic flag; active and pending
 deadlines use caller-supplied monotonic ticks, never wall clock. Stale request IDs fail

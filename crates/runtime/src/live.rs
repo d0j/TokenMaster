@@ -6,9 +6,10 @@ use std::sync::{
 };
 
 use tokenmaster_engine::{
-    Clock, OneShotExecutor, OperationControl, PortError, PortErrorCode, RefreshOutcome,
-    RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerCompletionNotifier,
-    WorkerError, WorkerErrorCode, WorkerPhase, WriterLease, WriterLeaseGuard,
+    Clock, ExecutionTimings, OneShotExecutor, OperationControl, PortError, PortErrorCode,
+    RefreshOutcome, RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion,
+    WorkerCompletionNotifier, WorkerError, WorkerErrorCode, WorkerPhase, WriterLease,
+    WriterLeaseGuard,
 };
 use tokenmaster_platform::ExclusiveFileLeaseGuard;
 use tokenmaster_platform::PowerLifecycleEvent;
@@ -39,6 +40,7 @@ pub struct LiveRuntime {
     admission_open: Arc<Mutex<bool>>,
     reset_watcher: Arc<AtomicBool>,
     latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
+    last_full_rebuild_timings: Arc<Mutex<Option<ExecutionTimings>>>,
     engine_publication: Arc<Mutex<EnginePublicationState>>,
     git_runtime: GitRuntime,
 }
@@ -196,6 +198,8 @@ impl LiveRuntime {
         let execution_clock = Arc::clone(&clock);
         let latest_refresh = Arc::new(Mutex::new(initial_refresh));
         let execution_refresh = Arc::clone(&latest_refresh);
+        let last_full_rebuild_timings = Arc::new(Mutex::new(None));
+        let execution_full_rebuild_timings = Arc::clone(&last_full_rebuild_timings);
         let execution_publication = Arc::clone(&engine_publication);
         let repository_hints =
             crate::provider::repository_hints_for(&*factory, git_runtime.ingress());
@@ -212,6 +216,7 @@ impl LiveRuntime {
             last_watch_roots: Vec::new(),
             watch_set_complete: false,
             latest_refresh: execution_refresh,
+            last_full_rebuild_timings: execution_full_rebuild_timings,
             engine_publication: execution_publication,
             continuation_schedule: Arc::clone(&continuation_schedule),
         };
@@ -267,6 +272,7 @@ impl LiveRuntime {
             admission_open,
             reset_watcher,
             latest_refresh,
+            last_full_rebuild_timings,
             engine_publication,
             git_runtime,
         })
@@ -301,6 +307,13 @@ impl LiveRuntime {
 
     pub fn try_completion(&self) -> Result<Option<WorkerCompletion>, RuntimeError> {
         self.worker.try_completion().map_err(runtime_worker_error)
+    }
+
+    pub fn last_full_rebuild_timings(&self) -> Result<Option<ExecutionTimings>, RuntimeError> {
+        self.last_full_rebuild_timings
+            .lock()
+            .map(|timings| *timings)
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))
     }
 
     pub fn wait_for_completion(
@@ -533,6 +546,7 @@ struct LiveExecution {
     last_watch_roots: Vec<PathBuf>,
     watch_set_complete: bool,
     latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
+    last_full_rebuild_timings: Arc<Mutex<Option<ExecutionTimings>>>,
     engine_publication: Arc<Mutex<EnginePublicationState>>,
     continuation_schedule: Arc<Mutex<Option<RefreshHintSink>>>,
 }
@@ -683,6 +697,9 @@ impl LiveExecution {
             self.adapter.as_mut(),
             &mut self.archive,
         );
+        if let Ok(mut timings) = self.last_full_rebuild_timings.lock() {
+            *timings = Some(result.timings());
+        }
         let current_generation = self
             .archive
             .current_cursor()
