@@ -1,8 +1,8 @@
 use tokenmaster_accounting::{CanonicalUsageEvent, Canonicalizer};
 use tokenmaster_domain::{
     ActivityCounts, LongContextState, ModelKey, ObservationDraft, ObservationDraftParts,
-    ObservationVerification, TokenCount, TokenUsage, UsageProfileId, UsageProviderId,
-    UsageSessionId, UsageSourceId, UtcTimestamp,
+    ObservationVerification, SessionRelationDraft, SessionRelationDraftParts, TokenCount,
+    TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
 };
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, ArchiveGeneration, ArchivePublicationQuality,
@@ -545,6 +545,19 @@ fn event_with_missing_parent() -> CanonicalUsageEvent {
     Canonicalizer::new().canonicalize(&draft).unwrap()
 }
 
+fn relation(session: &str, parent: &str, source_offset: u64) -> SessionRelationDraft {
+    SessionRelationDraft::new(SessionRelationDraftParts {
+        provider_id: UsageProviderId::new("codex").unwrap(),
+        profile_id: UsageProfileId::new("default").unwrap(),
+        session_id: UsageSessionId::new(session).unwrap(),
+        parent_session_id: UsageSessionId::new(parent).unwrap(),
+        declared_conflict: false,
+        source_id: UsageSourceId::new("fixture-23").unwrap(),
+        source_offset,
+    })
+    .unwrap()
+}
+
 #[test]
 fn current_pending_work_continues_in_bounded_cas_transactions() {
     let (mut store, revision) = promoted_store();
@@ -647,12 +660,12 @@ fn pending_work_does_not_block_the_next_pending_source() {
                 append_batch: append(
                     100,
                     200,
-                    vec![event_with_missing_parent()],
+                    vec![event("child", 110)],
                     Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
                     [SEED + 4; 32],
                     StoredVerification::Incremental,
                 ),
-                relations: Box::default(),
+                relations: vec![relation("child", "root", 120)].into_boxed_slice(),
             })
             .unwrap(),
         )
@@ -660,12 +673,27 @@ fn pending_work_does_not_block_the_next_pending_source() {
     assert!(deferred.remaining_work());
     assert_eq!(deferred.quality(), ArchivePublicationQuality::Partial);
 
+    let deferred_no_op = store
+        .continue_current_replay(
+            current.id(),
+            deferred.epoch(),
+            deferred.archive_generation(),
+        )
+        .unwrap();
+    assert_eq!(deferred_no_op.processed_count(), 0);
+    assert!(!deferred_no_op.remaining_work());
+    assert_eq!(deferred_no_op.epoch(), deferred.epoch());
+    assert_eq!(
+        deferred_no_op.archive_generation(),
+        deferred.archive_generation()
+    );
+
     let after_second_source = store
         .apply_current_replay_append_batch(
             &CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
                 revision_id: current.id(),
-                expected_epoch: deferred.epoch(),
-                expected_archive_generation: deferred.archive_generation(),
+                expected_epoch: deferred_no_op.epoch(),
+                expected_archive_generation: deferred_no_op.archive_generation(),
                 append_batch: append_for(
                     SECOND_SOURCE,
                     0,

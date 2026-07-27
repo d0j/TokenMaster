@@ -1,5 +1,50 @@
 # TokenMaster handoff
 
+## Partial-import replay stall correction (2026-07-27)
+
+Product state: the release binary no longer stops at a previously durable Partial
+source count while relation replay monopolizes SQLite. Current replay work is deferred
+until all manifest sources are complete, then drained in bounded transactions.
+Selection invalidation now starts from one session's indexed observations and seeks
+the revision/fingerprint selection primary key instead of scanning all selections for
+every affected session. UI and parser behavior did not change.
+
+Audit/evidence state: `EXPLAIN QUERY PLAN` confirmed the old correlated selection scan
+and the new indexed observation-to-selection plan. The focused incomplete-manifest
+contract was red before the production change and green afterward. Late-relation,
+bounded fan-out, durable depth-bound, and runtime incremental contracts pass. A first
+broad Store run had two deadline-sensitive benefit tests fail while Store/runtime/fmt
+were launched in parallel; each passed independently in about 0.3 seconds, classifying
+the failures as resource contention rather than this slice. The single independent
+review found no Critical/High/Medium defect, but the final aggregate then caught an
+over-broad post-manifest selector: `depth_bound` work ran instead of remaining durably
+pending. Root restored the prior actionable-reason boundary; the focused regression
+and complete replay archive suite now pass 52/52 with one release-only benchmark
+ignored. No second review or reviewer-of-reviewer round was opened.
+The final clean-root, format, warnings-as-errors workspace Clippy, and complete locked
+workspace test/doc-test baseline passed in 889.5 seconds.
+
+Real acceptance: the modified release binary safely rebuilt after the active source
+observation changed, advanced beyond the old `2,582` stop, completed `4,009 / 4,009`
+sources and `609,916` observations, drained a measured 3,796 replay-work rows to zero,
+published 128,976 selected events, and reached `Complete` in about 628 seconds. The
+window remained responsive and the completed process used about 59.9 MiB private
+memory.
+
+Release blockers: the correctness stall is closed, but the roughly 10-minute
+28-second real cold import is not WMT-speed superiority. Do not reopen parser, UI,
+schema, textual audit, or parameter micro-tuning from this receipt. The shortest next
+outcome is the minimum exact-clean Windows package/release acceptance path; signing,
+authenticated external accessibility/DPI evidence, and the operator-deferred soak
+remain separate.
+
+Git state: this narrow production/test/docs slice is recorded in one intentional
+commit and the worktree is clean. The accepted release application was closed after
+the live receipt.
+No console, test runner, temporary server, or child worker remains. This cycle changed
+product correctness and required evidence, not audit machinery.
+`AUDIT_HARDENING_LOOP` is not active.
+
 ## Cold-reader proof-cache correction (2026-07-27)
 
 Product state: a reproduced cold-import blocker legitimately reopened the otherwise

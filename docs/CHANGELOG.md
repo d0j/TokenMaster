@@ -11,6 +11,10 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Prevented an incomplete current replay from processing relation work ahead of
+  pending manifest sources, and changed session-selection invalidation from a
+  correlated archive scan to indexed observation and selection seeks.
+
 - Removed archive-sized work from bounded replay transactions. Schema v14 uses exact
   full-key time-rollup maintenance, replay parent reads declare their exact index, hot
   statements use a fixed-capacity cache, unchanged classifications avoid redundant

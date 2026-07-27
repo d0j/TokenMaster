@@ -1569,23 +1569,26 @@ impl UsageStore {
             revision.expected_source_count,
             scan_set_id,
         )?;
-        let work = load_next_actionable_work(&transaction, revision_id, manifest_complete)?;
-        if work.is_none() {
-            let pending_sources: i64 = transaction.query_row(
-                "SELECT count(*) FROM usage_replay_source
-                 WHERE revision_id = ?1 AND state <> 'complete'",
-                [revision_id.as_sql()?],
-                |row| row.get(0),
-            )?;
-            if pending_sources != 0 {
-                return Ok(CurrentReplayCommit {
-                    processed_count: 0,
-                    remaining_work: false,
-                    epoch: expected_epoch,
-                    archive_generation: expected_archive_generation,
-                    quality: ArchivePublicationQuality::Partial,
-                });
-            }
+        let pending_sources: i64 = transaction.query_row(
+            "SELECT count(*) FROM usage_replay_source
+             WHERE revision_id = ?1 AND state <> 'complete'",
+            [revision_id.as_sql()?],
+            |row| row.get(0),
+        )?;
+        let sources_complete = pending_sources == 0;
+        let work = load_next_actionable_work(
+            &transaction,
+            revision_id,
+            manifest_complete && sources_complete,
+        )?;
+        if work.is_none() && pending_sources != 0 {
+            return Ok(CurrentReplayCommit {
+                processed_count: 0,
+                remaining_work: false,
+                epoch: expected_epoch,
+                archive_generation: expected_archive_generation,
+                quality: ArchivePublicationQuality::Partial,
+            });
         }
         let next_epoch = next_replay_epoch(revision.epoch)?;
         let next_archive_generation = ArchiveGeneration::new(
@@ -1639,12 +1642,6 @@ impl UsageStore {
         }
         advance_current_revision_epoch(&transaction, revision_id, expected_epoch, next_epoch)?;
         let remaining_work = replay_work_exists(&transaction, revision_id)?;
-        let pending_sources: i64 = transaction.query_row(
-            "SELECT count(*) FROM usage_replay_source
-             WHERE revision_id = ?1 AND state <> 'complete'",
-            [revision_id.as_sql()?],
-            |row| row.get(0),
-        )?;
         let quality = if remaining_work || pending_sources != 0 {
             ArchivePublicationQuality::Partial
         } else {
@@ -4089,18 +4086,14 @@ fn invalidate_session_selections(
     session: &str,
 ) -> Result<(), StoreError> {
     transaction.execute(
-        "DELETE FROM usage_replay_selection AS selection
-         WHERE selection.revision_id = ?1
-           AND EXISTS(
-             SELECT 1 FROM usage_replay_observation AS observation
-             WHERE observation.revision_id = selection.revision_id
-               AND observation.fingerprint = selection.fingerprint
-               AND observation.file_key = selection.file_key
-               AND observation.generation = selection.generation
-               AND observation.source_offset = selection.source_offset
-               AND observation.provider_id = ?2
-               AND observation.profile_id = ?3
-               AND observation.session_id = ?4
+        "DELETE FROM usage_replay_selection
+         WHERE revision_id = ?1
+           AND fingerprint IN (
+             SELECT fingerprint FROM usage_replay_observation
+             WHERE revision_id = ?1
+               AND provider_id = ?2
+               AND profile_id = ?3
+               AND session_id = ?4
            )",
         params![revision_id.as_sql()?, provider, profile, session],
     )?;
@@ -4224,6 +4217,9 @@ fn load_next_actionable_work(
     revision_id: ReplayRevisionId,
     manifest_complete: bool,
 ) -> Result<Option<ReplayWork>, StoreError> {
+    if !manifest_complete {
+        return Ok(None);
+    }
     transaction
         .query_row(
             "SELECT work_kind, provider_id, profile_id, session_id,
@@ -4231,12 +4227,11 @@ fn load_next_actionable_work(
              FROM usage_replay_work
              WHERE revision_id = ?1
                AND (work_kind = 'scan_children'
-                    OR reason IN ('late_relation','parent_changed')
-                    OR (?2 = 1 AND reason = 'missing_parent'))
+                    OR reason IN ('late_relation','parent_changed','missing_parent'))
              ORDER BY CASE work_kind WHEN 'scan_children' THEN 0 ELSE 1 END,
                       provider_id, profile_id, session_id
              LIMIT 1",
-            params![revision_id.as_sql()?, sql_bool(manifest_complete)],
+            [revision_id.as_sql()?],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,

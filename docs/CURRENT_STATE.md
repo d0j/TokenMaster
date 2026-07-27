@@ -1,5 +1,40 @@
 # TokenMaster current state
 
+## 2026-07-27 — Partial-import replay stall removed
+
+Product correctness changed in the current replay/store path; UI and parser behavior
+are unchanged. A live release run remained at `2,582 / 4,008` while SQLite performed
+archive-sized selection invalidation inside an uncommitted replay transaction. Two
+causes were confirmed: relation work was treated as actionable while 1,426 manifest
+sources were still pending, and the invalidation `DELETE` scanned every selection
+before filtering observations for one session.
+
+Current continuation now returns immediately to source ingestion until every replay
+source is complete. Session invalidation drives from the exact
+`usage_replay_observation_parent` index and seeks the revision/fingerprint selection
+primary key. The focused current-manifest regression failed before the fix and passes
+after it; late-relation, bounded fan-out, and durable depth-bound contracts also pass.
+The first aggregate exposed an over-broad post-manifest selector that made
+`depth_bound` work spin instead of remaining pending. Root restored the prior
+actionable-reason boundary, and the complete replay archive suite passes 52/52 with
+one release-only benchmark ignored. Runtime incremental passes 14/14 with one
+release-only benchmark ignored.
+The final clean-root, format, warnings-as-errors workspace Clippy, and complete locked
+workspace test/doc-test baseline passed in 889.5 seconds.
+
+The modified release binary resumed against the real archive, safely started a fresh
+revision after the active source observation had changed, passed the former stall
+point, completed `4,009 / 4,009` sources and `609,916` observations, drained replay
+work from a measured 3,796 rows to zero, published 128,976 selected events, and reached
+`Complete` in about 628 seconds. The responsive process retained about 59.9 MiB
+private memory after completion.
+
+This closes a production stall, not the absolute performance target: roughly
+10 minutes 28 seconds is still slower than the desired WMT-class first import.
+The next outcome is the shortest Windows package/release path; any further importer
+architecture requires a separately measured release blocker. No audit, parser, UI,
+schema, P4, or reviewer-chain work was opened. `AUDIT_HARDENING_LOOP` is not active.
+
 ## 2026-07-27 — Quadratic cold-reader prefix rereads removed
 
 Product behavior changed only in the Codex reader/runtime adapter. The release importer

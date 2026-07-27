@@ -1,5 +1,20 @@
 # TokenMaster project history
 
+## 2026-07-27 — Source ingestion stopped waiting on premature relation replay
+
+A real release run exposed a durable Partial import frozen at 2,582 sources. The
+reader was active, but relation work ran before the remaining manifest sources and
+invalidated each session by scanning the full selection table. The runtime therefore
+spent minutes inside one transaction without publishing progress.
+
+Replay work now waits for all current sources, and selection invalidation follows an
+indexed session-observation list into exact selection primary-key deletes. The same
+archive completed 4,009 sources, retained 609,916 exact observations, drained its
+relation queue, and reached Complete in about 628 seconds. This removed the stall but
+did not establish speed superiority over WhereMyTokens. The final aggregate also
+caught and closed an over-broad selector that could consume durable `depth_bound`
+work; only the previously actionable post-manifest reasons are now processed.
+
 ## 2026-07-27 — Cold proof construction became forward-only
 
 A live large-history run disproved the earlier assumption that source reading was
