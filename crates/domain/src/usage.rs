@@ -75,6 +75,13 @@ pub struct TokenUsage {
     output: TokenCount,
     reasoning: TokenCount,
     total: TokenCount,
+    /// Tokens written into a provider's prompt cache, split by the lifetime the
+    /// provider bills them at. These are disjoint from `input`: a provider that
+    /// reports them charges the write separately from the prompt it caches.
+    /// Providers that do not report cache writes leave both `Unavailable`, which
+    /// is the default, so a missing value never reads as a legitimate zero.
+    cache_write_5m: TokenCount,
+    cache_write_1h: TokenCount,
 }
 
 impl TokenUsage {
@@ -92,7 +99,25 @@ impl TokenUsage {
             output,
             reasoning,
             total,
+            cache_write_5m: TokenCount::Unavailable,
+            cache_write_1h: TokenCount::Unavailable,
         }
+    }
+
+    /// Records provider-reported cache-write tokens.
+    ///
+    /// Separate from [`Self::new`] because no provider is required to report them
+    /// and the vast majority of call sites never do; folding them into the
+    /// constructor would make every one of them state a value it does not have.
+    #[must_use]
+    pub const fn with_cache_writes(
+        mut self,
+        cache_write_5m: TokenCount,
+        cache_write_1h: TokenCount,
+    ) -> Self {
+        self.cache_write_5m = cache_write_5m;
+        self.cache_write_1h = cache_write_1h;
+        self
     }
 
     #[must_use]
@@ -118,6 +143,16 @@ impl TokenUsage {
     #[must_use]
     pub const fn total(&self) -> TokenCount {
         self.total
+    }
+
+    #[must_use]
+    pub const fn cache_write_5m(&self) -> TokenCount {
+        self.cache_write_5m
+    }
+
+    #[must_use]
+    pub const fn cache_write_1h(&self) -> TokenCount {
+        self.cache_write_1h
     }
 }
 
@@ -610,5 +645,38 @@ impl fmt::Debug for ObservationDraft {
             .field("model", &self.parts.model)
             .field("usage", &"[redacted]")
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod cache_write_tests {
+    use super::{TokenCount, TokenUsage};
+
+    #[test]
+    fn cache_writes_default_to_unavailable_so_a_silent_provider_never_reads_as_zero() {
+        let usage = TokenUsage::new(
+            TokenCount::Available(10),
+            TokenCount::Available(2),
+            TokenCount::Available(5),
+            TokenCount::Unavailable,
+            TokenCount::Available(17),
+        );
+        assert_eq!(usage.cache_write_5m(), TokenCount::Unavailable);
+        assert_eq!(usage.cache_write_1h(), TokenCount::Unavailable);
+    }
+
+    #[test]
+    fn recorded_cache_writes_stay_disjoint_from_the_input_they_cache() {
+        let usage = TokenUsage::new(
+            TokenCount::Available(2),
+            TokenCount::Available(33_510),
+            TokenCount::Available(150),
+            TokenCount::Unavailable,
+            TokenCount::Available(152),
+        )
+        .with_cache_writes(TokenCount::Unavailable, TokenCount::Available(9_846));
+        assert_eq!(usage.input(), TokenCount::Available(2));
+        assert_eq!(usage.cache_write_1h(), TokenCount::Available(9_846));
+        assert_eq!(usage.cache_write_5m(), TokenCount::Unavailable);
     }
 }
