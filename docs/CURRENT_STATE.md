@@ -1,5 +1,21 @@
 # TokenMaster current state
 
+## 2026-07-27 — 10/10 ingestion research and locked execution plan
+
+No product behavior changed in this research-only slice. The clean cold receipt remains
+474 seconds for 4,010 sources and 610,312 observations. A separate live warm audit
+found the more severe release defect: a change in one active JSONL currently turns
+into a two-pass preflight/apply visit of all 4,010 sources, sustaining about
+0.82-1.04 CPU cores and 42.6-73.5 MiB/s reads while almost no usage changes.
+
+Primary-source comparison of pinned WhereMyTokens, pinned ccusage, Windows change
+notifications/file identity, SQLite WAL/transactions, SIMD JSON designs, and
+incremental-view maintenance is recorded in
+`docs/superpowers/plans/2026-07-27-tokenmaster-ingestion-10-of-10.md`. The locked order
+is changed-source warm refresh, idle reconciliation, bounded size-balanced cold parse
+and fact load, set-based final projection/WAL lifecycle, then one real-history
+acceptance. UI and speculative parser/PRAGMA work remain frozen until those gates pass.
+
 ## 2026-07-27 — Partial-import replay stall removed
 
 Product correctness changed in the current replay/store path; UI and parser behavior

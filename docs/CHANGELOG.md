@@ -9,6 +9,13 @@ All notable changes are recorded here.
 
 ## Unreleased
 
+### Planned
+
+- Locked the measured 10/10 ingestion sequence: path-targeted warm refresh, idle
+  reconciliation, bounded size-balanced cold parse/fact load, set-based final
+  projection and WAL lifecycle, then one real-history acceptance. This research-only
+  slice changes no product behavior.
+
 ### Fixed
 
 - Prevented an incomplete current replay from processing relation work ahead of

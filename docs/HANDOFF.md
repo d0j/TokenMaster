@@ -1,5 +1,30 @@
 # TokenMaster handoff
 
+## Locked ingestion performance plan (2026-07-27)
+
+Product state: correctness remains green on the clean 4,010-source archive, but
+release performance is not accepted. Cold import completes in 474 seconds versus the
+pinned WhereMyTokens aggregate receipt of about 262 seconds. More importantly, one
+active-file watcher hint still drives a global 4,010-source preflight/apply cycle,
+causing continuous high CPU and disk reads after import.
+
+Audit/evidence state: the research-only slice changed no production code. It compared
+the pinned WhereMyTokens byte-offset cache, pinned ccusage size-balanced parallel
+typed parser, Windows `ReadDirectoryChangesW`/file IDs/USN journal, SQLite WAL and
+prepared transactions, SIMD parsers, and incremental-view designs. The adopted and
+rejected methods, exact benchmarks, and stop conditions are locked in
+`docs/superpowers/plans/2026-07-27-tokenmaster-ingestion-10-of-10.md`.
+
+Release blockers: execute only Task 1, the path-targeted dirty-source warm refresh.
+Do not start cold-parser, store-projection, UI, package, P4, or audit hardening work
+until its append/rename/replace/truncate/delete/overflow/restart contracts and
+`p95 <= 250 ms`/`<= appended bytes + 1 MiB` receipt pass. The task sequence itself is
+the anti-loop control; one missed target causes profiling and path reconsideration,
+not another speculative improvement round.
+
+Git state: this handoff is evidence/documentation only; verify branch, HEAD, and clean
+status after its dedicated commit before implementation.
+
 ## Partial-import replay stall correction (2026-07-27)
 
 Product state: the release binary no longer stops at a previously durable Partial
