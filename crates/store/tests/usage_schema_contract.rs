@@ -1458,3 +1458,52 @@ fn source_keys_and_checkpoints_are_strict_and_debug_private() {
         StoreErrorCode::InvalidValue
     );
 }
+
+/// The v15 DDL has never existed as a single artifact: it is the accumulated
+/// result of `create_fresh_v4` plus eleven migrations' `ALTER`s and trigger swaps.
+/// This fixture is the byte-exact record of what the current create path produces,
+/// so collapsing the migration ladder cannot silently change the shipped schema.
+#[test]
+fn fresh_schema_matches_the_recorded_definition_byte_for_byte() {
+    let (_directory, connection) = fresh_usage_connection("schema-fixture-private.sqlite3");
+    let mut statement = connection
+        .prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name")
+        .expect("prepare schema dump");
+    let rows: Vec<String> = statement
+        .query_map([], |row| {
+            let kind: String = row.get(0)?;
+            let name: String = row.get(1)?;
+            let sql: Option<String> = row.get(2)?;
+            Ok(format!(
+                "-- {kind} {name}
+{}
+",
+                sql.unwrap_or_default()
+            ))
+        })
+        .expect("query schema dump")
+        .collect::<Result<_, _>>()
+        .expect("collect schema dump");
+    let actual = rows.join(
+        "
+",
+    );
+    let expected = include_str!("fixtures/usage_schema_current.sql");
+    if actual != expected {
+        let actual_lines: Vec<&str> = actual.lines().collect();
+        let expected_lines: Vec<&str> = expected.lines().collect();
+        let first_difference = actual_lines
+            .iter()
+            .zip(expected_lines.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(actual_lines.len().min(expected_lines.len()));
+        panic!(
+            "schema drifted from the recorded definition at line {first_difference}
+             recorded: {:?}
+  actual: {:?}
+             regenerate only when the change is intended",
+            expected_lines.get(first_difference),
+            actual_lines.get(first_difference),
+        );
+    }
+}
