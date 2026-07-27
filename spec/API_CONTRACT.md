@@ -1218,8 +1218,7 @@ Plugins receive no ambient WASI filesystem, network, environment, subprocess, or
 stdio authority. Optional host capability imports provide scoped read-only filesystem,
 allowlisted HTTPS, host-injected credential, and clock operations. All values and the
 engine-to-host framed protocol use strict versioned schemas and hard byte/count/time
-limits. The full package/runtime contract is recorded in
-`docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`.
+limits.
 
 ## P4-C presentation API
 

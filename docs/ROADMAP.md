@@ -330,13 +330,10 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   rolling civil-day presets, default/max 30, one worker/slot, shared History/Models/
   Projects envelope, exact epoch/product/range fences, accepted-only publication,
   terminal rollback, and refresh rebind. Task 2/3/4 focused receipts and final cfg
-  parser checks are recorded in `docs/CURRENT_STATE.md`; this does not claim P4/P5/P6,
+  parser checks are recorded in `git log`; this does not claim P4/P5/P6,
   M0, package/signing/soak, or release acceptance.
 
-P3-D.0 Reliable State is approved under
-`docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
-executable rail in
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. It keeps the fixed
+P3-D.0 Reliable State keeps the fixed
 live archive/writer identity, adds SQLite Online Backup, strict `.tmconfig`/
 `.tmbackup` streaming packages, optional bounded age passphrase export, redundant
 settings/run/recovery records, 15-point/2-GiB default retention, three-set quarantine,
@@ -389,8 +386,7 @@ dependency Windows Common Item Dialog backend, exact config/backup/encrypted fil
   and exact package dependency/license/feature/privacy/authority audits. These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 
-P2-A query foundation is approved under
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes
+P2-A query foundation first freezes
 two-dimensional publication/dataset identity (with replay revision plus schema-v7
 dataset generation inside current dataset identity), bounded immutable values, a dedicated
 query-only SQLite connection, exact short transactions, keyset paging, and deadline/
@@ -451,8 +447,7 @@ No frontend/database coupling or view-time full event grouping is accepted.
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before
 reset, old/new reset time, early/repeated reset markers, confidence, and simultaneous
-allowance changes. Ratios remain exact when absolute capacity is unavailable. See
-`docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
+allowance changes. Ratios remain exact when absolute capacity is unavailable.
 
 The same P2 gate keeps banked rate-limit reset benefits separate from quota epochs and
 credits. It adds independently expiring inventory lots, an initial
@@ -460,8 +455,7 @@ credits. It adds independently expiring inventory lots, an initial
 with bounded custom thresholds, truthful notification coverage, immutable activation
 receipts, and an
 official-capability-only path to future automatic activation. Manual inventory may
-ship first and never authorizes mutation. See
-`docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
+ship first and never authorizes mutation.
 
 ## 0.9 — complete desktop product
 

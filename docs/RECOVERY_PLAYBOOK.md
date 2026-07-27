@@ -1,7 +1,7 @@
 # TokenMaster recovery playbook
 
 1. Confirm the current branch and clean worktree with `git status --short`.
-2. Read `AGENTS.md`, the contracts in `spec/`, and `docs/HANDOFF.md`.
+2. Read `AGENTS.md`, the contracts in `spec/`, and `docs/RELEASE_EXIT_PLAN.md`.
 3. Run `pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path`.
 4. Run the focused test for the affected crate before changing behavior.
 5. If source data or SQLite state is involved, preserve user data and reproduce with a

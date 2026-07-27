@@ -47,7 +47,7 @@ A design or plan is not implementation evidence.
 | TM-SEC-008 | partial | sealed reliable-state layers plus complete Windows application/UI, adversarial, and resource contour | prior evidence plus every package prefix/one-bit mutation, coherent WAL/SHM recovery, twenty-three attack anchors, SHA-pinned dependencies/features/licenses, privacy canaries, zero codec process/network/shell/extraction/plugin/UI/SQL authority, zero child processes, fixed handle/thread/USER/GDI return, and clean P3-D.0 evidence identity pass; hostile-race Unix cleanup hardening remains before any future Unix native selector |
 
 The approved audit resolutions and delivery order are in
-`docs/AUDIT_AND_MASTER_PLAN.md`. P0-A/P0-B and P0-C have completed executable plans.
+the release exit plan. P0-A/P0-B and P0-C have completed executable plans.
 P0-D transaction, classification, seal, promotion, rollback, and recovery semantics
 are implemented. P0-D.1 removed the historical 256-file product blocker with exact
 schema-v2-to-v3 migration, disk-backed all-source begin, checked 64-bit counts, and

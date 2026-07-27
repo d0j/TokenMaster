@@ -19,10 +19,12 @@ Read in this order before changing behavior:
 4. `spec/SECURITY.md`
 5. `spec/TRACEABILITY.md`
 6. `spec/DECISIONS.md`
-7. `docs/CURRENT_STATE.md`
-8. `docs/HANDOFF.md`
-9. `docs/RELEASE_EXIT_PLAN.md`
-10. `docs/ROADMAP.md`
+7. `docs/RELEASE_EXIT_PLAN.md`
+8. `docs/ROADMAP.md`
+
+Project history lives in `git log` and `docs/CHANGELOG.md`. Do not reintroduce a
+narrative state or handoff document: the four that existed absorbed more edits
+than the most-edited source file and still contradicted each other.
 
 ## Workflow
 
@@ -101,7 +103,7 @@ cost, reject further speculative hardening, preserve the last verified product s
 and return to the shortest release-critical product slice. One additional bounded fix
 is allowed only for a demonstrated Critical production/security/data-loss defect; it
 must have a focused reproducer and a fixed stop condition. Record the trigger and the
-chosen disposition in `docs/HANDOFF.md` before continuing.
+chosen disposition in `docs/RELEASE_EXIT_PLAN.md` before continuing.
 
 At every handoff, separately report `product state`, `audit/evidence state`, `release
 blockers`, and `Git state`. A green developer baseline must never be described as a

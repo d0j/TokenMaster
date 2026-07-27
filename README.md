@@ -95,6 +95,5 @@ for diagnostic comparison and cannot be the default renderer.
   admission and watcher ownership before joining scheduler and worker threads.
 - Measured memory, CPU, handle, thread, USER, GDI, and latency gates.
 
-See [the approved audit and master plan](docs/AUDIT_AND_MASTER_PLAN.md),
-[architecture](docs/ARCHITECTURE.md), [feature matrix](docs/FEATURE_PARITY.md),
-[roadmap](docs/ROADMAP.md), and [current handoff](docs/HANDOFF.md).
+See [architecture](docs/ARCHITECTURE.md), [feature matrix](docs/FEATURE_PARITY.md),
+[roadmap](docs/ROADMAP.md), and [the release exit plan](docs/RELEASE_EXIT_PLAN.md).

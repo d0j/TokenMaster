@@ -1,7 +1,7 @@
 # TokenMaster release exit plan
 
-This file is the per-cycle delivery rail until the first accepted release. Read it after
-`docs/HANDOFF.md`. Repository contracts and acceptance documents remain authoritative.
+This file is the per-cycle delivery rail until the first accepted release. Repository
+contracts and acceptance documents remain authoritative.
 
 ## Current milestone
 
