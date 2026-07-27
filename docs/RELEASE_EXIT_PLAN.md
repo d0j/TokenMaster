@@ -14,14 +14,17 @@ separate external acceptance boundaries.
 
 ## Shortest critical path
 
-1. Close the accepted bounded exact-replay batching slice with a clean local commit;
-   the required decomposed workspace gate is green.
-2. Keep further parser/index/cache/parallel-reader tuning closed. If cold completion is
-   still a release blocker, design one bounded deferred/set-based exact projection
-   slice without weakening FULL durability, lineage truth, or bounded memory.
-3. Resume the bounded UI correction only after that explicit architecture decision.
+1. Keep the committed schema-v15 importer frozen under ADR-093; its decomposed
+   workspace gate is green.
+2. Launch the release build on real local history and accept visible loading, useful
+   Partial data, scrolling, hover, navigation, and primary button behavior.
+3. Correct only reproduced release-critical UI defects and close every interactive
+   inspection process immediately after its receipt.
 4. Build and verify the deterministic unsigned portable package, run pinned secret
    scans, and obtain one physical Windows UI confirmation.
+5. Defer the bounded disk-backed staging/set-based projection architecture until after
+   the first release unless step 2 proves cold completion is an unavoidable release
+   blocker.
 
 Do not start P4, provider-host, audit-parser, signing, M0, or remote receipt work before
 the preceding step is closed.

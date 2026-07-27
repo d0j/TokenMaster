@@ -27,11 +27,16 @@ from expensive live projection using bounded deferred/set-based materialization.
 Signing, authenticated DPI/accessibility acceptance, and the operator-deferred soak
 remain external.
 
-Git state: clean-root, format, strict workspace Clippy, the complete app workspace
-segment, the complete Store package, and workspace doc-tests pass. Closeout is pending
-only the local commit.
+Git state: the importer slice is committed and the worktree is clean. Clean-root,
+format, strict workspace Clippy, the complete app workspace segment, the complete
+Store package, and workspace doc-tests pass.
 `AUDIT_HARDENING_LOOP` is not active; the 60-minute performance stop is active and no
 further tuning belongs to this slice. No interactive UI was opened.
+
+Next action: keep ADR-093's backend freeze, launch the release build against real local
+history, and accept the visible loading/data/scroll/hover/button path. Correct only a
+reproduced release-critical UI defect, close the interactive process after inspection,
+then rebuild and validate the deterministic unsigned portable package.
 
 ## Active partial publication and cold-import boundary (2026-07-27)
 

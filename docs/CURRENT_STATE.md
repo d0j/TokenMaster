@@ -24,6 +24,9 @@ in about 262 seconds, while TokenMaster remains Partial because it retains exact
 observations, lineage, checkpoints, and FULL durability. Parameter and parallel-reader
 tuning is closed under the anti-loop rule. The next performance milestone is a separate
 deferred/set-based exact projection architecture, not another micro-optimization.
+ADR-093 freezes this importer for the first release. The next autonomous cycle returns
+to release-critical UI/package acceptance; backend architecture reopens only for a
+reproduced blocker.
 
 ## 2026-07-27 — Partial data is published during active cold import
 

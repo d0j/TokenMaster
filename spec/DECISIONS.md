@@ -2234,3 +2234,32 @@ facts rather than total archive or rollup size. Full-key triggers, an explicit p
 contract, fixed cache capacity, and transaction-boundary cancellation preserve
 correctness, bounded memory, and clean shutdown without weakening fail-closed schema
 validation.
+
+## ADR-093 — Freeze the release importer and defer projection architecture
+
+Decision: the schema-v15 exact importer is frozen for the first release. It retains
+bounded command/event/relation batches, one ordered SQLite writer, FULL durability,
+restart checkpoints, exact observations and lineage, active Partial publication, and
+bounded memory. Parser, PRAGMA, cache, index, and parallel-reader tuning must not
+reopen without a reproducible production or release-acceptance defect.
+
+If complete cold-import latency remains a demonstrated blocker after the first release,
+the only approved backend direction is a disk-backed staging generation followed by
+bounded set-based classification, selection, event, and rollup projection, then atomic
+generation publication. Exact facts and checkpoints commit before projection;
+incomplete projection is restartable and never becomes current. Work admission,
+temporary storage, transaction size, projection pages, retained generations, and
+memory remain explicitly capped. Per-row trigger expansion must move out of the hot
+ingest path only when equivalent set-based invariants and fault rollback are executable.
+
+Replacing SQLite, weakening `synchronous=FULL`, disabling constraints without exact
+bulk revalidation, adding concurrent writers, or buffering an unbounded history in
+memory is rejected. DuckDB/ClickHouse/PostgreSQL bulk-ingest patterns are architectural
+evidence, not runtime dependencies or authority.
+
+Rationale: the accepted real receipt improves exact progress while preserving product
+truth, but does not prove complete-import superiority over WMT's materially lighter
+compact aggregate ledger. Further micro-tuning has low expected return and already
+triggered the performance stop. The release-critical next outcome is therefore
+working UI/package acceptance; a later projection redesign must earn its scope with a
+measured blocker and an end-to-end A/B receipt.
