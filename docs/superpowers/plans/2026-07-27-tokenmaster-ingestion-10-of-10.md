@@ -1,6 +1,6 @@
 # TokenMaster 10/10 Ingestion Plan
 
-**Status:** Research complete; implementation not started.
+**Status:** Task 1 complete; Task 2 is next. Later tasks remain locked.
 
 **Goal:** Make TokenMaster's local-history ingestion faster and quieter than the
 pinned WhereMyTokens reference without weakening exact accounting, crash recovery,
@@ -86,6 +86,17 @@ Do not start a later task until the prior task satisfies its validator. Do not m
 work into Tasks 1-4.
 
 ### Task 1 — Warm changed-source path
+
+**Completed 2026-07-27.** The watcher now retains a bounded, deduplicated,
+runtime-private path batch. A known append takes the targeted provider path; unknown,
+new, deleted, renamed, ambiguous, overflow/rescan, forced, periodic, startup, and
+recovery work takes authoritative reconciliation. Forced/pathless provenance cannot
+be downgraded when it coalesces with a watcher path.
+
+Receipt: 4,010 sources, 20 one-line appends, one file examined per sample,
+`p95=3.824 ms`, `max=6.992 ms`, exact appended bytes, with a 250 ms limit. Focused
+append/unknown/truncate, scheduler, watcher, live-runtime, Codex, privacy, and strict
+Clippy contracts pass. Cold import is deliberately unchanged.
 
 - Carry normalized event paths and `need_rescan` through watcher/scheduler/runtime.
 - Maintain a bounded deduplicated dirty-source set with an explicit overflow flag.

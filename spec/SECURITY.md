@@ -672,19 +672,25 @@ failed rebuild into a complete publication. The previous canonical publication r
 readable behind `recovery_pending` until authoritative input is valid again.
 
 The pinned `notify = 8.2.0` backend is isolated inside `tokenmaster-runtime`. Callback
-code inspects only the rescan bit, discards every event/error object immediately, and
-updates one fixed atomic pathless aggregate through a capacity-one non-blocking wake.
-It never logs, formats, stores, forwards, or publishes event paths, backend errors, or
-event history. Root replacement is capped at 64, validates length/local namespace,
+code inspects the rescan bit and retains at most 256 validated absolute paths in one
+deduplicated runtime-private buffer solely until the next refresh. The buffer has
+redacted Debug output and is never persisted, serialized, logged, formatted, exposed
+through diagnostics/API/UI, or used as source identity. Empty, invalid, over-capacity,
+rescan, and backend-error events discard the batch and force authoritative
+reconciliation. Root replacement is capped at 64, validates length/local namespace,
 canonicalizes existing directories, rejects duplicates and reparse/symlink ancestry,
 and never watches a broad ancestor for a missing root. Old callback generations fail
 their atomic generation check. Watcher errors and clock rollback only force
 authoritative reconciliation; they cannot mutate archive truth.
 
-The scheduler submission callback receives only `RefreshUrgency`. Its owned thread has
-a thread-local panic-output filter, checked counters/time arithmetic, fixed phase, and
-joined shutdown. A failed submit faults without retry. Tests prove one aggregate and
-one engine follow-up for 10,000 hints and eventual return of process handles/threads to
+The scheduler submission callback receives only `RefreshUrgency`, while a separate
+shared boolean preserves whether any coalesced request requires full reconciliation.
+Only a non-forced Hint with a non-empty known path batch may take targeted replay.
+Forced/pathless, periodic, startup, recovery, unknown, create, delete, rename, and
+ambiguous work cannot be downgraded. The scheduler thread has a thread-local
+panic-output filter, checked counters/time arithmetic, fixed phase, and joined
+shutdown. A failed submit faults without retry. Tests prove one aggregate and one
+engine follow-up for 10,000 hints and eventual return of process handles/threads to
 baseline after 32 Windows watcher replacements.
 
 Windows suspend/resume registration uses one static callback and capacity-one atomic

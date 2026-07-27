@@ -1,5 +1,35 @@
 # TokenMaster handoff
 
+## Targeted warm refresh handoff (2026-07-27)
+
+Product state: Task 1 of the locked ingestion plan is complete. A normal filesystem
+append to a known source takes a bounded targeted replay and no longer performs the
+global 4,010-source preflight/apply cycle. All inventory-changing, ambiguous,
+overflow/rescan, forced/pathless, periodic, startup, and recovery cases retain the
+authoritative global path. Provider modularity is preserved: non-filesystem or
+non-target-capable adapters use the default reconciliation fallback.
+
+Audit/evidence state: this slice changed product performance and one correctness
+boundary; it did not add audit machinery, so `AUDIT_HARDENING_LOOP` did not trigger.
+The 4,010-source/20-append receipt passed with one file examined per sample,
+`p95=3.824 ms`, `max=6.992 ms`, and exact tail bytes. Focused targeted, watcher,
+live-runtime, scheduler, incremental, Codex, privacy, and strict Clippy checks pass.
+The single final Sol review found one P1 coalescing defect: a forced pathless Hint
+could be hidden by a buffered watcher path. Shared force provenance plus focused unit
+contracts now guarantees global reconciliation. Per governance, no reviewer-of-reviewer
+round was opened.
+The final required clean-root, format, warnings-denied workspace Clippy, and complete
+locked workspace test/doc-test gate finished with exit 0 in 987.4 seconds.
+
+Release blockers: Task 2 idle/reconciliation proof is next. Then Tasks 3-4 must close
+the still-open 474-second cold-import deficit before Task 5 real-history acceptance.
+Package/M0/signing/soak remain separate. UI, parser replacement, PRAGMA tuning, and P4
+remain frozen.
+
+Git state: Task 1 is one intentional feature-branch commit with its full workspace
+gate complete; the worktree must be clean before Task 2 starts. No commit hash is
+stored in tracked documentation.
+
 ## Locked ingestion performance plan (2026-07-27)
 
 Product state: correctness remains green on the clean 4,010-source archive, but

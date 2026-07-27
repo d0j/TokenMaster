@@ -1,7 +1,7 @@
 use std::fmt;
 use std::sync::{
     Arc,
-    atomic::{AtomicU8, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     mpsc::{SyncSender, TrySendError},
 };
 
@@ -53,10 +53,12 @@ pub(crate) struct HintState {
     pub(crate) phase: AtomicU8,
     pub(crate) accepted_hint_count: AtomicU64,
     pub(crate) submitted_count: AtomicU64,
+    pub(crate) force_pending: Arc<AtomicBool>,
 }
 
 impl HintState {
-    pub(crate) fn new(phase: SchedulerPhase) -> Self {
+    pub(crate) fn new(phase: SchedulerPhase, force_pending: Arc<AtomicBool>) -> Self {
+        force_pending.store(phase == SchedulerPhase::Running, Ordering::Release);
         Self {
             flags: AtomicU64::new(if phase == SchedulerPhase::Running {
                 INITIAL_FLAGS
@@ -68,6 +70,7 @@ impl HintState {
             phase: AtomicU8::new(encode_phase(phase)),
             accepted_hint_count: AtomicU64::new(0),
             submitted_count: AtomicU64::new(0),
+            force_pending,
         }
     }
 
@@ -95,6 +98,7 @@ impl HintState {
     }
 
     pub(crate) fn force_clock_discontinuity(&self) {
+        self.force_pending.store(true, Ordering::Release);
         self.flags.fetch_or(
             FLAG_DIRTY | FLAG_FORCE | FLAG_CLOCK_DISCONTINUITY | FLAG_URGENCY_RECOVERY,
             Ordering::AcqRel,
@@ -213,6 +217,9 @@ impl RefreshHintSink {
         {
             flags |= FLAG_FORCE | FLAG_URGENCY_RECOVERY;
         }
+        if flags & FLAG_FORCE != 0 {
+            self.state.force_pending.store(true, Ordering::Release);
+        }
         self.state.flags.fetch_or(flags, Ordering::AcqRel);
         self.wake()
     }
@@ -270,5 +277,43 @@ fn decode_health(value: u8) -> WatcherHealth {
         WatcherHealth::Healthy
     } else {
         WatcherHealth::Degraded
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::sync_channel,
+    };
+
+    use tokenmaster_engine::{Clock, MonotonicTime, RefreshUrgency};
+
+    use super::{HintState, RefreshHintSink, SchedulerPhase};
+
+    struct FixedClock;
+
+    impl Clock for FixedClock {
+        fn now(&self) -> MonotonicTime {
+            MonotonicTime::from_millis(1)
+        }
+    }
+
+    #[test]
+    fn force_provenance_is_shared_while_plain_watcher_hints_stay_targetable() {
+        let force_pending = Arc::new(AtomicBool::new(false));
+        let state = Arc::new(HintState::new(
+            SchedulerPhase::Paused,
+            Arc::clone(&force_pending),
+        ));
+        state.set_phase(SchedulerPhase::Running);
+        let (sender, _receiver) = sync_channel(1);
+        let hints = RefreshHintSink::new(state, Arc::new(FixedClock), sender);
+
+        assert!(hints.filesystem_changed());
+        assert!(!force_pending.load(Ordering::Acquire));
+        assert!(hints.force_reconcile(RefreshUrgency::Hint));
+        assert!(force_pending.load(Ordering::Acquire));
     }
 }

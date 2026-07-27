@@ -4648,3 +4648,31 @@ published current revision. Store incremental (10/10), replay archive (49/49), r
 incremental (14/14), and recovery (7/7) contracts pass; a GNU warnings-denied release
 build passes. The full workspace command outlived the shell receipt limit, so this entry
 does not claim a full-green baseline, M0, package, or release acceptance.
+
+## 2026-07-27 — 4,010-source warm refresh reduced to one changed source
+
+The first task of the locked ingestion plan replaced the global warm-refresh unit of
+work. `notify` paths now enter one deduplicated 256-entry runtime-private buffer.
+The built-in Codex adapter maps only existing known JSONL paths from its bounded
+discovery snapshot and streams those readers through the existing exact preflight,
+checkpoint, canonicalization, transaction, and publication machinery. No path enters
+SQLite, public results, diagnostics, Debug, logs, or UI. Non-target-capable providers
+retain the provider-neutral stale-state fallback.
+
+Create/delete/rename/unknown/ambiguous paths, overflow/rescan/backend errors, periodic
+work, startup/recovery, and explicit forced/pathless requests still use full
+reconciliation. A single Sol review found that a forced pathless Hint could coalesce
+with a buffered watcher path and be downgraded; a shared force-provenance boolean and
+focused regression close that exact stale-inventory defect without a second review
+round.
+
+The release-only synthetic receipt created 4,010 sources and applied 20 one-line
+appends to one known source. Every sample examined one file and read exactly its tail;
+p95 was 3.824 ms and maximum 6.992 ms against the 250 ms limit. Targeted append,
+unknown fallback, truncate/rebuild, watcher, scheduler, live runtime, incremental,
+Codex, privacy, and focused warnings-denied Clippy contracts pass. Cold import remains
+474 seconds and was not changed or claimed improved. Task 2 idle/reconciliation
+measurement is next; UI, parser replacement, PRAGMA tuning, P4, and audit hardening
+remain frozen.
+The final clean-root, format, warnings-denied workspace Clippy, and complete locked
+workspace test/doc-test gate finished with exit 0 in 987.4 seconds.

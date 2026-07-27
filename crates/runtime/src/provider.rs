@@ -1,8 +1,10 @@
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tokenmaster_codex::CodexProvider;
-use tokenmaster_engine::Adapter;
+use tokenmaster_engine::{
+    Adapter, AdapterCompletion, OperationControl, PortError, PortErrorCode, ReplaySourceSink,
+};
 use tokenmaster_provider::{
     DiscoveryProvider, DiscoveryRequest, ProviderCapability, ProviderDescriptor,
 };
@@ -50,6 +52,15 @@ impl ProviderWatchRoots {
 
 pub trait LiveProviderAdapter: Adapter {
     fn watch_roots(&self) -> ProviderWatchRoots;
+
+    fn visit_changed_replay_sources(
+        &mut self,
+        _paths: &[&Path],
+        _control: &OperationControl<'_>,
+        _sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        Err(PortError::new(PortErrorCode::StaleState))
+    }
 }
 
 pub trait UsageProviderFactory: Send + 'static {

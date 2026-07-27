@@ -42,7 +42,7 @@ pub use checkpoint_codec::{
 pub use files::{
     EnumerationCompletion, EnumerationDiagnosticCode, EnumerationDiagnostics, EnumerationError,
     EnumerationErrorCode, EnumerationReport, FileMetadataHint, MAX_ENUMERATION_DEPTH, SinkDecision,
-    SourceFileDescriptor, enumerate_profile_sources,
+    SourceFileDescriptor, enumerate_profile_sources, inspect_profile_source_path,
 };
 pub use identity::profile_id_for_root;
 pub use parser::{

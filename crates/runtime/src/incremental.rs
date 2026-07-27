@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tokenmaster_engine::{
     Adapter, AdapterCompletion, AdapterCounters, AdapterDiagnostics, AdapterSourceProgress,
     AdapterSourceProgressParts, Archive, BatchState, CompletionQuality, DiscoveredSource,
@@ -9,14 +11,20 @@ use tokenmaster_store::{
     ArchivePublicationQuality, MAX_APPEND_EVENTS, MAX_APPEND_RELATIONS, MAX_SCAN_SCOPES,
 };
 
-use crate::StoreArchive;
 use crate::store_archive::{CurrentCursor, PreparedCurrentBatch};
+use crate::{LiveProviderAdapter, StoreArchive};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IncrementalRefreshOutcome {
     Complete,
     Partial,
     RebuildRequired,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TargetedRefreshOutcome {
+    Applied(IncrementalRefreshReport),
+    ReconcileRequired,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -262,6 +270,98 @@ pub fn refresh_incremental(
     };
     let outcome = run_tail_passes(adapter, archive, control, &scopes, &mut cursor, &mut counts)?;
     report(archive, starting_current_generation, outcome, counts)
+}
+
+pub fn refresh_targeted(
+    adapter: &mut dyn LiveProviderAdapter,
+    archive: &mut StoreArchive,
+    control: &OperationControl<'_>,
+    paths: &[&Path],
+) -> Result<TargetedRefreshOutcome, PortError> {
+    control.check()?;
+    if paths.is_empty() {
+        return Ok(TargetedRefreshOutcome::ReconcileRequired);
+    }
+    let publication = archive
+        .store()
+        .archive_publication()
+        .map_err(|_| PortError::new(PortErrorCode::Unavailable))?;
+    if publication.quality() != ArchivePublicationQuality::Complete {
+        return Ok(TargetedRefreshOutcome::ReconcileRequired);
+    }
+
+    let starting_current_generation = archive.current_cursor()?.archive_generation.get();
+    let mut cursor = archive.current_cursor()?;
+    let mut counts = RefreshCounts::default();
+    let mut preflight = PreflightSink {
+        archive,
+        control,
+        files_examined: 0,
+    };
+    let completion = match adapter.visit_changed_replay_sources(paths, control, &mut preflight) {
+        Ok(completion) => completion,
+        Err(error) if error.code() == PortErrorCode::StaleState => {
+            return Ok(TargetedRefreshOutcome::ReconcileRequired);
+        }
+        Err(error) if error.code() == PortErrorCode::RebuildRequired => {
+            archive.mark_rebuild_required(cursor)?;
+            return Ok(TargetedRefreshOutcome::Applied(report(
+                archive,
+                starting_current_generation,
+                IncrementalRefreshOutcome::RebuildRequired,
+                counts,
+            )?));
+        }
+        Err(error) => return Err(error),
+    };
+    counts.files_examined = checked_add(counts.files_examined, preflight.files_examined)?;
+    if completion.quality() != CompletionQuality::Complete {
+        return Ok(TargetedRefreshOutcome::ReconcileRequired);
+    }
+
+    let mut apply = ApplySink {
+        archive,
+        control,
+        cursor,
+        counts: &mut counts,
+        pending: Vec::new(),
+        pending_events: 0,
+        pending_relations: 0,
+    };
+    let completion = match adapter.visit_changed_replay_sources(paths, control, &mut apply) {
+        Ok(completion) => completion,
+        Err(error) if error.code() == PortErrorCode::StaleState => {
+            return Ok(TargetedRefreshOutcome::ReconcileRequired);
+        }
+        Err(error) if error.code() == PortErrorCode::RebuildRequired => {
+            let rebuild_cursor = apply.cursor;
+            drop(apply);
+            archive.mark_rebuild_required(rebuild_cursor)?;
+            return Ok(TargetedRefreshOutcome::Applied(report(
+                archive,
+                starting_current_generation,
+                IncrementalRefreshOutcome::RebuildRequired,
+                counts,
+            )?));
+        }
+        Err(error) => return Err(error),
+    };
+    apply.flush_pending()?;
+    cursor = apply.cursor;
+    if completion.quality() != CompletionQuality::Complete {
+        return Ok(TargetedRefreshOutcome::ReconcileRequired);
+    }
+    let outcome = if settle_current(archive, &mut cursor, control)? {
+        IncrementalRefreshOutcome::Complete
+    } else {
+        IncrementalRefreshOutcome::Partial
+    };
+    Ok(TargetedRefreshOutcome::Applied(report(
+        archive,
+        starting_current_generation,
+        outcome,
+        counts,
+    )?))
 }
 
 fn run_tail_passes(

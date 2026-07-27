@@ -20,11 +20,13 @@ use crate::publication::{
     EnginePublicationQuality, EnginePublicationState, archive_snapshot_candidate,
 };
 use crate::recovery::{StagingRecoveryOutcome, StartupRecoveryReport, recover_startup};
+use crate::watcher::{ChangedPathBatch, ChangedPathBuffer};
 use crate::{
     BoundedFilesystemWatcher, CodexUsageProviderFactory, GitRuntime, GitRuntimeConfig,
     IncrementalRefreshOutcome, LiveProviderAdapter, RefreshHintSink, RefreshScheduler,
     RuntimeError, RuntimeErrorCode, SchedulerError, SchedulerErrorCode, SchedulerPhase,
-    StoreArchive, SystemClock, UsageProviderFactory, WatcherSnapshot, refresh_incremental,
+    StoreArchive, SystemClock, TargetedRefreshOutcome, UsageProviderFactory, WatcherSnapshot,
+    refresh_incremental, refresh_targeted,
 };
 
 pub struct LiveRuntime {
@@ -186,6 +188,8 @@ impl LiveRuntime {
         };
 
         let watcher_slot = Arc::new(Mutex::new(None));
+        let changed_paths = ChangedPathBuffer::new();
+        let force_reconcile = Arc::new(AtomicBool::new(false));
         let reset_watcher = Arc::new(AtomicBool::new(true));
         let execution_watcher = Arc::clone(&watcher_slot);
         let execution_reset = Arc::clone(&reset_watcher);
@@ -202,6 +206,8 @@ impl LiveRuntime {
             adapter: factory.build(repository_hints)?,
             archive,
             watcher_slot: execution_watcher,
+            changed_paths: changed_paths.clone(),
+            force_reconcile: Arc::clone(&force_reconcile),
             reset_watcher: execution_reset,
             last_watch_roots: Vec::new(),
             watch_set_complete: false,
@@ -224,22 +230,24 @@ impl LiveRuntime {
         let admission_open = Arc::new(Mutex::new(false));
         let scheduler_worker = Arc::clone(&worker);
         let scheduler_admission = Arc::clone(&admission_open);
-        let scheduler = RefreshScheduler::spawn_paused(clock, move |urgency| {
-            let admission = scheduler_admission.lock().map_err(|_| ())?;
-            if !*admission {
-                return Ok(());
-            }
-            scheduler_worker
-                .submit(urgency, None)
-                .map(|_admission| ())
-                .map_err(|_| ())
-        })
-        .map_err(runtime_scheduler_error)?;
+        let scheduler =
+            RefreshScheduler::spawn_paused_tracked(clock, force_reconcile, move |urgency| {
+                let admission = scheduler_admission.lock().map_err(|_| ())?;
+                if !*admission {
+                    return Ok(());
+                }
+                scheduler_worker
+                    .submit(urgency, None)
+                    .map(|_admission| ())
+                    .map_err(|_| ())
+            })
+            .map_err(runtime_scheduler_error)?;
         *continuation_schedule
             .lock()
             .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))? = Some(scheduler.hints());
-        let watcher = BoundedFilesystemWatcher::new(scheduler.hints())
-            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?;
+        let watcher =
+            BoundedFilesystemWatcher::with_changed_paths(scheduler.hints(), changed_paths)
+                .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?;
         let last_watcher_snapshot = watcher.snapshot();
         *watcher_slot
             .lock()
@@ -519,6 +527,8 @@ struct LiveExecution {
     adapter: Box<dyn LiveProviderAdapter>,
     archive: StoreArchive,
     watcher_slot: Arc<Mutex<Option<BoundedFilesystemWatcher>>>,
+    changed_paths: ChangedPathBuffer,
+    force_reconcile: Arc<AtomicBool>,
     reset_watcher: Arc<AtomicBool>,
     last_watch_roots: Vec<PathBuf>,
     watch_set_complete: bool,
@@ -599,8 +609,28 @@ impl LiveExecution {
                 quality,
                 ArchivePublicationQuality::Complete | ArchivePublicationQuality::Partial
             );
+        let force_reconcile = self.force_reconcile.swap(false, Ordering::AcqRel);
         if incremental {
-            match refresh_incremental(self.adapter.as_mut(), &mut self.archive, &control) {
+            let targeted_paths =
+                select_targeted_paths(permit.urgency(), force_reconcile, self.changed_paths.take());
+            let result = if let Some(paths) = targeted_paths.as_ref() {
+                let borrowed = paths.iter().map(PathBuf::as_path).collect::<Vec<_>>();
+                match refresh_targeted(
+                    self.adapter.as_mut(),
+                    &mut self.archive,
+                    &control,
+                    &borrowed,
+                ) {
+                    Ok(TargetedRefreshOutcome::Applied(report)) => Ok(report),
+                    Ok(TargetedRefreshOutcome::ReconcileRequired) => {
+                        refresh_incremental(self.adapter.as_mut(), &mut self.archive, &control)
+                    }
+                    Err(error) => Err(error),
+                }
+            } else {
+                refresh_incremental(self.adapter.as_mut(), &mut self.archive, &control)
+            };
+            match result {
                 Ok(report) if report.outcome() == IncrementalRefreshOutcome::RebuildRequired => {
                     self.full_rebuild(permit, guard)
                 }
@@ -708,6 +738,21 @@ impl LiveExecution {
     }
 }
 
+fn select_targeted_paths(
+    urgency: RefreshUrgency,
+    force_reconcile: bool,
+    batch: ChangedPathBatch,
+) -> Option<Vec<PathBuf>> {
+    match batch {
+        ChangedPathBatch::Paths(paths)
+            if urgency == RefreshUrgency::Hint && !force_reconcile && !paths.is_empty() =>
+        {
+            Some(paths)
+        }
+        ChangedPathBatch::Paths(_) | ChangedPathBatch::Reconcile => None,
+    }
+}
+
 fn durable_generation_advanced(starting: Option<u64>, current: Option<u64>) -> bool {
     match (starting, current) {
         (None, Some(_)) => true,
@@ -802,6 +847,31 @@ fn runtime_scheduler_error(error: SchedulerError) -> RuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forced_pathless_hint_cannot_be_downgraded_by_buffered_watcher_path() {
+        let path = PathBuf::from(if cfg!(windows) {
+            r"C:\tokenmaster\known.jsonl"
+        } else {
+            "/tokenmaster/known.jsonl"
+        });
+        assert!(
+            select_targeted_paths(
+                RefreshUrgency::Hint,
+                true,
+                ChangedPathBatch::Paths(vec![path.clone()]),
+            )
+            .is_none()
+        );
+        assert_eq!(
+            select_targeted_paths(
+                RefreshUrgency::Hint,
+                false,
+                ChangedPathBatch::Paths(vec![path.clone()]),
+            ),
+            Some(vec![path])
+        );
+    }
 
     #[test]
     fn recovery_requires_a_durable_full_rebuild_generation_advance() {

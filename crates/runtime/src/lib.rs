@@ -31,7 +31,10 @@ pub use git::{
     MAX_GIT_RUNTIME_REPOSITORIES,
 };
 pub use hints::{RefreshHintSink, SchedulerPhase, WatcherHealth};
-pub use incremental::{IncrementalRefreshOutcome, IncrementalRefreshReport, refresh_incremental};
+pub use incremental::{
+    IncrementalRefreshOutcome, IncrementalRefreshReport, TargetedRefreshOutcome,
+    refresh_incremental, refresh_targeted,
+};
 pub use lease::RuntimeWriterLease;
 pub use lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntimeSnapshot};
 pub use live::LiveRuntime;

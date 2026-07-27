@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicU64, Ordering},
 };
 
@@ -13,6 +13,90 @@ use tokenmaster_provider::{MAX_PATH_BYTES, MAX_PROFILES};
 use crate::RefreshHintSink;
 
 pub const MAX_WATCH_ROOTS: usize = MAX_PROFILES;
+pub(crate) const MAX_CHANGED_PATHS: usize = 256;
+
+#[derive(Clone)]
+pub(crate) struct ChangedPathBuffer {
+    state: Arc<Mutex<ChangedPathState>>,
+}
+
+#[derive(Default)]
+struct ChangedPathState {
+    paths: Vec<PathBuf>,
+    reconcile_required: bool,
+}
+
+pub(crate) enum ChangedPathBatch {
+    Paths(Vec<PathBuf>),
+    Reconcile,
+}
+
+impl ChangedPathBuffer {
+    pub(crate) fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(ChangedPathState::default())),
+        }
+    }
+
+    fn record(&self, paths: Vec<PathBuf>) -> bool {
+        let Ok(mut state) = self.state.lock() else {
+            return false;
+        };
+        if state.reconcile_required {
+            return false;
+        }
+        if paths.is_empty() {
+            state.paths.clear();
+            state.reconcile_required = true;
+            return false;
+        }
+        for path in paths {
+            if !path.is_absolute()
+                || path_byte_len(&path) > MAX_PATH_BYTES
+                || validate_namespace(&path).is_err()
+            {
+                state.paths.clear();
+                state.reconcile_required = true;
+                return false;
+            }
+            if state.paths.iter().any(|current| current == &path) {
+                continue;
+            }
+            if state.paths.len() == MAX_CHANGED_PATHS {
+                state.paths.clear();
+                state.reconcile_required = true;
+                return false;
+            }
+            state.paths.push(path);
+        }
+        true
+    }
+
+    fn require_reconcile(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.paths.clear();
+            state.reconcile_required = true;
+        }
+    }
+
+    pub(crate) fn take(&self) -> ChangedPathBatch {
+        let Ok(mut state) = self.state.lock() else {
+            return ChangedPathBatch::Reconcile;
+        };
+        if state.reconcile_required {
+            state.reconcile_required = false;
+            state.paths.clear();
+            return ChangedPathBatch::Reconcile;
+        }
+        ChangedPathBatch::Paths(std::mem::take(&mut state.paths))
+    }
+}
+
+impl fmt::Debug for ChangedPathBuffer {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ChangedPathBuffer([redacted])")
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WatcherErrorCode {
@@ -82,6 +166,7 @@ impl WatcherSnapshot {
 
 pub struct BoundedFilesystemWatcher {
     hints: RefreshHintSink,
+    changed_paths: ChangedPathBuffer,
     active_generation: Arc<AtomicU64>,
     watcher: Option<RecommendedWatcher>,
     generation: u64,
@@ -90,8 +175,16 @@ pub struct BoundedFilesystemWatcher {
 
 impl BoundedFilesystemWatcher {
     pub fn new(hints: RefreshHintSink) -> Result<Self, WatcherError> {
+        Self::with_changed_paths(hints, ChangedPathBuffer::new())
+    }
+
+    pub(crate) fn with_changed_paths(
+        hints: RefreshHintSink,
+        changed_paths: ChangedPathBuffer,
+    ) -> Result<Self, WatcherError> {
         Ok(Self {
             hints,
+            changed_paths,
             active_generation: Arc::new(AtomicU64::new(0)),
             watcher: None,
             generation: 0,
@@ -119,6 +212,7 @@ impl BoundedFilesystemWatcher {
 
         let active_generation = self.active_generation.clone();
         let callback_hints = self.hints.clone();
+        let callback_changed_paths = self.changed_paths.clone();
         let mut next_watcher = if validated.existing.is_empty() {
             None
         } else {
@@ -128,12 +222,18 @@ impl BoundedFilesystemWatcher {
                 }
                 match result {
                     Ok(event) if event.need_rescan() => {
+                        callback_changed_paths.require_reconcile();
                         let _ = callback_hints.watcher_rescan_required();
                     }
-                    Ok(_event) => {
-                        let _ = callback_hints.filesystem_changed();
+                    Ok(event) => {
+                        if callback_changed_paths.record(event.paths) {
+                            let _ = callback_hints.filesystem_changed();
+                        } else {
+                            let _ = callback_hints.force_reconcile(RefreshUrgency::Recovery);
+                        }
                     }
                     Err(_error) => {
+                        callback_changed_paths.require_reconcile();
                         let _ = callback_hints.watcher_error();
                     }
                 }
@@ -309,4 +409,44 @@ fn path_byte_len(path: &Path) -> usize {
     use std::os::unix::ffi::OsStrExt;
 
     path.as_os_str().as_bytes().len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ChangedPathBatch, ChangedPathBuffer, MAX_CHANGED_PATHS};
+    use std::path::PathBuf;
+
+    fn absolute_path(index: usize) -> PathBuf {
+        #[cfg(windows)]
+        {
+            PathBuf::from(format!(r"C:\tokenmaster\session-{index}.jsonl"))
+        }
+        #[cfg(not(windows))]
+        {
+            PathBuf::from(format!("/tokenmaster/session-{index}.jsonl"))
+        }
+    }
+
+    #[test]
+    fn changed_paths_are_deduplicated_and_drained_without_exposure() {
+        let buffer = ChangedPathBuffer::new();
+        let path = absolute_path(1);
+        assert!(buffer.record(vec![path.clone(), path.clone()]));
+        let ChangedPathBatch::Paths(paths) = buffer.take() else {
+            panic!("recorded paths");
+        };
+        assert_eq!(paths, vec![path.clone()]);
+        assert!(matches!(buffer.take(), ChangedPathBatch::Paths(paths) if paths.is_empty()));
+        assert_eq!(format!("{buffer:?}"), "ChangedPathBuffer([redacted])");
+        assert!(!format!("{buffer:?}").contains(path.to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn changed_path_capacity_forces_one_reconciliation() {
+        let buffer = ChangedPathBuffer::new();
+        let paths = (0..=MAX_CHANGED_PATHS).map(absolute_path).collect();
+        assert!(!buffer.record(paths));
+        assert!(matches!(buffer.take(), ChangedPathBatch::Reconcile));
+        assert!(matches!(buffer.take(), ChangedPathBatch::Paths(paths) if paths.is_empty()));
+    }
 }

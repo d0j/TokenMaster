@@ -1,5 +1,31 @@
 # TokenMaster current state
 
+## 2026-07-27 — Targeted warm refresh complete
+
+Product behavior changed: an ordinary watcher append to an already known Codex JSONL
+now validates and replays only that source instead of enumerating and opening all
+4,010 sources twice. Event paths are deduplicated in a fixed 256-entry
+runtime-private buffer and are never persisted, serialized, logged, included in
+Debug, or passed to UI/query surfaces. New, deleted, renamed, ambiguous, invalid,
+overflow/rescan, forced/pathless, periodic, startup, and recovery work still takes the
+existing authoritative global reconciliation path.
+
+The exact-scale synthetic receipt used 4,010 sources and 20 one-line appends:
+`files_examined=1` for every sample, `p95=3.824 ms`, and `max=6.992 ms` against the
+250 ms gate, while bytes read equalled the appended line. Focused targeted contracts
+prove append, unknown-source no-mutation fallback, and truncate-to-rebuild behavior;
+watcher 5/5, live runtime 3/3, scheduler 7/7, incremental 17/17, Codex package tests,
+and focused warnings-denied Clippy pass. One Sol review found a forced/pathless Hint
+coalescing defect; a shared force-provenance bit and focused regression corrected it.
+This was one bounded production correctness fix, not a new review round.
+The final required clean-root, format, warnings-denied workspace Clippy, and complete
+locked workspace test/doc-test gate finished with exit 0 in 987.4 seconds.
+
+Task 1 of the locked ingestion plan is complete. The next and only open performance
+slice is Task 2: prove idle/reconciliation CPU, I/O, generation, and memory bounds.
+Cold import remains 474 seconds and is not claimed improved. Package, M0, signing, and
+soak remain release blockers.
+
 ## 2026-07-27 — 10/10 ingestion research and locked execution plan
 
 No product behavior changed in this research-only slice. The clean cold receipt remains

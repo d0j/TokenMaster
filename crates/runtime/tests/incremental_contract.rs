@@ -18,7 +18,7 @@ use tokenmaster_engine::{
 };
 use tokenmaster_runtime::{
     CodexAdapter, IncrementalRefreshOutcome, IncrementalRefreshReport, StoreArchive,
-    refresh_incremental,
+    TargetedRefreshOutcome, refresh_incremental, refresh_targeted,
 };
 use tokenmaster_store::{ArchivePublicationQuality, UsageStore};
 
@@ -514,6 +514,156 @@ fn one_line_append_reads_and_commits_only_the_tail_then_restarts_cleanly() {
     assert_eq!(restart.bytes_read(), 0);
     assert_eq!(restart.events_observed(), 0);
     assert_eq!(restart.batches_committed(), 0);
+}
+
+#[test]
+fn targeted_append_examines_only_the_changed_source() {
+    let root = TempDir::new().expect("source root");
+    let changed = root.path().join("session-17.jsonl");
+    for index in 0..32_u64 {
+        std::fs::write(
+            root.path().join(format!("session-{index}.jsonl")),
+            usage_line(index + 1),
+        )
+        .expect("write source");
+    }
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    let mut adapter = adapter(root.path());
+    assert_bootstrapped(bootstrap_with_adapter(&mut adapter, &mut archive));
+    let tail = usage_line(100);
+    append(&changed, &tail);
+    let (_coordinator, permit) = permit();
+    let control = OperationControl::new(&permit, &FixedClock);
+
+    let result = refresh_targeted(&mut adapter, &mut archive, &control, &[changed.as_path()])
+        .expect("targeted refresh");
+    let TargetedRefreshOutcome::Applied(report) = result else {
+        panic!("known changed source must use targeted refresh");
+    };
+
+    assert_eq!(report.outcome(), IncrementalRefreshOutcome::Complete);
+    assert_eq!(report.files_examined(), 1);
+    assert_eq!(report.bytes_read(), tail.len() as u64);
+    assert_eq!(report.events_observed(), 1);
+    assert_eq!(report.batches_committed(), 1);
+    let counts = archive.store().counts().expect("counts");
+    assert_eq!(counts.sources(), 32);
+    assert_eq!(counts.canonical_events(), 33);
+}
+
+#[test]
+fn targeted_unknown_source_requires_reconciliation_without_mutation() {
+    let root = TempDir::new().expect("source root");
+    std::fs::write(root.path().join("known.jsonl"), usage_line(1)).expect("write source");
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    let mut adapter = adapter(root.path());
+    assert_bootstrapped(bootstrap_with_adapter(&mut adapter, &mut archive));
+    let unknown = root.path().join("new.jsonl");
+    std::fs::write(&unknown, usage_line(2)).expect("write new source");
+    let before = archive.store().counts().expect("counts before");
+    let (_coordinator, permit) = permit();
+    let control = OperationControl::new(&permit, &FixedClock);
+
+    let result = refresh_targeted(&mut adapter, &mut archive, &control, &[unknown.as_path()])
+        .expect("targeted refresh");
+
+    assert_eq!(result, TargetedRefreshOutcome::ReconcileRequired);
+    assert_eq!(archive.store().counts().expect("counts after"), before);
+    let reconciled =
+        refresh_incremental(&mut adapter, &mut archive, &control).expect("full reconciliation");
+    assert_eq!(reconciled.outcome(), IncrementalRefreshOutcome::Complete);
+    assert_eq!(archive.store().counts().expect("counts").sources(), 2);
+    assert_eq!(
+        archive.store().counts().expect("counts").canonical_events(),
+        2
+    );
+}
+
+#[test]
+fn targeted_truncation_requests_rebuild_without_changing_usage() {
+    let root = TempDir::new().expect("source root");
+    let path = root.path().join("session.jsonl");
+    std::fs::write(&path, usage_line(1)).expect("write source");
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    let mut adapter = adapter(root.path());
+    assert_bootstrapped(bootstrap_with_adapter(&mut adapter, &mut archive));
+    std::fs::write(&path, "").expect("truncate source");
+    let (_coordinator, permit) = permit();
+    let control = OperationControl::new(&permit, &FixedClock);
+
+    let result = refresh_targeted(&mut adapter, &mut archive, &control, &[path.as_path()])
+        .expect("targeted refresh");
+    let TargetedRefreshOutcome::Applied(report) = result else {
+        panic!("known truncated source must be classified by targeted refresh");
+    };
+
+    assert_eq!(report.outcome(), IncrementalRefreshOutcome::RebuildRequired);
+    assert_eq!(report.bytes_read(), 0);
+    assert_eq!(report.batches_committed(), 0);
+    assert_eq!(
+        archive
+            .store()
+            .archive_publication()
+            .expect("publication")
+            .quality(),
+        ArchivePublicationQuality::RecoveryPending
+    );
+    assert_eq!(
+        archive.store().counts().expect("counts").canonical_events(),
+        1
+    );
+}
+
+#[test]
+#[ignore = "release-only 4,010-source targeted warm benchmark"]
+fn synthetic_targeted_warm_refresh_receipt() {
+    let root = TempDir::new().expect("source root");
+    let changed = root.path().join("session-2005.jsonl");
+    for index in 0..4_010_u64 {
+        let payload = if index == 2_005 {
+            usage_line(1)
+        } else {
+            String::new()
+        };
+        std::fs::write(root.path().join(format!("session-{index}.jsonl")), payload)
+            .expect("write source");
+    }
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    let mut adapter = adapter(root.path());
+    assert_bootstrapped(bootstrap_with_adapter(&mut adapter, &mut archive));
+    assert_eq!(archive.store().counts().expect("counts").sources(), 4_010);
+
+    let mut samples = Vec::new();
+    for index in 2..22_u64 {
+        let tail = usage_line(index);
+        append(&changed, &tail);
+        let (_coordinator, permit) = permit();
+        let control = OperationControl::new(&permit, &FixedClock);
+        let started = Instant::now();
+        let result = refresh_targeted(&mut adapter, &mut archive, &control, &[changed.as_path()])
+            .expect("targeted refresh");
+        let elapsed = started.elapsed();
+        let TargetedRefreshOutcome::Applied(report) = result else {
+            panic!("known changed source must use targeted refresh");
+        };
+        assert_eq!(report.outcome(), IncrementalRefreshOutcome::Complete);
+        assert_eq!(report.files_examined(), 1);
+        assert_eq!(report.bytes_read(), tail.len() as u64);
+        assert_eq!(report.events_observed(), 1);
+        samples.push(elapsed);
+    }
+    samples.sort_unstable();
+    let p95 = samples[18];
+    println!(
+        "TM-TARGETED-WARM-BENCH|sources=4010|samples=20|p95_ms={:.3}|max_ms={:.3}",
+        p95.as_secs_f64() * 1_000.0,
+        samples[19].as_secs_f64() * 1_000.0,
+    );
+    assert!(
+        p95 <= std::time::Duration::from_millis(250),
+        "targeted warm refresh p95 {} ms exceeds 250 ms",
+        p95.as_millis()
+    );
 }
 
 #[test]

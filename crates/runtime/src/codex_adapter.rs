@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 
 use tokenmaster_codex::{
@@ -6,8 +6,8 @@ use tokenmaster_codex::{
     ParserDiagnosticCode, ParserResumeState, ReaderCheckpointParts, ReaderCheckpointV1,
     ReaderDiagnosticCode, ReaderError, ReaderErrorCode, ReaderOutcome, ReaderProofCache,
     SinkDecision, SourceCheckpointStatus, SourceChunkDigest, SourceFileDescriptor,
-    enumerate_profile_sources, initialize_source_checkpoint, logical_file_identity,
-    read_source_batch_with_cache, validate_source_checkpoint,
+    enumerate_profile_sources, initialize_source_checkpoint, inspect_profile_source_path,
+    logical_file_identity, read_source_batch_with_cache, validate_source_checkpoint,
 };
 use tokenmaster_engine::{
     Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
@@ -193,6 +193,24 @@ impl CodexAdapter {
             degraded || quality != CompletionQuality::Complete,
         )
     }
+
+    fn emit_descriptor(
+        &self,
+        descriptor: SourceFileDescriptor,
+        emit: &mut impl FnMut(
+            DiscoveredSource,
+            AdapterSourceState,
+            SourceFileDescriptor,
+        ) -> Result<SinkControl, PortError>,
+    ) -> Result<SinkControl, PortError> {
+        let initial = initialize_source_checkpoint(&descriptor)
+            .map_err(|_| PortError::new(PortErrorCode::StaleState))?;
+        let source = discovered_source(&descriptor)?;
+        let checkpoint = encode_checkpoint(initial.clone())?;
+        let progress = source_progress(&initial)?;
+        let state = AdapterSourceState::new(checkpoint, progress).map_err(PortError::from)?;
+        emit(source, state, descriptor)
+    }
 }
 
 impl Adapter for CodexAdapter {
@@ -260,6 +278,76 @@ impl Adapter for CodexAdapter {
 impl crate::LiveProviderAdapter for CodexAdapter {
     fn watch_roots(&self) -> crate::ProviderWatchRoots {
         crate::ProviderWatchRoots::from_bounded(self.watch_roots())
+    }
+
+    fn visit_changed_replay_sources(
+        &mut self,
+        paths: &[&Path],
+        control: &OperationControl<'_>,
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        control.check()?;
+        if paths.is_empty() || paths.len() > crate::watcher::MAX_CHANGED_PATHS {
+            return Err(PortError::new(PortErrorCode::StaleState));
+        }
+        let snapshot = self
+            .snapshot
+            .as_ref()
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let mut descriptors = Vec::with_capacity(paths.len());
+        for path in paths {
+            let mut matched = None;
+            for profile in snapshot.profiles() {
+                if profile.availability() != ProfileAvailability::Available {
+                    continue;
+                }
+                let sources = snapshot
+                    .sources()
+                    .iter()
+                    .filter(|source| source.profile_id() == profile.id())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if sources.is_empty() {
+                    continue;
+                }
+                let Some(descriptor) = inspect_profile_source_path(&sources, path)
+                    .map_err(|_| PortError::new(PortErrorCode::StaleState))?
+                else {
+                    continue;
+                };
+                if matched.is_some() {
+                    return Err(PortError::new(PortErrorCode::StaleState));
+                }
+                matched = Some(descriptor);
+            }
+            let descriptor = matched.ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+            if descriptors.iter().any(|current: &SourceFileDescriptor| {
+                current.absolute_path() == descriptor.absolute_path()
+            }) {
+                continue;
+            }
+            descriptors.push(descriptor);
+        }
+        let mut emitted = 0_u64;
+        for descriptor in descriptors {
+            control.check()?;
+            if self.emit_descriptor(descriptor, &mut |source, state, descriptor| {
+                let mut reader = CodexSourceBatchReader {
+                    descriptor,
+                    source: source.identity().clone(),
+                    latest_repository_activity_hint: None,
+                    repository_hint_ingress: self.repository_hint_ingress.clone(),
+                    prefetched: None,
+                    proof_cache: ReaderProofCache::default(),
+                };
+                sink.on_source(source, state, &mut reader)
+            })? == SinkControl::Stop
+            {
+                return completion(CompletionQuality::Partial, emitted, true);
+            }
+            emitted = emitted.saturating_add(1);
+        }
+        completion(CompletionQuality::Complete, emitted, false)
     }
 }
 

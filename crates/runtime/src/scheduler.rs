@@ -3,7 +3,7 @@ use std::fmt;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{
     Arc, Once,
-    atomic::Ordering,
+    atomic::{AtomicBool, Ordering},
     mpsc::{Receiver, RecvTimeoutError, sync_channel},
 };
 use std::thread::{Builder, JoinHandle};
@@ -124,7 +124,12 @@ impl RefreshScheduler {
     where
         F: FnMut(RefreshUrgency) -> Result<(), E> + Send + 'static,
     {
-        Self::spawn_with_phase(clock, SchedulerPhase::Running, submit)
+        Self::spawn_with_phase(
+            clock,
+            SchedulerPhase::Running,
+            Arc::new(AtomicBool::new(true)),
+            submit,
+        )
     }
 
     pub(crate) fn spawn_paused<F, E>(
@@ -134,19 +139,36 @@ impl RefreshScheduler {
     where
         F: FnMut(RefreshUrgency) -> Result<(), E> + Send + 'static,
     {
-        Self::spawn_with_phase(clock, SchedulerPhase::Paused, submit)
+        Self::spawn_with_phase(
+            clock,
+            SchedulerPhase::Paused,
+            Arc::new(AtomicBool::new(false)),
+            submit,
+        )
+    }
+
+    pub(crate) fn spawn_paused_tracked<F, E>(
+        clock: Arc<dyn Clock>,
+        force_pending: Arc<AtomicBool>,
+        submit: F,
+    ) -> Result<Self, SchedulerError>
+    where
+        F: FnMut(RefreshUrgency) -> Result<(), E> + Send + 'static,
+    {
+        Self::spawn_with_phase(clock, SchedulerPhase::Paused, force_pending, submit)
     }
 
     fn spawn_with_phase<F, E>(
         clock: Arc<dyn Clock>,
         initial_phase: SchedulerPhase,
+        force_pending: Arc<AtomicBool>,
         submit: F,
     ) -> Result<Self, SchedulerError>
     where
         F: FnMut(RefreshUrgency) -> Result<(), E> + Send + 'static,
     {
         install_scheduler_panic_redaction();
-        let state = Arc::new(HintState::new(initial_phase));
+        let state = Arc::new(HintState::new(initial_phase, force_pending));
         let (wake_sender, wake_receiver) = sync_channel(1);
         let hints = RefreshHintSink::new(state.clone(), clock.clone(), wake_sender);
         let thread_state = state.clone();

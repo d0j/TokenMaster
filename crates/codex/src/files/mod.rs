@@ -384,6 +384,17 @@ pub fn enumerate_profile_sources(
     Ok(state.into_report())
 }
 
+pub fn inspect_profile_source_path(
+    sources: &[SourceDescriptor],
+    absolute_path: &Path,
+) -> Result<Option<SourceFileDescriptor>, EnumerationError> {
+    validate_source_set(sources)?;
+    for source in sources {
+        walk::validate_root(source.path())?;
+    }
+    walk::inspect_source_path(sources, absolute_path)
+}
+
 fn validate_source_set(sources: &[SourceDescriptor]) -> Result<(), EnumerationError> {
     let Some(first) = sources.first() else {
         return Err(EnumerationError::new(EnumerationErrorCode::EmptySourceSet));

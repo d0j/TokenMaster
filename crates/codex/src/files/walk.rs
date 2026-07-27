@@ -221,6 +221,74 @@ pub(super) fn walk_source(
     Ok(WalkControl::Continue)
 }
 
+pub(super) fn inspect_source_path(
+    sources: &[SourceDescriptor],
+    absolute_path: &Path,
+) -> Result<Option<SourceFileDescriptor>, EnumerationError> {
+    if path_byte_len(absolute_path) > MAX_PATH_BYTES
+        || validate_local_root_namespace(absolute_path).is_err()
+    {
+        return Ok(None);
+    }
+    let mut matched = sources.iter().filter_map(|source| {
+        absolute_path
+            .strip_prefix(source.path())
+            .ok()
+            .filter(|relative| valid_relative_path(relative))
+            .map(|relative| (source, relative.to_path_buf()))
+    });
+    let Some((source, relative_path)) = matched.next() else {
+        return Ok(None);
+    };
+    if matched.next().is_some() {
+        return Ok(None);
+    }
+    let metadata = match fs::symlink_metadata(absolute_path) {
+        Ok(metadata)
+            if metadata.is_file()
+                && !is_reparse_point(&metadata)
+                && has_jsonl_extension(absolute_path) =>
+        {
+            metadata
+        }
+        Ok(_) | Err(_) => return Ok(None),
+    };
+    if source.kind() == tokenmaster_provider::SourceKind::Archived {
+        let active_root = sources
+            .iter()
+            .find(|candidate| candidate.kind() == tokenmaster_provider::SourceKind::Active)
+            .map(SourceDescriptor::path);
+        let mut state = EnumerationState::default();
+        if active_root.is_some_and(|active| archive_is_shadowed(active, &relative_path, &mut state))
+        {
+            return Ok(None);
+        }
+    }
+    let profile_id = Arc::new(
+        UsageProfileId::new(source.profile_id().as_str().to_owned())
+            .map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?,
+    );
+    let source_id = Arc::new(
+        UsageSourceId::new(source.id().as_str().to_owned())
+            .map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?,
+    );
+    let hashed_session_hint = hashed_session_hint(&profile_id, &relative_path)
+        .map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?;
+    Ok(Some(SourceFileDescriptor {
+        profile_id,
+        source_id,
+        source_kind: source.kind(),
+        absolute_path: absolute_path.to_path_buf(),
+        relative_path: relative_path.clone(),
+        filename_session_hint: filename_session_hint(&relative_path),
+        hashed_session_hint,
+        metadata_hint: FileMetadataHint::new(
+            metadata.len(),
+            metadata.modified().ok().map(system_time_to_unix_nanos),
+        ),
+    }))
+}
+
 pub(super) enum CandidateClassification {
     Directory,
     File(fs::Metadata),
