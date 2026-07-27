@@ -29,8 +29,16 @@ work from a measured 3,796 rows to zero, published 128,976 selected events, and 
 `Complete` in about 628 seconds. The responsive process retained about 59.9 MiB
 private memory after completion.
 
-This closes a production stall, not the absolute performance target: roughly
-10 minutes 28 seconds is still slower than the desired WMT-class first import.
+The subsequent true empty-data cold start on the committed release binary supersedes
+that recovery timing: all `4,010` sources completed in about 400 seconds, replay work
+then drained from 3,826 measured rows to zero, and the archive reached `Complete` at
+474 seconds with `610,312` observations and 128,976 selected events. The responsive
+process retained about 58 MiB private memory after completion; the live database was
+about 811.6 MiB with a 12.2 MiB WAL.
+
+This closes a production stall, not the absolute performance target: 474 seconds is
+about 24.5% faster than the 628-second recovery run but still roughly 1.8 times the
+pinned WMT aggregate-ledger receipt of about 262 seconds.
 The next outcome is the shortest Windows package/release path; any further importer
 architecture requires a separately measured release blocker. No audit, parser, UI,
 schema, P4, or reviewer-chain work was opened. `AUDIT_HARDENING_LOOP` is not active.

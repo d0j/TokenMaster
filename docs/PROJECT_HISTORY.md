@@ -15,6 +15,11 @@ did not establish speed superiority over WhereMyTokens. The final aggregate also
 caught and closed an over-broad selector that could consume durable `depth_bound`
 work; only the previously actionable post-manifest reasons are now processed.
 
+A following empty-data launch of the committed release binary completed 4,010 sources
+in about 400 seconds and reached Complete after replay drain at 474 seconds, retaining
+610,312 exact observations and about 58 MiB private memory. This is 24.5% faster than
+the recovery run, but still roughly 1.8 times the pinned WMT aggregate-ledger timing.
+
 ## 2026-07-27 — Cold proof construction became forward-only
 
 A live large-history run disproved the earlier assumption that source reading was

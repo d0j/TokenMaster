@@ -31,18 +31,26 @@ published 128,976 selected events, and reached `Complete` in about 628 seconds. 
 window remained responsive and the completed process used about 59.9 MiB private
 memory.
 
-Release blockers: the correctness stall is closed, but the roughly 10-minute
-28-second real cold import is not WMT-speed superiority. Do not reopen parser, UI,
+Clean cold-start receipt: the committed release binary started against an empty
+TokenMaster data directory, completed all `4,010` sources in about 400 seconds, then
+drained replay work from 3,826 measured rows to zero and reached `Complete` at
+474 seconds with `610,312` observations and 128,976 selected events. The responsive
+process retained about 58 MiB private memory; the resulting database was about
+811.6 MiB with a 12.2 MiB WAL. The prior data directory was preserved by an atomic
+rename and was not deleted.
+
+Release blockers: the correctness stall is closed, but the 474-second clean cold
+import is not WMT-speed superiority. Do not reopen parser, UI,
 schema, textual audit, or parameter micro-tuning from this receipt. The shortest next
 outcome is the minimum exact-clean Windows package/release acceptance path; signing,
 authenticated external accessibility/DPI evidence, and the operator-deferred soak
 remain separate.
 
-Git state: this narrow production/test/docs slice is recorded in one intentional
-commit and the worktree is clean. The accepted release application was closed after
-the live receipt.
-No console, test runner, temporary server, or child worker remains. This cycle changed
-product correctness and required evidence, not audit machinery.
+Git state: the production correction is recorded in one intentional commit; this
+clean-cold receipt is recorded separately as evidence-only documentation. The clean
+release application remains deliberately open for operator inspection. No console,
+test runner, temporary server, or child worker remains. This cycle changed required
+evidence, not product behavior or audit machinery.
 `AUDIT_HARDENING_LOOP` is not active.
 
 ## Cold-reader proof-cache correction (2026-07-27)
