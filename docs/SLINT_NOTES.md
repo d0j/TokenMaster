@@ -14,11 +14,13 @@ then drops every instance, each drop calls `free_graphics_resources`, and that s
 it is a last resort because deleted items have no known screen region. Upstream
 #7432, open.
 
-`crates/desktop/src/ui.rs:4127` builds a new `ModelRc` on every projection, and all
-30 `set_*_rows` sites go through it. Every data update therefore repaints the whole
-window even when the pixels are identical. `VecModel::set_row_data` is the cheap
-path and does not trip it; `push`/`insert`/`remove` still destroy instances,
-`set_vec` and `clear` issue a full reset.
+This repository used to build a new `ModelRc` on every projection, so every data
+update repainted the whole window even when the pixels were identical. `fn patch_rows`
+now writes through `set_row_data` and returns a replacement only when the row count
+changed; the 26 call sites go through the `set_rows!` macro. `VecModel::set_row_data`
+is the cheap path and does not trip the repaint; `push`/`insert`/`remove` still
+destroy instances, and `set_vec` and `clear` issue a full reset — so a new call site
+must use the macro rather than reach for those.
 
 **Partial rendering is on by default here and in its best mode.** softbuffer's Win32
 backend returns buffer age 1 after the first present, which selects `ReusedBuffer` —
@@ -171,13 +173,17 @@ Known-fragile. Each is scheduled in the "Recorded, with a phase" table of
 `docs/RELEASE_EXIT_PLAN.md`; this section explains the mechanism, that one commits
 to when:
 
-- `settings-view.slint:248-256` — four backup-policy controls bound one-way with no
-  handler. After one user interaction the pushes at `ui.rs:2254-2260` are dead.
-- `ui.rs:1952-1987` — compact-window sizing samples `window().size()` and
-  `scale_factor()` before the window is shown, and compares physical pixels against
-  logical-looking constants. Wrong on any non-100% display.
-- `dashboard-view.slint:535` indexes sections positionally with nothing enforcing
-  the order.
+Anchors here are symbols, not line numbers: every line reference this file once
+carried had drifted.
+
+- The "Automatic backup policy" card in `settings-view.slint` — four controls bound
+  one-way with no handler. After one user interaction the pushes in
+  `fn apply_reliable_state_projection` are dead.
+- `fn update_compact_window_mode` — compact-window sizing samples `window().size()`
+  and `scale_factor()` before the window is shown, and compares physical pixels
+  against logical-looking constants. Wrong on any non-100% display.
+- `dashboard-view.slint`, `out property <DashboardSectionRow> active-section`, indexes
+  sections positionally with nothing enforcing the order.
 - `high-contrast` and `reduced-motion` are declared and consumed by the tree but
   never set from Rust, so both affordances are inert.
 - The Win32 tray reconstructs a `&'static Inner` from `GWLP_USERDATA`. It is correct

@@ -35,6 +35,14 @@ Project history lives in `git log` and `docs/CHANGELOG.md`. Do not reintroduce a
 narrative state or handoff document: the four that existed absorbed more edits than
 the most-edited source file and still contradicted each other.
 
+`docs/ROADMAP.md` was the fifth and was deleted for the same reason. It ran 522 lines,
+declared in its own opening line that the exit plan was the active rail, and then
+carried its own phase numbering in which P6 meant signing rather than ingestion. It
+called the secret scan green when nothing invoked the scanner, described a GNU release
+lane removed in P0, and mandated a WebAssembly plugin host that was dropped by decision.
+Requirement status belongs to `spec/TRACEABILITY.md`; delivery order belongs to
+`docs/RELEASE_EXIT_PLAN.md`; everything else belongs to `git log`.
+
 `M0_ACCEPTANCE.md` describes receipts produced by `tokenmaster-m0`, a probe binary
 deleted in 2dd1f09. It measured a different renderer and none of the product's
 ingestion, query or snapshot code, so it never could gate a product release and
@@ -66,6 +74,11 @@ These are binding regardless of what is being built.
 - Prefer deleting code to adding it when both reach the goal. Do not add a document,
   script, or abstraction that no phase asked for.
 - Do not put a commit hash in a tracked document.
+- Reference code by symbol, never by line number. Every `file:line` reference the
+  tracked documents once carried had drifted, and two of them pointed at defects that
+  were already fixed. A function or property name survives edits and is greppable.
+- A check that reads a script's own text is not that check. Assert against the artifact,
+  and name the test for what it actually does.
 
 ## Verification
 

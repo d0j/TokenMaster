@@ -25,7 +25,10 @@ Describe 'release secret scan' {
         { [void][scriptblock]::Create($text) } | Should -Not -Throw
     }
 
-    It 'scans clean committed source history and the validated closed package' {
+    # Reads the validator as text. It proves the scan is declared with bounded, redacted
+    # flags over both targets; it does not run Gitleaks and proves nothing about this
+    # repository's contents. The scan itself runs in the release workflow.
+    It 'declares bounded redacted scan modes for source history and the closed package' {
         Test-Path -LiteralPath $Validator | Should -BeTrue
         $text = Get-Content -LiteralPath $Validator -Raw
         $source = [regex]::Match(

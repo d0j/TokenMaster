@@ -32,5 +32,5 @@ pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 приняты, пока нет отдельных интерактивных Windows и непрерывных soak receipts.
 
 Подробности: [архитектура](docs/ARCHITECTURE.md),
-[матрица функциональности](docs/FEATURE_PARITY.md),
-[roadmap](docs/ROADMAP.md) и [план выхода к релизу](docs/RELEASE_EXIT_PLAN.md).
+[матрица функциональности](docs/FEATURE_PARITY.md)
+и [план выхода к релизу](docs/RELEASE_EXIT_PLAN.md).

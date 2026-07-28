@@ -31,6 +31,13 @@ jobs:
       - name: Package canonical unsigned artifact
         shell: pwsh
         run: ./scripts/package-product.ps1 -RepositoryRoot $PWD.Path
+      - name: Scan committed history and the closed package for secrets
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -Path dist -Filter 'TokenMaster-*-windows-x64-unsigned.zip' |
+            Select-Object -First 1
+          if (-not $package) { throw 'no package to scan' }
+          ./scripts/verify-secret-scan.ps1 -RepositoryRoot $PWD.Path -PackagePath $package.FullName
       - name: Attest canonical unsigned ZIP
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:

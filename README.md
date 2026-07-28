@@ -96,4 +96,4 @@ for diagnostic comparison and cannot be the default renderer.
 - Measured memory, CPU, handle, thread, USER, GDI, and latency gates.
 
 See [architecture](docs/ARCHITECTURE.md), [feature matrix](docs/FEATURE_PARITY.md),
-[roadmap](docs/ROADMAP.md), and [the release exit plan](docs/RELEASE_EXIT_PLAN.md).
+and [the release exit plan](docs/RELEASE_EXIT_PLAN.md).
