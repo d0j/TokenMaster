@@ -74,9 +74,11 @@ These are binding regardless of what is being built.
 - Prefer deleting code to adding it when both reach the goal. Do not add a document,
   script, or abstraction that no phase asked for.
 - Do not put a commit hash in a tracked document.
-- Reference code by symbol, never by line number. Every `file:line` reference the
-  tracked documents once carried had drifted, and two of them pointed at defects that
-  were already fixed. A function or property name survives edits and is greppable.
+- In a tracked document, reference code by symbol rather than by line number. Every
+  `file:line` reference these documents once carried had drifted, and two of them
+  pointed at defects that were already fixed. A function or property name survives
+  edits and is greppable. A commit message or a review comment is not a tracked
+  document and may cite lines freely.
 - A check that reads a script's own text is not that check. Assert against the artifact,
   and name the test for what it actually does.
 
