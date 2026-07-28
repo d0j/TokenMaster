@@ -165,7 +165,9 @@ Established patterns, so a change follows the existing shape:
   from Rust as functions; a locale switch must re-project everything, because the
   strings were baked into model rows.
 
-Known-fragile, recorded rather than fixed:
+Known-fragile. Each is scheduled in the "Recorded, with a phase" table of
+`docs/RELEASE_EXIT_PLAN.md`; this section explains the mechanism, that one commits
+to when:
 
 - `settings-view.slint:248-256` — four backup-policy controls bound one-way with no
   handler. After one user interaction the pushes at `ui.rs:2254-2260` are dead.

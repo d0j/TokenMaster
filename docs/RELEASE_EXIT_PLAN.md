@@ -27,6 +27,22 @@ Do not start a phase before the previous one meets its criterion.
 | P6 | Ingestion, capped | Cold import under 300 s median with a byte-identical selected-event set |
 | P7 | Claude provider | Two `provider_id` values under one writer lease |
 
+## Recorded, with a phase
+
+Defects found while working on something else. Each is deferred deliberately, not
+forgotten; the phase is the commitment. Background and mechanism are in
+`docs/SLINT_NOTES.md`.
+
+| Phase | Item | Where |
+|---|---|---|
+| P3 | Four backup-policy controls are bound one-way with no handler, so Slint severs them on the first user interaction and the Rust pushes are silently dropped. After a config import the card can show a policy that is not the one running. | `ui/views/settings-view.slint:248-256`, pushes at `src/ui.rs:2254-2260` |
+| P3 | Charts distinguishing unavailable from a legitimate zero is not test-guarded. The text cells are covered; the visual difference is not, and the row struct is not exported. | `ui/views/history-view.slint:173-186` |
+| P6 | Every `set_*_rows` builds a fresh `ModelRc`, which is never `PartialEq` to the old one, so each data projection destroys every repeater instance and forces a full-window repaint. 30 call sites through one helper. | `src/ui.rs:4127` |
+| P6 | `hide()` → `show()` skips the partial-render cache invalidation that minimize → restore gets, because winit emits no `Occluded` on Windows. Suspected cause of a stale window after restoring from the tray. Reproduce before fixing. | backend behaviour; `src/ui.rs:1728` |
+| post-tag | `high-contrast` and `reduced-motion` are declared and consumed by the tree but never set from Rust, so both affordances are inert. | `ui/main.slint:289-290` |
+| post-tag | Compact-window sizing samples `window().size()` before the window is shown and compares physical pixels against logical constants. Wrong on any non-100% display. | `src/ui.rs:1952-1987` |
+| post-tag | The Dashboard indexes its six sections positionally with nothing enforcing the order. | `ui/views/dashboard-view.slint:535` |
+
 ## Abort rules
 
 These are binding. They exist because this project produced 543 commits and zero
