@@ -23,103 +23,49 @@ achievable or desirable. The product's own claim is that it is not Electron.
 
 ## Source of truth
 
-Read in this order before changing behavior:
+Read in this order before changing behaviour:
 
-1. `spec/SPECIFICATION.md`
-2. `spec/DATA_CONTRACT.md`
-3. `spec/API_CONTRACT.md`
-4. `spec/SECURITY.md`
-5. `spec/TRACEABILITY.md`
-6. `spec/DECISIONS.md`
-7. `docs/RELEASE_EXIT_PLAN.md`
-8. `docs/ROADMAP.md`
+1. `spec/SPECIFICATION.md` — the normative product contract
+2. `spec/DATA_CONTRACT.md`, `spec/API_CONTRACT.md`, `spec/SECURITY.md`
+3. `spec/DECISIONS.md` — ADRs
+4. `spec/TRACEABILITY.md` — the sole requirement-status authority
+5. `docs/RELEASE_EXIT_PLAN.md` — the delivery rail: phases, criteria, abort rules
 
 Project history lives in `git log` and `docs/CHANGELOG.md`. Do not reintroduce a
-narrative state or handoff document: the four that existed absorbed more edits
-than the most-edited source file and still contradicted each other.
+narrative state or handoff document: the four that existed absorbed more edits than
+the most-edited source file and still contradicted each other.
 
-## Workflow
+`M0_ACCEPTANCE.md` describes receipts produced by `tokenmaster-m0`, a probe binary
+deleted in 2dd1f09. It measured a different renderer and none of the product's
+ingestion, query or snapshot code, so it never could gate a product release and
+does not now. Release gates live in `docs/RELEASE_EXIT_PLAN.md`.
 
-- Work on a feature branch or isolated worktree.
-- Use focused red/green tests for behavior changes, then run the relevant workspace
-  tests.
-- Keep input, retained memory, archive writes, and UI snapshots bounded.
+## Product invariants
+
+These are binding regardless of what is being built.
+
 - Never persist or expose prompts, responses, reasoning, commands, source contents,
   credentials, raw incomplete lines, or absolute user paths.
-- Do not add arbitrary SQL, shell, HTTP, or filesystem access to future CLI/MCP
-  surfaces.
-- After substantial work update traceability, current state, project history, and the
-  affected security or operational document. Do not put a current commit hash in
-  tracked documents.
-- A release is not accepted without the exact receipt gates in `M0_ACCEPTANCE.md` and
-  the future product-release checklist.
+- Input lines, retained parser state, reader batches, checkpoints, chart points and
+  UI lists are bounded. No production path allocates from an untrusted declared size.
+- A missing value stays missing. Unavailable, partial and legitimate-zero are three
+  different facts and must remain distinguishable everywhere they are shown — text,
+  chart, accessible label.
+- CLI and MCP surfaces, when they exist, expose no arbitrary SQL, shell, HTTP,
+  filesystem or credential operation.
 
-## Root delivery governance
+## Working
 
-The root agent is the senior delivery owner, not an implementation worker managed by
-its reviewers. At the start and end of every autonomous cycle, root must state and
-reconcile:
-
-1. the current user-visible product milestone;
-2. the shortest release-critical next outcome;
-3. the remaining real product/release blockers;
-4. whether the cycle changed product behavior, correctness, required evidence, or only
-   audit machinery.
-
-Root owns architecture, critical path, delegation, integration, stop conditions, and
-final acceptance. Children return bounded evidence; they never extend scope or create
-an indefinite review queue. Keep the critical-path decision local to root.
-
-Until the first accepted release, every autonomous cycle is release-driven:
-
-- Freeze new P4 improvements. Work only on the shortest open Windows acceptance,
-  package, signing, soak, M0, or release blocker.
-- Run at most two child agents concurrently. Use one reviewer only after a complete
-  release-critical slice; do not run reviewer-of-reviewer rounds without a
-  demonstrated Critical production, security, or data-loss defect.
-- Use focused tests while implementing and run the full workspace gate once before
-  the milestone, not after every micro-slice.
-- Change textual audits or parsers only for a demonstrated production defect or a
-  required release receipt.
-- Update cycle documentation once at slice closeout.
-- If 60 minutes do not close a product or release blocker, stop the current path,
-  preserve verified state, and reconsider the shortest path before continuing.
-
-Audit and proof work must remain subordinate to product delivery:
-
-- Classify each finding as a production correctness/security/data-loss defect, a
-  required acceptance-evidence defect, or audit-only hardening. Do not present an
-  audit-only parser/regex weakness as a product defect.
-- Every audit rule must map to an existing source-of-truth requirement and a practical
-  compiling or executable mutation. Do not expand the threat model merely because a
-  new textual decoy can be invented.
-- Prefer types, compiler checks, runtime invariants, and focused behavioral tests over
-  increasingly complex source-text parsing. A textual audit is a last-mile guard, not
-  a substitute parser or a product milestone.
-- Normally allow one implementation review and one final re-review. A further review
-  round requires a newly demonstrated Critical production/security/data-loss risk,
-  not another audit-only bypass.
-- Run focused red/green validation while correcting findings, then one relevant final
-  aggregate and the required baseline. Do not rerun a long full gate after every
-  audit-only edit.
-
-Root must declare `AUDIT_HARDENING_LOOP` when either condition occurs:
-
-- two consecutive correction/review rounds change only audits/tests/docs without
-  changing product behavior or closing a required release receipt; or
-- more than 60 minutes are spent on audit-only hardening after the production behavior
-  and focused contracts already pass.
-
-When triggered, root must immediately stop audit children, report the loop and its
-cost, reject further speculative hardening, preserve the last verified product state,
-and return to the shortest release-critical product slice. One additional bounded fix
-is allowed only for a demonstrated Critical production/security/data-loss defect; it
-must have a focused reproducer and a fixed stop condition. Record the trigger and the
-chosen disposition in `docs/RELEASE_EXIT_PLAN.md` before continuing.
-
-At every handoff, separately report `product state`, `audit/evidence state`, `release
-blockers`, and `Git state`. A green developer baseline must never be described as a
-package, M0, release-candidate, or stable-release acceptance.
+- Work on a feature branch or an isolated worktree.
+- Follow `docs/RELEASE_EXIT_PLAN.md` in its order. One phase at a time, and report
+  against that phase's stated criterion with its measured number — including when it
+  was missed. A reported miss is information; a quietly adjusted target is not.
+- A behaviour change starts with a test that fails before it. A guard that stays
+  green for both the correct and a plausible wrong implementation guards nothing.
+- A defect found outside the current item is recorded and deferred, not fixed inline.
+- Prefer deleting code to adding it when both reach the goal. Do not add a document,
+  script, or abstraction that no phase asked for.
+- Do not put a commit hash in a tracked document.
 
 ## Verification
 
@@ -135,3 +81,7 @@ cargo fmt --all -- --check
 $env:RUSTFLAGS = '-Dwarnings'; cargo clippy --workspace --all-targets --locked
 cargo test --workspace --locked
 ```
+
+`pwsh -NoProfile -File scripts\verify-m0.ps1` runs that gate plus the clean-root,
+immutable-action and dependency-policy checks and the eight Pester suites. The
+dependency policy needs network access to the current RustSec database.

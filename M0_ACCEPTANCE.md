@@ -1,5 +1,12 @@
 # TokenMaster M0 acceptance
 
+> **Superseded.** The receipts below were produced by `tokenmaster-m0`, a probe
+> binary deleted in 2dd1f09. It used a different renderer and contained none of the
+> product's ingestion, query or snapshot code, so its measurements never described
+> the shipped executable. Kept for history. Release gates are in
+> `docs/RELEASE_EXIT_PLAN.md`; a soak, if one is run, must target the packaged
+> `TokenMaster.exe` and needs a harness written against it.
+
 **Status: SUFFICIENT FOR BOUNDED M1 DEVELOPMENT; NOT M0/RELEASE-ACCEPTED — automated
 developer gates pass; interactive and uninterrupted 24-hour evidence is missing.**
 
