@@ -177,8 +177,19 @@ component HistoryTrendCard inherits Rectangle {
                     Rectangle {
                         y: parent.height - self.height;
                         width: parent.width;
-                        height: max(1px, row.token-ratio * parent.height);
-                        background: UiTokens.accent;
+                        // `ratio()` returns 0.0 for an unavailable day, so drawing it
+                        // unconditionally puts a bar at the baseline that is pixel
+                        // identical to a legitimate zero. A day with no evidence and a
+                        // day that truly cost nothing are different facts, and the
+                        // column is where that distinction is most visible.
+                        height: row.total-availability == "unavailable"
+                            ? 3px
+                            : max(1px, row.token-ratio * parent.height);
+                        background: row.total-availability == "unavailable"
+                            ? UiTokens.unavailable
+                            : row.total-availability == "partial"
+                            ? UiTokens.degraded
+                            : UiTokens.accent;
                         border-radius: 2px;
                     }
                 }

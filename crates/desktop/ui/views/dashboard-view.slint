@@ -323,7 +323,12 @@ component TrendCard inherits Rectangle {
                 for point[i] in root.points: Rectangle {
                     horizontal-stretch: 1;
                     background: transparent;
-                    if mod(i, 3) == 0 || i == root.points.length - 1: Rectangle {
+                    // The Rust line generator already breaks the polyline on an
+                    // unavailable point. Drawing the marker anyway put a visible dot on
+                    // the chart floor inside the gap the line deliberately left, which
+                    // reads as a measured zero.
+                    if (mod(i, 3) == 0 || i == root.points.length - 1)
+                        && point.tokens-availability != "unavailable": Rectangle {
                         x: parent.width / 2 - 3px;
                         y: 0px + (1.0 - point.tokens-ratio) * (parent.height - 26px);
                         width: 6px;
@@ -333,7 +338,8 @@ component TrendCard inherits Rectangle {
                         border-color: UiTokens.accent;
                         border-width: 2px;
                     }
-                    if mod(i, 3) == 0 || i == root.points.length - 1: Rectangle {
+                    if (mod(i, 3) == 0 || i == root.points.length - 1)
+                        && point.cost-availability != "unavailable": Rectangle {
                         x: parent.width / 2 - 2px;
                         y: 1px + (1.0 - point.cost-ratio) * (parent.height - 26px);
                         width: 4px;
