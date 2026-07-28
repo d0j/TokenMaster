@@ -16,10 +16,10 @@ export component SettingsView inherits Rectangle {
     in property <int> presentation-locale-id;
     in property <string> presentation-persistence-state;
     in property <[DashboardBoardEditorRow]> board-editor-rows;
-    in property <bool> periodic-enabled;
-    in property <int> quiet-seconds;
-    in property <int> interval-seconds;
-    in property <int> retention-budget-mib;
+    in-out property <bool> periodic-enabled;
+    in-out property <int> quiet-seconds;
+    in-out property <int> interval-seconds;
+    in-out property <int> retention-budget-mib;
     in property <bool> reminder-enabled;
     in property <bool> reminder-preset-seven-days;
     in property <bool> reminder-preset-twenty-four-hours;
@@ -245,15 +245,15 @@ export component SettingsView inherits Rectangle {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
                 Text { text: @tr("Automatic backup policy"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
-                enabled := CheckBox { text: @tr("Enable periodic backups"); checked: root.periodic-enabled; accessible-label: @tr("Enable periodic backups"); }
+                enabled := CheckBox { text: @tr("Enable periodic backups"); checked <=> root.periodic-enabled; accessible-label: @tr("Enable periodic backups"); }
                 GridLayout {
                     spacing: UiTokens.space-sm;
                     Text { row: 0; col: 0; text: @tr("Quiet seconds"); color: UiTokens.text-secondary; vertical-alignment: center; }
-                    quiet := SpinBox { row: 0; col: 1; minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: @tr("Backup quiet period in seconds"); }
+                    quiet := SpinBox { row: 0; col: 1; minimum: 300; maximum: 3600; value <=> root.quiet-seconds; accessible-label: @tr("Backup quiet period in seconds"); }
                     Text { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 2 : 0; text: @tr("Interval seconds"); color: UiTokens.text-secondary; vertical-alignment: center; }
-                    interval := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 3 : 1; minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: @tr("Backup interval in seconds"); }
+                    interval := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 3 : 1; minimum: 21600; maximum: 604800; value <=> root.interval-seconds; accessible-label: @tr("Backup interval in seconds"); }
                     Text { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 4 : 0; text: @tr("Budget MiB"); color: UiTokens.text-secondary; vertical-alignment: center; }
-                    budget := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 5 : 1; minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: @tr("Backup retention budget in mebibytes"); }
+                    budget := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 5 : 1; minimum: 256; maximum: 65536; value <=> root.retention-budget-mib; accessible-label: @tr("Backup retention budget in mebibytes"); }
                 }
                 Button { text: @tr("Save backup policy"); accessible-label: @tr("Save automatic backup policy"); clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); } }
             }

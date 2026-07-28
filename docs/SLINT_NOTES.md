@@ -103,7 +103,11 @@ documented and by design: `checked: root.x` on a `CheckBox`, `value:` on a `Spin
 `text:` on a `LineEdit`, `current-index:` on a `ComboBox`, `value:` on a `Slider`.
 After the user touches the control, Rust-side `set_*` pushes are silently dropped.
 The fix is `<=>`, which requires `in-out` on both ends, or an `edited`/`toggled`
-handler that routes through Rust.
+handler that routes through Rust. The backup-policy card was converted this way and
+is the worked example: four declarations in `main.slint`, four in `settings-view.slint`,
+four forwards and four control bindings, all of which must change together. A test
+proves it only if it interacts with the control *before* asserting the push — one
+that merely pushes passes on the broken version too.
 
 **`visible: false` is compiled into a 0×0 `Clip` wrapper**, not removal. The subtree
 still exists, still evaluates its bindings, and still occupies layout space — but its
@@ -176,9 +180,6 @@ to when:
 Anchors here are symbols, not line numbers: every line reference this file once
 carried had drifted.
 
-- The "Automatic backup policy" card in `settings-view.slint` — four controls bound
-  one-way with no handler. After one user interaction the pushes in
-  `fn apply_reliable_state_projection` are dead.
 - `fn update_compact_window_mode` — compact-window sizing samples `window().size()`
   and `scale_factor()` before the window is shown, and compares physical pixels
   against logical-looking constants. Wrong on any non-100% display.
