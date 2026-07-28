@@ -1,0 +1,10 @@
+# SQL fixtures are compiled in with `include_str!`, which embeds the file bytes
+# unchanged -- unlike a Rust string literal, where the compiler normalizes CRLF.
+# Several fixtures are executed as DDL and then read back out of `sqlite_schema`,
+# where SQLite stores the statement text verbatim, and both the byte-exact schema
+# guard and the v12 trigger reconstruction compare that text against LF-only
+# separators. With `core.autocrlf=true` a fresh clone rewrites these files to CRLF
+# and those comparisons fail, which is invisible in a working copy that was written
+# rather than checked out. Pin the checkout instead of teaching every consumer to
+# accept both.
+*.sql text eol=lf
