@@ -52,12 +52,18 @@ component DashboardHeaderCard inherits Rectangle {
             Text {
                 text: @tr("Today");
                 color: UiTokens.text-primary;
-                font-size: 11px;
-                font-weight: 800;
-                letter-spacing: 1.1px;
+                font-size: UiTokens.text-subhead;
+                font-weight: UiTokens.weight-bold;
                 horizontal-stretch: 1;
             }
-            Text { text: root.evidence; color: UiTokens.text-secondary; font-size: 11px; vertical-alignment: center; }
+            Text {
+                text: root.evidence;
+                color: UiTokens.text-secondary;
+                font-family: UiTokens.mono;
+                font-size: UiTokens.text-caption;
+                letter-spacing: UiTokens.tracking-label;
+                vertical-alignment: center;
+            }
         }
         HorizontalLayout {
             spacing: UiTokens.space-lg;
@@ -66,12 +72,19 @@ component DashboardHeaderCard inherits Rectangle {
                 horizontal-stretch: 2;
                 accessible-role: groupbox;
                 accessible-label: @tr("Cost {0}", root.cost);
-                Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: 11px; letter-spacing: 1.2px; }
+                Text {
+                    text: @tr("Cost").to-uppercase();
+                    color: UiTokens.text-secondary;
+                    font-family: UiTokens.mono;
+                    font-size: UiTokens.text-caption;
+                    letter-spacing: UiTokens.tracking-label;
+                }
                 Text {
                     text: root.cost;
                     color: root.cost == "—" ? UiTokens.text-secondary : UiTokens.text-primary;
-                    font-size: 30px;
-                    font-weight: 800;
+                    font-family: UiTokens.mono;
+                    font-size: UiTokens.text-hero;
+                    font-weight: UiTokens.weight-bold;
                     overflow: elide;
                 }
             }

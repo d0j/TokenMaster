@@ -13,15 +13,23 @@ export component MetricValue inherits Rectangle {
     VerticalLayout {
         spacing: UiTokens.space-xs;
         Text {
-            text: root.label;
+            // Uppercased here rather than in the msgid: casing is presentation, and a
+            // translated catalog should carry the word, not a styling decision. The
+            // localization contract enumerates every msgid, so baking `COST` into one
+            // would orphan `Cost` in both catalogs and fail that contract -- which is
+            // how this was caught.
+            text: root.label.to-uppercase();
             color: UiTokens.text-secondary;
-            font-size: 11px;
+            font-family: UiTokens.mono;
+            font-size: UiTokens.text-caption;
+            letter-spacing: UiTokens.tracking-label;
         }
         Text {
             text: root.value;
             color: root.availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary;
-            font-size: 19px;
-            font-weight: 700;
+            font-family: UiTokens.mono;
+            font-size: UiTokens.text-display;
+            font-weight: UiTokens.weight-bold;
             overflow: elide;
         }
     }
