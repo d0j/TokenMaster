@@ -51,6 +51,25 @@ repaint. An opaque rectangle does not stop what is beneath it from being drawn.
 Safe and cheap: solid and `with-alpha` colours, `border-radius` fills, rectangular
 `clip: true`, `Text`, images at 1:1, in-place `set_row_data`.
 
+**The software renderer was measured against femtovg, and it stays.** Switching
+`renderer-software` to `renderer-femtovg` is a two-line change, and it was tried in full:
+the blank window after a move disappeared completely — 29.1 mean luma where software gave
+48.4 — which is the proof that the defect belongs to softbuffer and not to Slint. The cost
+made it unusable. Sampled every ten seconds for eighty seconds on the release build,
+steady and not a startup transient:
+
+| | software | femtovg |
+|---|---|---|
+| private bytes | 41.6 MB | ~368 MB |
+| working set | 69 MB | ~245 MB |
+| threads | 18 | 27–33 |
+| idle CPU | bursts to ~86% | bursts to ~92% |
+
+Three and a half times the resident memory is the whole positioning of this product, so
+the renderer stays software and the blank window is solved in our own code instead. The
+CPU bursts are identical under both renderers, which rules the renderer out as their
+source and points at the periodic reconciliation.
+
 ## Window lifecycle
 
 **`window().is_visible()` does not mean visible.** It returns whether `show()` was
