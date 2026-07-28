@@ -51,6 +51,35 @@ survives edits and is greppable.
 | post-tag | The Dashboard indexes its six sections positionally with nothing enforcing the order. | `dashboard-view.slint`, `out property <DashboardSectionRow> active-section` |
 | post-tag | The Win32 tray carries 39 `unsafe` blocks and one SAFETY comment, and lives in the UI crate rather than `platform`, which exists to own OS FFI and documents 23 of its 25 blocks. Moving it there and then adding `#![forbid(unsafe_code)]` to `desktop` is what stops it drifting back. | `crates/desktop/src/native_tray.rs` |
 
+## Direction, and where the idle cost is not
+
+`docs/UI_REFERENCE.md` holds the owner's Dashboard mockup transcribed as a binding
+specification. It is the standard: where the built product differs from it, the product is
+wrong. Its second list -- the elements blocked on data the projection does not carry -- is
+the more valuable half, because each entry is a fact the product already computes and
+discards.
+
+The UI stack is settled and was checked rather than assumed. Six research angles across
+forums, issue trackers and shipped-product retrospectives, with the strongest claims put
+through refutation. Verdict: keep Slint with the Skia renderer. Every alternative loses on
+one hard requirement -- unavailable, partial and legitimate-zero must stay distinguishable
+in the accessible label. iced has carried an open accessibility issue since 2020, GPUI is
+invisible to JAWS and NVDA, Tauri and Dioxus are a WebView, Xilem is alpha. egui is the only
+real fallback and it has no hot reload at all.
+
+**Turn on `slint/live-preview`.** Measured on this repository: generated Rust falls from
+15,997,690 bytes to 296,507 -- fifty-four times smaller -- with an identical API surface,
+and a `tokens.slint` edit stops costing a thirteen-second rebuild. It is a non-default
+feature and must never reach a release build.
+
+**The idle CPU cost is ours.** An empty Slint window with this repository's exact features
+measures 0% of a core, 10 threads and 7.1 MB, against 81% and 24 threads for the product.
+Ruled out by measurement, not by argument: all three renderers, the tree's only
+`animation-tick()`, and the `accessibility` feature. What remains is the fifteen threads the
+product starts and the empty window does not -- the reminder, quota, git and live runtimes,
+the watcher and the scheduler. Hunt there, and give the threads names first: Windows returns
+none today, so the burning thread cannot identify itself.
+
 ## Abort rules
 
 These are binding. They exist because this project produced 543 commits and zero

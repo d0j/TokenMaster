@@ -5,6 +5,10 @@
 TokenMaster is the only product in this repository. It is a Rust 1.97, Slint 1.17,
 and bundled SQLite application. The root Cargo workspace is the sole workspace.
 
+`docs/UI_REFERENCE.md` is the visual standard: the owner's Dashboard mockup, transcribed.
+Every visual element in it is in scope. Where the built product differs from it, the product
+is wrong.
+
 WhereMyTokens is the external UI/product reference. ccusage is the external
 usage-analysis reference. Both are pinned in `third_party/UPSTREAM.toml`.
 
