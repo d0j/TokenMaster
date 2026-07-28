@@ -4,6 +4,11 @@ export component MetricValue inherits Rectangle {
     in property <string> label;
     in property <string> value;
     in property <string> availability;
+    // "positive" | "negative" | anything else for the ordinary colour. A tone is a
+    // statement about the number's direction, not about its availability: an
+    // unavailable value keeps the muted colour whatever tone it was given, because
+    // colouring a dash green would claim a fact the evidence does not support.
+    in property <string> tone;
 
     min-height: 54px;
     background: transparent;
@@ -26,7 +31,11 @@ export component MetricValue inherits Rectangle {
         }
         Text {
             text: root.value;
-            color: root.availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary;
+            color: root.availability == "unavailable"
+                ? UiTokens.text-secondary
+                : (root.tone == "positive"
+                    ? UiTokens.ready
+                    : (root.tone == "negative" ? UiTokens.unavailable : UiTokens.text-primary));
             font-family: UiTokens.mono;
             font-size: UiTokens.text-display;
             font-weight: UiTokens.weight-bold;

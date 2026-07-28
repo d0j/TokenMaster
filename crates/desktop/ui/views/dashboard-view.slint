@@ -239,8 +239,8 @@ component CodeOutputCard inherits Rectangle {
         HorizontalLayout {
             spacing: UiTokens.space;
             MetricValue { label: @tr("Commits"); value: root.commits; availability: root.section.state; horizontal-stretch: 1; }
-            MetricValue { label: @tr("+Added"); value: root.added; availability: root.section.state; horizontal-stretch: 1; }
-            MetricValue { label: @tr("-Removed"); value: root.removed; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: @tr("+Added"); tone: "positive"; value: root.added; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: @tr("-Removed"); tone: "negative"; value: root.removed; availability: root.section.state; horizontal-stretch: 1; }
             MetricValue { label: @tr("Net"); value: root.net; availability: root.section.state; horizontal-stretch: 1; }
         }
         Text { text: root.efficiency; color: UiTokens.accent; font-size: UiTokens.text-body; }
@@ -263,6 +263,12 @@ component TrendCard inherits Rectangle {
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
     accessible-label: @tr("Usage and Cost Trend");
+    // The trend changes only when a projection replaces its points, which is rare, and
+    // it is the most expensive subtree on the board -- two `Path`s that the software
+    // renderer could not confine to a dirty region at all. Skia honours this hint by
+    // rendering the subtree into an offscreen layer and reusing it until something
+    // changes. It costs GPU memory, which is not a constraint here.
+    cache-rendering-hint: true;
 
     VerticalLayout {
         padding: UiTokens.space;
