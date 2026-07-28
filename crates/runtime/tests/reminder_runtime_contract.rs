@@ -68,7 +68,7 @@ fn seed(path: &std::path::Path, observed_at_ms: i64, expiry_at_ms: i64) {
 }
 
 fn wait_completion(runtime: &BenefitReminderRuntime) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         if runtime.try_completion().expect("completion").is_some() {
             return;
@@ -299,7 +299,7 @@ fn reminder_store_fault_leaves_live_usage_runtime_unchanged() {
     let usage_path = archive_root.path().join("usage.sqlite3");
     let mut usage =
         tokenmaster_runtime::LiveRuntime::start(&usage_path, request).expect("usage runtime");
-    let usage_deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let usage_deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         if usage.try_completion().expect("usage completion").is_some() {
             break;

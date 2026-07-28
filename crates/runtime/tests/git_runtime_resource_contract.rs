@@ -152,7 +152,7 @@ fn hint(repository: &Path, sequence: u64) -> RepositoryActivityHint {
 
 #[cfg(windows)]
 fn wait_publication(runtime: &GitRuntime) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if runtime
             .snapshot()

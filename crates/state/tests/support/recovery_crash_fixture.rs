@@ -32,7 +32,7 @@ pub fn kill_after_durable_phase(root: &Path, phase: &str) {
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn exact recovery integration test executable");
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + Duration::from_secs(30);
     while !marker.exists() {
         assert!(
             Instant::now() < deadline,

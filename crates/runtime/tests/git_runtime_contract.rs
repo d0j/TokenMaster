@@ -75,7 +75,7 @@ fn hint(repository: &Path, session: &str) -> RepositoryActivityHint {
 }
 
 fn wait_for_publications(runtime: &GitRuntime, minimum: u64) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let snapshot = runtime.snapshot().expect("runtime snapshot");
         if snapshot.refresh().published_count() >= minimum {
@@ -90,7 +90,7 @@ fn wait_for_publications(runtime: &GitRuntime, minimum: u64) {
 }
 
 fn wait_for_outcome(runtime: &GitRuntime, expected: RefreshOutcome) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let snapshot = runtime.snapshot().expect("runtime snapshot");
         if snapshot.refresh().outcome() == Some(expected) {
@@ -135,7 +135,7 @@ fn fixture_runtime(temporary: &TempDir, mode: &str) -> (GitRuntime, PathBuf, Pat
 }
 
 fn wait_for_file(path: &Path) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(30);
     while !path.is_file() {
         assert!(Instant::now() < deadline, "fixture marker timeout");
         thread::sleep(Duration::from_millis(2));
@@ -354,7 +354,7 @@ fn superseded_hint_rejects_the_scanned_result_and_runs_one_follow_up() {
         .submit_hint(hint(&repository, "stale-session-2"))
         .expect("supersede hint");
 
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let snapshot = runtime.snapshot().expect("stale snapshot");
         if snapshot.refresh().stale_count() >= 1 {
@@ -458,7 +458,7 @@ fn live_codex_usage_flow_routes_private_hints_into_the_git_runtime() {
     runtime
         .refresh_now(RefreshUrgency::Recovery)
         .expect("usage recovery");
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let snapshot = runtime.snapshot().expect("live snapshot");
         if snapshot.git().refresh().published_count() >= 1 {

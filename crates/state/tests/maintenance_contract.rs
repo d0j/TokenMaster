@@ -469,7 +469,7 @@ fn worker_keeps_only_latest_health_and_joins_on_shutdown() {
         let _ = worker.submit(MaintenancePurpose::Periodic);
     }
     release_sender.send(()).expect("release worker");
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while worker.snapshot().successful_count() == 0 && std::time::Instant::now() < deadline {
         std::thread::yield_now();
     }
@@ -518,7 +518,7 @@ fn runtime_owns_one_worker_and_scheduler_and_catches_up_after_resume() {
             .expect("manual execution"),
         MaintenancePurpose::Manual
     );
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while runtime.snapshot().worker().successful_count() == 0
         && std::time::Instant::now() < deadline
     {
@@ -535,7 +535,7 @@ fn runtime_owns_one_worker_and_scheduler_and_catches_up_after_resume() {
             .expect("resume catch-up"),
         MaintenancePurpose::Periodic
     );
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while runtime.snapshot().scheduler().submitted_count() == 0
         && std::time::Instant::now() < deadline
     {

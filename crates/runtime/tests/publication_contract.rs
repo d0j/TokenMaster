@@ -40,7 +40,7 @@ fn append(path: &Path, payload: &str) {
 }
 
 fn wait_completion(runtime: &LiveRuntime) -> tokenmaster_engine::WorkerCompletion {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = runtime.try_completion().expect("completion") {
             return completion;
@@ -51,7 +51,7 @@ fn wait_completion(runtime: &LiveRuntime) -> tokenmaster_engine::WorkerCompletio
 }
 
 fn wait_quiescent(runtime: &LiveRuntime) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut stable_since = None;
     loop {
         while runtime
@@ -93,7 +93,7 @@ fn active_cold_import_publishes_partial_engine_truth_before_completion() {
 
     let mut runtime =
         LiveRuntime::start(&archive_path, request(source_root.path())).expect("live runtime");
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let snapshot = runtime.snapshot().expect("active cold import snapshot");
         if snapshot.engine().quality() == EnginePublicationQuality::Partial {

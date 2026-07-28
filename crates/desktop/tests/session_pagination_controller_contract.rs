@@ -281,7 +281,7 @@ fn selection(generation: u64, ordinal: u8) -> ProductSessionDetailSelection {
 fn wait_for_completion(
     controller: &DesktopController,
 ) -> tokenmaster_desktop::DesktopRefreshCompletion {
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = controller.try_completion().expect("worker healthy") {
             return completion;
@@ -292,7 +292,7 @@ fn wait_for_completion(
 }
 
 fn wait_for_snapshot(controller: &DesktopController) -> Arc<tokenmaster_product::ProductSnapshot> {
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(snapshot) = controller.take_snapshot().expect("mailbox") {
             return snapshot;

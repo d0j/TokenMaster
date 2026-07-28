@@ -71,7 +71,7 @@ impl Clock for BlockingClock {
 }
 
 fn wait_until(mut condition: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(30);
     while !condition() {
         assert!(
             Instant::now() < deadline,
@@ -82,7 +82,7 @@ fn wait_until(mut condition: impl FnMut() -> bool) {
 }
 
 fn wait_completion(worker: &RefreshWorker) -> WorkerCompletion {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = worker.try_completion().expect("completion poll") {
             return completion;

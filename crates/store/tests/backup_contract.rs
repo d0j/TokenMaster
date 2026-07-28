@@ -156,7 +156,7 @@ fn online_snapshot_is_reopenable_and_verified_during_bounded_concurrent_writes()
     });
 
     let snapshot_path = staging_path.join(".tokenmaster-snapshot-00.sqlite3");
-    let wait_deadline = Instant::now() + Duration::from_secs(2);
+    let wait_deadline = Instant::now() + Duration::from_secs(30);
     let mut observed_active_step = false;
     while Instant::now() < wait_deadline {
         if fs::metadata(&snapshot_path).is_ok_and(|metadata| metadata.len() > 0)

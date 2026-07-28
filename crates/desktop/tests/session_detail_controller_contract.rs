@@ -232,7 +232,7 @@ fn started_attempt(admission: DesktopRefreshAdmission) -> DesktopAttempt {
 fn wait_for_completion(
     controller: &DesktopController,
 ) -> tokenmaster_desktop::DesktopRefreshCompletion {
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = controller.try_completion().expect("worker healthy") {
             return completion;
@@ -496,7 +496,7 @@ fn rapid_selection_is_latest_wins_and_cancellation_publishes_nothing() {
     ));
     release_sender.send(()).expect("release first detail");
 
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = Instant::now() + Duration::from_secs(30);
     let latest = loop {
         if let Some(snapshot) = controller.take_snapshot().expect("mailbox")
             && snapshot.session_detail_selection() == Some(selection(2, 1))
@@ -571,7 +571,7 @@ fn detail_and_refresh_share_one_worker_without_losing_the_follow_up_refresh() {
     ));
     release_sender.send(()).expect("release detail");
 
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline = Instant::now() + Duration::from_secs(30);
     while status_calls.load(Ordering::Acquire) < 2 {
         assert!(Instant::now() < deadline, "follow-up refresh timed out");
         thread::yield_now();

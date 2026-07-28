@@ -416,7 +416,7 @@ fn stalled_partial_provider_quiesces_without_an_immediate_refresh_loop() {
         .wait_for_completion(Duration::from_secs(10))
         .expect("resumed completion wait")
         .expect("resumed partial completion");
-    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     let submitted_at_quiescence = loop {
         let snapshot = resumed.snapshot().expect("stalled runtime snapshot");
         if !snapshot.scheduler().dirty()
@@ -468,7 +468,7 @@ fn unchanged_source_partial_provider_quiesces_without_an_immediate_refresh_loop(
         .wait_for_completion(Duration::from_secs(10))
         .expect("resumed completion wait")
         .expect("resumed partial completion");
-    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     let submitted_at_quiescence = loop {
         let snapshot = resumed.snapshot().expect("unchanged partial snapshot");
         if !snapshot.scheduler().dirty()

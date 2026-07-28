@@ -29,7 +29,7 @@ impl WorkerCompletionNotifier for CountingNotifier {
 }
 
 fn wait_for_notification(notifier: &CountingNotifier) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     while notifier.count() == 0 {
         assert!(
             Instant::now() < deadline,

@@ -29,7 +29,7 @@ mod windows {
             .expect("transport timeout");
         let mut runtime = ProviderQuotaRuntime::start(config).expect("quota runtime");
 
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(30);
         let completion = loop {
             if let Some(completion) = runtime.try_completion().expect("completion") {
                 break completion;

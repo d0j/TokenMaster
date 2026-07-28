@@ -295,7 +295,7 @@ fn append(path: &Path, payload: &str) {
 }
 
 fn wait_completion(runtime: &LiveRuntime) -> WorkerCompletion {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = runtime.try_completion().expect("completion") {
             return completion;
@@ -306,7 +306,7 @@ fn wait_completion(runtime: &LiveRuntime) -> WorkerCompletion {
 }
 
 fn wait_quiescent(runtime: &LiveRuntime) {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut stable_since = None;
     loop {
         while runtime
@@ -870,7 +870,7 @@ fn real_import_diagnostics(path: &Path) -> (u64, u64, u64, u64, u64, u64) {
 
 #[cfg(windows)]
 fn assert_resources_return(baseline: (u32, u32)) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let current = current_resource_counts();
         if current.0 <= baseline.0 && current.1 <= baseline.1 {

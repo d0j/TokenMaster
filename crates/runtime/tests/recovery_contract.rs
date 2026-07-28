@@ -460,7 +460,7 @@ fn startup_resumes_a_published_replacement_partial_after_failure() {
         runtime.startup_recovery().staging(),
         StagingRecoveryOutcome::None
     );
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     let completion = loop {
         if let Some(completion) = runtime.try_completion().expect("completion") {
             break completion;

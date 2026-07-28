@@ -513,7 +513,7 @@ fn ready_controller() -> (DesktopController, DesktopSnapshotEpoch, ProductGenera
     controller
         .refresh(DesktopRefreshUrgency::Interactive)
         .expect("refresh");
-    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while controller.try_completion().expect("completion").is_none() {
         assert!(std::time::Instant::now() < deadline, "refresh timed out");
         thread::yield_now();
@@ -1475,7 +1475,7 @@ fn refresh_supersedes_active_range_and_rolls_back_before_refresh_publication() {
     assert!(controller.take_snapshot().expect("mailbox").is_none());
     release_sender.send(()).expect("release range");
     let _ = wait_for_completion(&controller);
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while controller.take_snapshot().expect("mailbox").is_none() {
         assert!(
             std::time::Instant::now() < deadline,
@@ -1493,7 +1493,7 @@ fn refresh_supersedes_active_range_and_rolls_back_before_refresh_publication() {
 fn wait_for_completion(
     controller: &DesktopController,
 ) -> tokenmaster_desktop::DesktopRefreshCompletion {
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = controller.try_completion().expect("worker healthy") {
             return completion;
@@ -1506,7 +1506,7 @@ fn wait_for_completion(
 fn wait_for_terminal_completion(
     controller: &DesktopController,
 ) -> tokenmaster_desktop::DesktopRefreshCompletion {
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = controller.try_completion().expect("worker healthy")
             && !completion.follow_up_started()

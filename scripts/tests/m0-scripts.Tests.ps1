@@ -27,6 +27,29 @@ Describe "TokenMaster M0 script contracts" {
         $Workflow | Should -Match 'Install-Module Pester -RequiredVersion 5\.7\.1'
     }
 
+    # A wall-clock deadline in a test bounds a hang; it does not assert latency, and a
+    # latency claim is made by comparing a measured elapsed time, not by failing to reach
+    # a timeout. Short budgets measure the runner instead of the product: fifty of these
+    # existed, forty-nine under thirty seconds and ten at two, and two separate CI runs
+    # died on them. Raising a bound costs nothing on the green path, because the deadline
+    # only elapses when something is already broken.
+    It "gives every test hang bound at least thirty seconds" {
+        $offenders = @()
+        Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'crates') -Recurse -File -Filter '*.rs' |
+            Where-Object { $_.FullName -match '\\tests\\' } |
+            ForEach-Object {
+                $text = Get-Content -LiteralPath $_.FullName -Raw
+                foreach ($match in [regex]::Matches(
+                    $text, 'Instant::now\(\)\s*\+\s*Duration::from_secs\((\d+)\)'
+                )) {
+                    if ([int]$match.Groups[1].Value -lt 30) {
+                        $offenders += "$($_.Name): $($match.Value)"
+                    }
+                }
+            }
+        $offenders -join '; ' | Should -BeExactly ''
+    }
+
     # A push touching only one of these files changed what the build produces while
     # triggering nothing, so the change landed ungated. `.gitattributes` is the case
     # that occurred: it decides the bytes `include_str!` compiles in.

@@ -188,7 +188,7 @@ fn start_runtime(archive: &Path, executable: &Path, timeout: Duration) -> Provid
 
 #[cfg(windows)]
 fn wait_completion(runtime: &ProviderQuotaRuntime) -> tokenmaster_engine::WorkerCompletion {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = runtime.try_completion().expect("runtime completion") {
             return completion;

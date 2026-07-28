@@ -886,7 +886,7 @@ fn wait_for_snapshot_attempt(
     controller: &DesktopController,
     expected: u64,
 ) -> Arc<tokenmaster_product::ProductSnapshot> {
-    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(snapshot) = controller
             .take_snapshot()
@@ -906,7 +906,7 @@ fn wait_for_snapshot_attempt(
 fn wait_for_completion(
     controller: &DesktopController,
 ) -> tokenmaster_desktop::DesktopRefreshCompletion {
-    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = controller
             .try_completion()

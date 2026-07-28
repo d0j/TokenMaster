@@ -36,7 +36,7 @@ fn controller_snapshot_reaches_the_real_headless_slint_event_loop() {
 
     let observer = bridge.observer();
     let watcher = thread::spawn(move || {
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         let delivered = loop {
             if let Some(snapshot) = observer.snapshot() {
                 if snapshot.delivered_count() == 1 {

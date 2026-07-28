@@ -50,7 +50,7 @@ fn exercise_round(round: usize) {
     .expect("spawn maintenance runtime");
     let admission = runtime.submit(MaintenancePurpose::Manual);
     assert!(matches!(admission, MaintenanceAdmission::Started(_)));
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = runtime.snapshot().worker().latest_completion() {
             assert_eq!(
@@ -160,7 +160,7 @@ fn repeated_success_failure_and_cancel_cycles_return_process_resources() {
     let mut final_private_bytes = baseline.private_bytes;
     for round in 0..MEASURED_ROUNDS {
         exercise_round(round);
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(30);
         let sample = loop {
             let sample = resource_counts();
             if sample.handles <= baseline.handles.saturating_add(1)

@@ -162,7 +162,7 @@ fn submit_failure_faults_and_joins_without_retry_or_payload() {
     let clock = Arc::new(FakeClock::default());
     let mut scheduler = RefreshScheduler::spawn(clock, |_urgency| Err::<(), _>(())).expect("spawn");
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while std::time::Instant::now() < deadline {
         if scheduler.snapshot().phase() == SchedulerPhase::Faulted {
             break;
@@ -213,7 +213,7 @@ fn ten_thousand_scheduler_hints_create_at_most_one_engine_follow_up() {
     }
     clock.set(100 + QUIET_WINDOW_MILLIS);
     assert!(hints.watcher_healthy());
-    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while std::time::Instant::now() < deadline {
         if worker.snapshot().expect("worker snapshot").pending_count() == 1 {
             break;

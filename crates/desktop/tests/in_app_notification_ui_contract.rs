@@ -207,7 +207,7 @@ fn real_event_loop_applies_every_row_before_presentation_receipt_and_dismisses()
     let observed = receipt.clone();
     let observed_stale = stale_receipt.clone();
     let watcher = thread::spawn(move || {
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while (observed.presented_count() == 0 && observed.failed_count() == 0)
             || (observed_stale.presented_count() == 0 && observed_stale.failed_count() == 0)
         {

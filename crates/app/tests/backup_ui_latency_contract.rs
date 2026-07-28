@@ -154,7 +154,7 @@ struct AutomaticBackupLoad {
 
 impl AutomaticBackupLoad {
     fn wait_for_in_progress_cycle_after(&self, completed_before: usize) -> usize {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             let completed = self.completed_cycles.load(Ordering::Acquire);
             let started = self.started_cycles.load(Ordering::Acquire);
@@ -208,7 +208,7 @@ fn refresh_once(controller: &DesktopController) -> Duration {
         DesktopRefreshAdmission::Started { attempt } => attempt,
         other => panic!("sequential Dashboard query must start: {other:?}"),
     };
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(completion) = controller
             .try_completion()

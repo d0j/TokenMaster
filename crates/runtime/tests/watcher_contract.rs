@@ -233,7 +233,7 @@ fn repeated_generations_return_process_threads_and_handles_to_baseline() {
     watcher.shutdown();
     scheduler.shutdown().expect("scheduler shutdown");
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         let current = current_resource_counts();
         if current.0 <= baseline.0 && current.1 <= baseline.1 {
