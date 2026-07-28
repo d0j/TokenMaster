@@ -6,8 +6,20 @@ TokenMaster is the only product in this repository. It is a Rust 1.97, Slint 1.1
 and bundled SQLite application. The root Cargo workspace is the sole workspace.
 
 WhereMyTokens is the external UI/product reference. ccusage is the external
-usage-analysis reference. Both are pinned in `third_party/UPSTREAM.toml`; neither is
-a runtime dependency or source to vendor.
+usage-analysis reference. Both are pinned in `third_party/UPSTREAM.toml`.
+
+Read them. Studying a pinned reference and reimplementing what you learn is the
+intended way to work, and it needs no justification: palettes, spacing and type
+scales, chart weighting, axis and gridline treatment, information hierarchy,
+empty and error states, wording, and which number belongs on which screen are all
+fair to take. When the reference does something better, match it.
+
+What does not cross: their source. Neither is a runtime dependency and neither is
+vendored. Both are MIT, so copying code would carry a copyright and licence
+obligation this repository does not take on, and there is nothing to gain —
+TypeScript and React do not port into Rust and Slint, and pixel-matching an
+Electron app in a different layout engine with a different font stack is not
+achievable or desirable. The product's own claim is that it is not Electron.
 
 ## Source of truth
 

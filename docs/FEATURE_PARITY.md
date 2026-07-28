@@ -1,9 +1,16 @@
 # TokenMaster feature-parity ledger
 
-This ledger defines behavioral lineage, not copied implementation, pixel compatibility,
-or protocol compatibility. `WMT` means the WhereMyTokens commit and `CC` means the
-ccusage commit pinned in `third_party/UPSTREAM.toml`. A 1.0 parity claim requires every
-row to be `implemented` or explicitly `rejected` with the recorded rationale.
+This ledger records behavioural lineage: which capability came from which reference
+and what TokenMaster decided to do about it. `WMT` means the WhereMyTokens commit and
+`CC` means the ccusage commit pinned in `third_party/UPSTREAM.toml`.
+
+Lineage is not source. Design decisions are meant to be studied and reimplemented —
+see the product boundary in `AGENTS.md`. What the ledger does not claim is copied
+implementation, pixel compatibility, or protocol compatibility.
+
+A 1.0 parity claim requires every row to be `implemented` or explicitly `rejected`
+with the recorded rationale. This gates the parity *claim* only; a release that makes
+no such claim is not blocked by a `partial` row.
 
 Status is one of `implemented`, `partial`, `planned`, or `rejected`.
 
