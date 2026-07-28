@@ -21,7 +21,7 @@ fn startup_dashboard_software_frame_is_visible_and_non_uniform() {
     window.set_dashboard_initial_import_stage(2);
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1_120, 720));
+        .set_size(slint::PhysicalSize::new(1_288, 720));
     window.show().expect("show headless startup window");
 
     let frame = window

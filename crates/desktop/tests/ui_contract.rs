@@ -387,7 +387,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(import_status.len(), 1);
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1_120, 720));
+        .set_size(slint::PhysicalSize::new(1_288, 720));
     let import_card = &import_status[0];
     let import_position = import_card.absolute_position();
     let import_size = import_card.size();
@@ -1022,7 +1022,7 @@ fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
     window.show().expect("show command palette window");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert!(!window.get_command_palette_visible());
     assert_eq!(window.get_command_palette_rows().row_count(), 0);
 
@@ -1288,7 +1288,7 @@ fn assert_compiled_help_about_is_static_truthful_and_responsive() {
     window.show().expect("show Help/About window");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert_eq!(window.get_help_about_layout_mode(), "wide");
 
     window.window().set_size(slint::PhysicalSize::new(700, 720));
@@ -1297,7 +1297,7 @@ fn assert_compiled_help_about_is_static_truthful_and_responsive() {
     assert_eq!(window.get_help_about_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 1200));
+        .set_size(slint::PhysicalSize::new(1288, 1200));
     assert_eq!(window.get_help_about_layout_mode(), "wide");
 
     let labels = ElementQuery::from_root(window)
@@ -1417,7 +1417,7 @@ fn assert_compiled_notifications_render_expiry_truth_in_place() {
     assert_eq!(window.get_notifications_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert_eq!(window.get_notifications_layout_mode(), "wide");
 
     window.show().expect("show notifications window");
@@ -1505,7 +1505,7 @@ fn assert_compiled_activity_renders_bounded_safe_events_in_place() {
     assert_eq!(window.get_activity_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert_eq!(window.get_activity_layout_mode(), "wide");
 
     window.show().expect("show activity window");
@@ -1680,7 +1680,7 @@ fn assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place()
     assert_eq!(window.get_projects_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert_eq!(window.get_projects_layout_mode(), "wide");
 
     window.show().expect("show projects window");
@@ -2686,7 +2686,7 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
     assert!(!window.get_dashboard_trend_cost_axis().is_empty());
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1_120, 1_400));
+        .set_size(slint::PhysicalSize::new(1_288, 1_400));
     let multi_day_trend = ElementQuery::from_root(window)
         .match_accessible_role(AccessibleRole::Image)
         .match_predicate(|element| {
@@ -2715,7 +2715,7 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
     assert_eq!(window.get_dashboard_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert_eq!(window.get_dashboard_layout_mode(), "wide");
 
     let component_address = window as *const _;
@@ -2816,7 +2816,7 @@ fn assert_compiled_models_render_complete_bounded_mix_without_recreating_the_win
     assert_eq!(window.get_models_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert_eq!(window.get_models_layout_mode(), "wide");
 
     window.invoke_select_route(SharedString::from("dashboard"));
@@ -2905,7 +2905,7 @@ fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_windo
     assert_eq!(window.get_sessions_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 720));
+        .set_size(slint::PhysicalSize::new(1288, 720));
     assert_eq!(window.get_sessions_layout_mode(), "wide");
 
     window.invoke_select_route(SharedString::from("dashboard"));
@@ -2956,11 +2956,11 @@ fn every_route_is_reachable_by_mouse_without_the_command_palette() {
         "every route needs a clickable sidebar entry on a wide window"
     );
 
-    window.window().set_size(slint::PhysicalSize::new(700, 720));
-    assert!(
-        !window.get_route_sidebar_visible(),
-        "the sidebar yields rather than squeeze a view into its narrow layout"
-    );
+    // The sidebar yields to compact mode, which is route-driven. It deliberately does
+    // not react to width: a child whose width reads the parent's computed width is a
+    // binding loop, and the window carries the sidebar in its preferred width instead.
+    window.invoke_select_route(SharedString::from("compact_widget"));
+    assert!(!window.get_route_sidebar_visible());
 }
 
 /// Replacing a `ModelRc` is never `PartialEq` to the one it replaces, so the

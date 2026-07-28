@@ -6,6 +6,8 @@ use std::{
     },
 };
 
+use slint::ComponentHandle;
+
 use crate::{
     MainWindow,
     bridge::{EventScheduler, ScheduleError, SlintEventScheduler, saturating_increment},
@@ -317,6 +319,8 @@ pub enum DesktopNotificationBridgeFailureCode {
     EventLoopTerminated,
     StaleEpoch,
     WindowClosed,
+    /// The window exists but nobody can see it: hidden to tray, or minimized.
+    WindowNotVisible,
     StateUnavailable,
 }
 
@@ -328,6 +332,7 @@ impl DesktopNotificationBridgeFailureCode {
             Self::EventLoopTerminated => "event_loop_terminated",
             Self::StaleEpoch => "stale_epoch",
             Self::WindowClosed => "window_closed",
+            Self::WindowNotVisible => "window_not_visible",
             Self::StateUnavailable => "state_unavailable",
         }
     }
@@ -339,6 +344,7 @@ impl DesktopNotificationBridgeFailureCode {
             Self::StaleEpoch => 3,
             Self::WindowClosed => 4,
             Self::StateUnavailable => 5,
+            Self::WindowNotVisible => 6,
         }
     }
 
@@ -349,6 +355,7 @@ impl DesktopNotificationBridgeFailureCode {
             3 => Some(Self::StaleEpoch),
             4 => Some(Self::WindowClosed),
             5 => Some(Self::StateUnavailable),
+            6 => Some(Self::WindowNotVisible),
             _ => None,
         }
     }
@@ -440,6 +447,7 @@ enum NotificationDeliveryOutcome {
     Presented,
     Stale,
     WindowClosed,
+    WindowNotVisible,
     StateUnavailable,
 }
 
@@ -462,6 +470,15 @@ impl NotificationDelivery for SlintNotificationDelivery {
         let Some(window) = self.window.upgrade() else {
             return NotificationDeliveryOutcome::WindowClosed;
         };
+        // `is_visible()` reports only that `show()` was called and `hide()` was not:
+        // it stays true for a minimized window. Occlusion is not observable at all,
+        // because winit emits no `Occluded` event on Windows. This pair is therefore
+        // the strongest honest signal, and the outcome stays retryable so the batch is
+        // re-pumped rather than acknowledged to nobody.
+        let window_handle = window.window();
+        if !window_handle.is_visible() || window_handle.is_minimized() {
+            return NotificationDeliveryOutcome::WindowNotVisible;
+        }
         let Ok(mut latest_batch) = self.latest_batch.lock() else {
             return NotificationDeliveryOutcome::StateUnavailable;
         };
@@ -559,6 +576,10 @@ impl NotificationBridgeInner {
             }
             NotificationDeliveryOutcome::WindowClosed => {
                 self.fail(DesktopNotificationBridgeFailureCode::WindowClosed, true);
+                false
+            }
+            NotificationDeliveryOutcome::WindowNotVisible => {
+                self.fail(DesktopNotificationBridgeFailureCode::WindowNotVisible, true);
                 false
             }
             NotificationDeliveryOutcome::StateUnavailable => {

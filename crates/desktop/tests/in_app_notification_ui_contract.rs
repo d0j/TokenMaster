@@ -1,3 +1,4 @@
+use slint::ComponentHandle;
 use std::{
     rc::Rc,
     sync::{
@@ -157,6 +158,9 @@ fn real_event_loop_applies_every_row_before_presentation_receipt_and_dismisses()
         Rc::new(AcceptingIntentSink),
     )
     .expect("desktop shell");
+    // Delivery is gated on the window actually being watchable. A never-shown window
+    // is the hide-to-tray case, and a reminder must not be acknowledged to nobody.
+    shell.window().show().expect("show the notification window");
     let stale_bridge = shell
         .bridge_factory()
         .in_app_notification_bridge()

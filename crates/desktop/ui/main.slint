@@ -222,13 +222,15 @@ export component MainWindow inherits Window {
     out property <bool> help-about-visible: root.active-route-key == "help_about";
     in property <bool> refresh-in-flight;
     out property <bool> compact-widget-visible: root.active-route-key == "compact_widget";
-    // Above the breakpoint every route has a clickable sidebar entry. Below it the
-    // header's route-palette button is the affordance on every route; the bottom tab
-    // bar is NOT a fallback -- it renders only on Dashboard and Notifications.
+    // Derived from the route, never from `root.width`. A child whose width depends on
+    // the parent's computed width is a binding loop -- Slint reports it as deprecated
+    // and warns it may panic at runtime. The other `*-layout-mode` properties may read
+    // `root.width` safely because they arrange content inside a view rather than
+    // contributing a layout constraint back to the window.
     //
-    // 1180px is the widest content breakpoint (1010px) plus the sidebar width: the
-    // sidebar must never be the reason a view drops to its narrow layout.
-    out property <bool> route-sidebar-visible: !root.compact-widget-visible && root.width >= 1180px;
+    // The window's preferred width carries the sidebar on top of the content width, so
+    // the sidebar never costs a view its wide layout.
+    out property <bool> route-sidebar-visible: !root.compact-widget-visible;
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> dashboard-layout-preset: root.presentation-layout-key;
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
@@ -345,9 +347,9 @@ export component MainWindow inherits Window {
     changed observed-system-color-scheme-id => { root.system-color-scheme-observed(root.observed-system-color-scheme-id); }
 
     title: @tr("TokenMaster");
-    preferred-width: root.compact-widget-visible ? 420px : 880px;
+    preferred-width: root.compact-widget-visible ? 420px : 1048px;
     preferred-height: root.compact-widget-visible ? 560px : 760px;
-    min-width: root.compact-widget-visible ? 360px : 640px;
+    min-width: root.compact-widget-visible ? 360px : 808px;
     min-height: root.compact-widget-visible ? 320px : 480px;
     background: UiTokens.background;
     forward-focus: shell-focus;
