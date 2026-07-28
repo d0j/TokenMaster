@@ -41,10 +41,18 @@ jobs:
       - name: Install Rust 1.97.0
         shell: pwsh
         run: rustup toolchain install 1.97.0-x86_64-pc-windows-msvc --profile minimal --component rustfmt --component clippy
+      # Repository policy allows GitHub-owned actions only, so the Rust-specific
+      # third-party cache cannot be used here. See scripts/validate-immutable-actions.ps1.
       - name: Cache Cargo registry and build artifacts
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          cache-all-crates: true
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
       - name: Verify TokenMaster M0
         shell: pwsh
         run: ./scripts/verify-m0.ps1 -RepositoryRoot $PWD.Path

@@ -39,6 +39,24 @@ jobs:
         (Invoke-Validator "steps:`n  - uses: $Reference").ExitCode | Should -Be 1
     }
 
+    # A correctly pinned third-party action passes every other check in the validator,
+    # and the repository policy still rejects it at workflow startup with no job and no
+    # log. This is the case that produced a `startup_failure` in 0s.
+    It 'rejects a correctly pinned action from a non-GitHub owner' -TestCases @(
+        @{ Reference = 'Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4' }
+        @{ Reference = 'docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772' }
+    ) {
+        param($Reference)
+        (Invoke-Validator "steps:`n  - uses: $Reference").ExitCode | Should -Be 1
+    }
+
+    It 'still accepts a GitHub-owned action with a subpath' {
+        $result = Invoke-Validator (
+            "steps:`n  - uses: actions/ai-inference/tools@" + ('a' * 40)
+        )
+        $result.ExitCode | Should -Be 0
+    }
+
     It 'pins every current remote action to an exact reviewed commit' {
         $text = Get-Content -LiteralPath (
             Join-Path (Split-Path -Parent $ScriptsRoot) `

@@ -38,6 +38,15 @@ try {
             if ($reference -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_./-]+)?@[0-9a-f]{40}$') {
                 throw 'TM-ACTIONS-REFERENCE'
             }
+            # The repository's GitHub Actions policy is `allowed_actions: selected` with
+            # `github_owned_allowed: true`, no allowed patterns and verified creators
+            # disallowed. A third-party reference is therefore rejected at workflow
+            # startup, before any job exists, which reads as "workflow file issue" with
+            # nothing else to go on. That policy lives in repository settings and is
+            # invisible from a clone, so it is asserted here as well.
+            if (-not $reference.StartsWith('actions/', [StringComparison]::Ordinal)) {
+                throw 'TM-ACTIONS-OWNER'
+            }
             $remoteCount++
         }
     }
