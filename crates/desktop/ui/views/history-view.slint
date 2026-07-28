@@ -191,6 +191,14 @@ component HistoryTrendCard inherits Rectangle {
                             ? UiTokens.degraded
                             : UiTokens.accent;
                         border-radius: 2px;
+                        // The product invariant requires unavailable, partial and
+                        // legitimate zero to stay distinguishable in text, in chart and
+                        // in the accessible label. Height and colour carry the first two;
+                        // without a label per column a screen reader hears only the
+                        // card's own "Thirty day token trend" and loses the distinction
+                        // entirely. Both parts are already localized where they are built.
+                        accessible-role: text;
+                        accessible-label: row.date-label + ", " + row.total-label;
                     }
                 }
             }
