@@ -83,18 +83,28 @@ component DashboardHeaderCard inherits Rectangle {
 
 component ImportActivityDot inherits Rectangle {
     in property <bool> reduced-motion;
+    in property <bool> active;
     in property <float> phase;
 
     width: 7px;
     height: 7px;
     background: UiTokens.accent;
     border-radius: 4px;
-    opacity: root.reduced-motion ? 1.0 : 0.25 + 0.75 * abs(sin(360deg * (animation-tick() / 1.2s + root.phase)));
+    // Reading `animation-tick()` schedules a repaint at the monitor refresh rate for as
+    // long as the binding is evaluated, and since 1.17 the contents of an `if` are
+    // instantiated eagerly -- so this ran whether or not an import was in progress, and
+    // whether or not the window was visible. Measured before this guard: 97.7% of one
+    // core with the window shown and 105.5% with it hidden, for the life of the process.
+    // `active` must stay bound to the same condition that shows the card.
+    opacity: (root.active && !root.reduced-motion)
+        ? 0.25 + 0.75 * abs(sin(360deg * (animation-tick() / 1.2s + root.phase)))
+        : 1.0;
 }
 
 component InitialImportCard inherits Rectangle {
     in property <string> phase-label;
     in property <bool> reduced-motion;
+    in property <bool> active;
     in property <bool> progress-known;
     in property <string> progress-label;
     in property <float> progress-ratio;
@@ -112,9 +122,9 @@ component InitialImportCard inherits Rectangle {
         spacing: UiTokens.space-sm;
         VerticalLayout {
             spacing: 3px;
-            ImportActivityDot { reduced-motion: root.reduced-motion; phase: 0.0; }
-            ImportActivityDot { reduced-motion: root.reduced-motion; phase: 0.33; }
-            ImportActivityDot { reduced-motion: root.reduced-motion; phase: 0.66; }
+            ImportActivityDot { reduced-motion: root.reduced-motion; active: root.active; phase: 0.0; }
+            ImportActivityDot { reduced-motion: root.reduced-motion; active: root.active; phase: 0.33; }
+            ImportActivityDot { reduced-motion: root.reduced-motion; active: root.active; phase: 0.66; }
         }
         VerticalLayout {
             spacing: UiTokens.space-xs;
@@ -609,6 +619,7 @@ export component DashboardView inherits Rectangle {
             padding: UiTokens.space;
             spacing: UiTokens.space;
             if root.initial-import-visible: InitialImportCard {
+                active: root.initial-import-visible;
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
                 progress-known: root.import-progress-known;
@@ -623,6 +634,7 @@ export component DashboardView inherits Rectangle {
             padding: UiTokens.space;
             spacing: UiTokens.space;
             if root.initial-import-visible: InitialImportCard {
+                active: root.initial-import-visible;
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
                 progress-known: root.import-progress-known;
@@ -648,6 +660,7 @@ export component DashboardView inherits Rectangle {
             padding: UiTokens.space;
             spacing: UiTokens.space;
             if root.initial-import-visible: InitialImportCard {
+                active: root.initial-import-visible;
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
                 progress-known: root.import-progress-known;
@@ -673,6 +686,7 @@ export component DashboardView inherits Rectangle {
             padding: UiTokens.space;
             spacing: UiTokens.space;
             if root.initial-import-visible: InitialImportCard {
+                active: root.initial-import-visible;
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
                 progress-known: root.import-progress-known;
