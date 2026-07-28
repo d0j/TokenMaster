@@ -233,6 +233,34 @@ fn resource_counts() -> ResourceCounts {
 }
 
 #[cfg(windows)]
+/// Samples until the structural counts settle back to the plateau, or gives up.
+///
+/// A finished thread is not released the moment its work ends, and under a full
+/// `cargo test --workspace` the lag is long enough to read. A single strict sample
+/// therefore fails on scheduling rather than on a leak: the run that produced this
+/// helper showed threads 4 to 7 while private bytes *fell*, and the same test passed
+/// five times out of five when run alone.
+///
+/// Re-sampling keeps the guard exactly as strict as it was. A genuine leak never
+/// settles, so it still fails — it just fails after a second rather than instantly.
+fn settled_counts(plateau: ResourceCounts) -> ResourceCounts {
+    const SETTLE_ATTEMPTS: u32 = 40;
+    let mut sample = resource_counts();
+    for _ in 0..SETTLE_ATTEMPTS {
+        if sample.threads <= plateau.threads
+            && sample.handles <= plateau.handles.saturating_add(1)
+            && sample.user_objects <= plateau.user_objects
+            && sample.gdi_objects <= plateau.gdi_objects
+        {
+            return sample;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        sample = resource_counts();
+    }
+    sample
+}
+
+#[cfg(windows)]
 fn assert_structural_plateau(baseline: ResourceCounts, sample: ResourceCounts) {
     assert!(
         sample.handles <= baseline.handles.saturating_add(1),
@@ -315,7 +343,7 @@ fn run_windows_contract() {
     let mut highest = ResourceCounts::default();
     for _ in 0..MEASURED_ROUNDS {
         fixtures.exercise_round();
-        let sample = resource_counts();
+        let sample = settled_counts(plateau);
         assert_structural_plateau(plateau, sample);
         highest.private_bytes = highest.private_bytes.max(sample.private_bytes);
         highest.handles = highest.handles.max(sample.handles);
