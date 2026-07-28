@@ -51,7 +51,7 @@ rusqlite = { version = "=0.40.1", features = ["backup", "bundled", "hooks", "lim
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.150"
 sha2 = "=0.11.0"
-slint = { version = "=1.17.1", default-features = false, features = ["accessibility", "backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-software", "std"] }
+slint = { version = "=1.17.1", default-features = false, features = ["accessibility", "backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-skia", "std"] }
 slint-build = "=1.17.1"
 raw-window-handle = "=0.6.2"
 tempfile = "=3.27.0"

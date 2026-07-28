@@ -2,7 +2,10 @@
 target = "x86_64-pc-windows-msvc"
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
+# Skia has no prebuilt bindings for a static CRT and a source build needs LLVM, which
+# `skia-bindings` panics about. Without the flag it builds in about four minutes, and
+# the binary then imports VCRUNTIME140.dll and MSVCP140.dll -- both shipped inside the
+# portable package next to the executable, so "download and run" still holds.
 
 [env]
-SLINT_BACKEND = { value = "winit-software", force = false }
+SLINT_BACKEND = { value = "winit-skia", force = false }

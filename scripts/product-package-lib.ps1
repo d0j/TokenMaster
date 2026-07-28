@@ -120,7 +120,10 @@ function Assert-ProductPackageStage {
         "SBOM.cdx.json",
         "SHA256SUMS.txt",
         "THIRD_PARTY_NOTICES.txt",
+        "MSVCP140.dll",
         "TokenMaster.exe",
+        "VCRUNTIME140.dll",
+        "VCRUNTIME140_1.dll",
         "tokenmaster.portable"
     )
     [Array]::Sort($ExpectedFiles, [StringComparer]::Ordinal)

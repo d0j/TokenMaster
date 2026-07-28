@@ -7,6 +7,24 @@ $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "product-package-lib.ps1")
 
+function Get-VisualCppRuntimePath {
+    param([Parameter(Mandatory)][string]$Name)
+    $Roots = @(
+        (Join-Path $env:ProgramFiles "Microsoft Visual Studio"),
+        (Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio")
+    )
+    foreach ($Root in $Roots) {
+        if (-not (Test-Path -LiteralPath $Root)) { continue }
+        $Found = Get-ChildItem -LiteralPath $Root -Recurse -File -Filter $Name `
+                -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*\Redist\*\x64\*" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+        if ($Found) { return $Found.FullName }
+    }
+    throw "Visual C++ redistributable $Name not found; the package must not fall back to System32"
+}
+
 function Invoke-Checked {
     param(
         [Parameter(Mandatory)]
@@ -220,6 +238,15 @@ try {
     $Stage = Join-Path $TemporaryRoot $StageName
     [IO.Directory]::CreateDirectory($Stage) | Out-Null
     [IO.File]::Copy($Executable, (Join-Path $Stage "TokenMaster.exe"), $false)
+    # Skia will not build against a static CRT, so the executable imports these. They
+    # ship beside it rather than being assumed present: a machine that has never run a
+    # Visual C++ application does not have them, and the acceptance criterion is a
+    # stranger who downloads and runs. Taken from the toolchain redistributable rather
+    # than System32, so the package does not inherit this machine's servicing state.
+    foreach ($Runtime in @("VCRUNTIME140.dll", "VCRUNTIME140_1.dll", "MSVCP140.dll")) {
+        $Source = Get-VisualCppRuntimePath -Name $Runtime
+        [IO.File]::Copy($Source, (Join-Path $Stage $Runtime), $false)
+    }
     [IO.File]::WriteAllBytes((Join-Path $Stage "tokenmaster.portable"), [byte[]]@())
     foreach ($Name in @("README.md", "README_RU.md", "LICENSE")) {
         [IO.File]::Copy((Join-Path $Repository $Name), (Join-Path $Stage $Name), $false)
