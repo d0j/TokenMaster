@@ -53,8 +53,10 @@ Safe and cheap: solid and `with-alpha` colours, `border-radius` fills, rectangul
 
 **`window().is_visible()` does not mean visible.** It returns whether `show()` was
 called and `hide()` was not — true for a minimized, occluded or off-screen window.
-The docs.rs prose claiming otherwise is stale for the winit backend. Any "the user
-can see this" decision needs a different signal.
+The docs.rs prose claiming otherwise is stale for the winit backend. The closest
+honest signal is `is_visible() && !is_minimized()`; occlusion is not detectable at
+all, because winit emits no `Occluded` event on Windows. Anything that must be seen
+to count as delivered should therefore be retryable rather than asserted.
 
 **`hide()` on Windows destroys nothing.** It is `set_visible(false)`. The HWND, the
 renderer, the softbuffer surface, the position and the item tree all survive. Only

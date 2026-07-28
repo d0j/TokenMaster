@@ -35,6 +35,7 @@ forgotten; the phase is the commitment. Background and mechanism are in
 
 | Phase | Item | Where |
 |---|---|---|
+| P3 | Expiry reminders are marked `Presented` and durably acknowledged after a property write, with no check that anyone can see them. A user who closed to tray loses every warning. **The fix the audit proposed does not work**: `window().is_visible()` returns whether `show()` was called, and stays true for a minimized window. Use `is_visible() && !is_minimized()`, and treat anything else as retryable so the existing 60-second re-pump holds the batch. | `src/in_app_notification.rs:458-472`, ack at `crates/app/src/notification.rs:395` |
 | P3 | Four backup-policy controls are bound one-way with no handler, so Slint severs them on the first user interaction and the Rust pushes are silently dropped. After a config import the card can show a policy that is not the one running. | `ui/views/settings-view.slint:248-256`, pushes at `src/ui.rs:2254-2260` |
 | P3 | Charts distinguishing unavailable from a legitimate zero is not test-guarded. The text cells are covered; the visual difference is not, and the row struct is not exported. | `ui/views/history-view.slint:173-186` |
 | P6 | Every `set_*_rows` builds a fresh `ModelRc`, which is never `PartialEq` to the old one, so each data projection destroys every repeater instance and forces a full-window repaint. 30 call sites through one helper. | `src/ui.rs:4127` |
@@ -42,6 +43,9 @@ forgotten; the phase is the commitment. Background and mechanism are in
 | post-tag | `high-contrast` and `reduced-motion` are declared and consumed by the tree but never set from Rust, so both affordances are inert. | `ui/main.slint:289-290` |
 | post-tag | Compact-window sizing samples `window().size()` before the window is shown and compares physical pixels against logical constants. Wrong on any non-100% display. | `src/ui.rs:1952-1987` |
 | post-tag | The Dashboard indexes its six sections positionally with nothing enforcing the order. | `ui/views/dashboard-view.slint:535` |
+| post-tag | The Win32 tray carries 39 `unsafe` blocks and one SAFETY comment, and lives in the UI crate rather than `platform`, which exists to own OS FFI and documents 23 of its 25 blocks. Moving it there and then adding `#![forbid(unsafe_code)]` to `desktop` is what stops it drifting back. | `src/native_tray.rs` |
+| post-tag | `RegisterClassW`'s result is discarded and `CLASS_REGISTERED` latches true regardless, so a genuine registration failure is permanent and indistinguishable from the benign already-registered case. | `src/native_tray.rs:344-358` |
+| post-tag | `show_menu` holds a `&'static Inner` minted from `GWLP_USERDATA` across `TrackPopupMenu`'s nested modal message loop and dereferences it afterwards. Safe today only because nothing dispatched inside that loop can drop the owner. Re-read the pointer after the loop instead. | `src/native_tray.rs:304-331` |
 
 ## Abort rules
 
