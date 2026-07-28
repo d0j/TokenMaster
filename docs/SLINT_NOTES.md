@@ -51,6 +51,34 @@ repaint. An opaque rectangle does not stop what is beneath it from being drawn.
 Safe and cheap: solid and `with-alpha` colours, `border-radius` fills, rectangular
 `clip: true`, `Text`, images at 1:1, in-place `set_row_data`.
 
+**Three renderers, measured on one machine at 200% DPI.** Switching is two lines --
+the `renderer-*` feature in the workspace `Cargo.toml` and `SLINT_BACKEND` in
+`.cargo/config.toml` -- so these numbers are what the choice costs, not an argument
+about it.
+
+| | software | femtovg | skia |
+|---|---|---|---|
+| binary | 34.83 MB | 34.32 MB | 40.37 MB |
+| start to tray icon | 6.73 s | 16.74 s | 8.02 s |
+| private bytes | 33.3 MB | 295 MB | 51.8 MB |
+| working set | 58.5 MB | 172.4 MB | 92.7 MB |
+| threads | 25 | 33 | 25 |
+| idle CPU | 83.6% | ~90% | 83.9% |
+| blank window after a move | **yes**, 27.5% of pixels differ over two backgrounds | no | no, 7.8% |
+| text | grayscale AA, no hinting | crisp | crisp |
+| CRT linkage | static | static | **dynamic** |
+
+femtovg is the worst of the three on every axis but binary size. Skia costs 5.5 MB and
+1.3 seconds of startup over software and removes the blank window entirely.
+
+Skia will not build with `+crt-static`: no prebuilt bindings exist for that target and a
+source build needs LLVM, which `skia-bindings` panics about at
+`build_support/platform/windows.rs:32`. Without the flag it builds in about four minutes
+and the binary then imports `VCRUNTIME140.dll` and `MSVCP140.dll`.
+
+The idle CPU is within a point of itself on all three, which is the third independent
+result ruling the renderer out as its cause.
+
 **The software renderer was measured against femtovg, and it stays.** Switching
 `renderer-software` to `renderer-femtovg` is a two-line change, and it was tried in full:
 the blank window after a move disappeared completely — 29.1 mean luma where software gave
