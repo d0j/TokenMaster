@@ -482,7 +482,7 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
         {
             let control = ElementHandle::find_by_accessible_label(window, label)
                 .next()
-                .expect("reminder control");
+                .unwrap_or_else(|| panic!("reminder control missing at {width}: {label}"));
             let position = control.absolute_position();
             let size = control.size();
             assert!(

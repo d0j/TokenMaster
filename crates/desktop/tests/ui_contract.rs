@@ -2917,3 +2917,50 @@ fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_windo
     assert_eq!(component_address, shell.window() as *const _);
     assert_eq!(window.get_session_list_rows().row_count(), 64);
 }
+
+/// Nine of eleven routes used to be reachable only through the command palette: the
+/// sidebar was fully built but pinned to `width: 0px; visible: false`, and the bottom
+/// tab bar showed on two routes. Nothing failed when that happened, so this asserts
+/// the affordance itself rather than the property behind it.
+#[test]
+fn every_route_is_reachable_by_mouse_without_the_command_palette() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let reducer = ProductReducer::new();
+    let shell = DesktopShell::new(&reducer.snapshot()).expect("desktop shell");
+    let window = shell.window();
+    let route_rows = window.get_route_rows();
+    let labels: Vec<String> = (0..route_rows.row_count())
+        .filter_map(|index| route_rows.row_data(index))
+        .map(|row| row.label.to_string())
+        .collect();
+    assert_eq!(labels.len(), 11);
+
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1_280, 720));
+    let mut wide_reachable = 0_usize;
+    for label in &labels {
+        let expected = label.clone();
+        let found = ElementQuery::from_root(window)
+            .match_predicate(move |element| {
+                element.accessible_role() == Some(AccessibleRole::Button)
+                    && element.accessible_label().as_deref() == Some(expected.as_str())
+            })
+            .find_first()
+            .is_some();
+        if found {
+            wide_reachable += 1;
+        }
+    }
+    assert_eq!(
+        wide_reachable, 11,
+        "every route needs a clickable sidebar entry on a wide window"
+    );
+
+    window.window().set_size(slint::PhysicalSize::new(700, 720));
+    assert!(
+        !window.get_route_sidebar_visible(),
+        "the sidebar yields rather than squeeze a view into its narrow layout"
+    );
+}

@@ -221,6 +221,13 @@ export component MainWindow inherits Window {
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <bool> help-about-visible: root.active-route-key == "help_about";
     out property <bool> compact-widget-visible: root.active-route-key == "compact_widget";
+    // Every route is reachable by mouse from the sidebar when there is room for it.
+    // Below the breakpoint the bottom tab bar carries navigation instead, so neither
+    // layout leaves the command palette as the only way to reach a route.
+    //
+    // 1180px is the widest content breakpoint (1010px) plus the sidebar: the sidebar
+    // must never be the reason a view drops to its narrow layout.
+    out property <bool> route-sidebar-visible: !root.compact-widget-visible && root.width >= 1180px;
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> dashboard-layout-preset: root.presentation-layout-key;
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
@@ -407,8 +414,8 @@ export component MainWindow inherits Window {
             vertical-stretch: 1;
 
             Rectangle {
-                width: 0px;
-                visible: false;
+                width: root.route-sidebar-visible ? 168px : 0px;
+                visible: root.route-sidebar-visible;
                 background: UiTokens.surface;
                 border-color: UiTokens.border;
                 border-width: 1px;
