@@ -105,6 +105,13 @@ redacted, bounded temporary reports. The bounded receipt binds the same commit,
 worktree, tool, and package before and after the scan and retains no findings, local
 paths, command output, or source content.
 
+It runs in `.github/workflows/tokenmaster-release-artifact.yml`, after packaging and
+before attestation, because it needs a built package. Until that step existed the
+validator was invoked by nothing, and the only automated evidence was a Pester case
+asserting against the validator's own source text — which is why this paragraph now
+names the caller rather than the capability alone. No tagged release has exercised it
+yet; the source half has been run by hand against a clean worktree with no findings.
+
 The artifact-attestation producer path is implemented as a separate pinned Windows
 workflow. It builds the canonical MSVC ZIP only from a `v*` tag or a default-branch
 manual run, attests exactly that unsigned ZIP with OIDC, and then uploads the ZIP and

@@ -70,7 +70,11 @@ These are binding regardless of what is being built.
   was missed. A reported miss is information; a quietly adjusted target is not.
 - A behaviour change starts with a test that fails before it. A guard that stays
   green for both the correct and a plausible wrong implementation guards nothing.
-- A defect found outside the current item is recorded and deferred, not fixed inline.
+- A defect found outside the current item is recorded and deferred, not fixed inline —
+  unless it makes something this repository currently claims untrue. A red test, a gate
+  that never runs, a document that misstates the state, and code no longer reachable are
+  not deferrable: they are a false account of the present, and every later report
+  inherits the falsehood. Fix those where they are found. Everything else gets a phase.
 - Prefer deleting code to adding it when both reach the goal. Do not add a document,
   script, or abstraction that no phase asked for.
 - Do not put a commit hash in a tracked document.
