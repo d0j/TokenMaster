@@ -98,6 +98,19 @@ the renderer stays software and the blank window is solved in our own code inste
 CPU bursts are identical under both renderers, which rules the renderer out as their
 source and points at the periodic reconciliation.
 
+**The idle CPU cost is ours, and the bisection is done.** An empty Slint window built with
+this repository's exact features -- skia renderer, winit backend, accessibility -- measured
+**0% of a core, 10 threads, 7.1 MB** while the product measured 81% and 24 threads. Slint and
+winit are therefore not the source. Two named upstream suspects were tested and both failed:
+building without the `accessibility` feature changed nothing (86.7% against 81%, so not
+AccessKit/UIA despite slint#3867 and egui#4527), and the burn is identical across all three
+renderers. Gating the tree's only `animation-tick()` changed nothing either. What remains is
+roughly fifteen threads the product starts that the empty window does not.
+
+Slint does reach `ControlFlow::wait_duration(next_timer)` -- winit's `WaitUntil`, implicated by
+winit#1610 on Windows -- but only when a Slint timer is armed, and the empty window proves that
+path is quiet here.
+
 ## Window lifecycle
 
 **`window().is_visible()` does not mean visible.** It returns whether `show()` was
