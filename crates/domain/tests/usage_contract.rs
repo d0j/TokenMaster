@@ -159,7 +159,7 @@ fn unavailable_tokens_serialize_as_null_not_zero() {
     let json = serde_json::to_string(&usage).expect("metadata-only usage serializes");
     assert_eq!(
         json,
-        r#"{"input":10,"cached":null,"output":2,"reasoning":null,"total":12}"#
+        r#"{"input":10,"cached":null,"output":2,"reasoning":null,"total":12,"cache_write_5m":null,"cache_write_1h":null}"#
     );
     assert_eq!(usage.input(), TokenCount::Available(10));
     assert_eq!(usage.cached(), TokenCount::Unavailable);
