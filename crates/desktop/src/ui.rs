@@ -14,6 +14,14 @@ use chrono::{DateTime, Utc};
 use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tokenmaster_product::ProductSnapshot;
 
+macro_rules! set_rows {
+    ($window:expr, $getter:ident, $setter:ident, $rows:expr) => {{
+        if let Some(replacement) = patch_rows(&$window.$getter(), $rows) {
+            $window.$setter(replacement);
+        }
+    }};
+}
+
 use crate::{
     ActivityRhythmRow, BenefitLotRow, DashboardActivityRow, DashboardBenefitRow,
     DashboardBoardEditorRow, DashboardBoardSlotRow, DashboardModelRow, DashboardQuotaRow,
@@ -873,8 +881,18 @@ fn apply_dashboard_board_preferences(
             collapsed: row.collapsed(),
         })
         .collect::<Vec<_>>();
-    window.set_dashboard_board_editor_rows(model(editor_rows));
-    window.set_dashboard_board_visible_slots(model(visible_slots));
+    set_rows!(
+        window,
+        get_dashboard_board_editor_rows,
+        set_dashboard_board_editor_rows,
+        editor_rows
+    );
+    set_rows!(
+        window,
+        get_dashboard_board_visible_slots,
+        set_dashboard_board_visible_slots,
+        visible_slots
+    );
 }
 
 const fn workbench_canonical_rank(key: DesktopBoardSectionKey) -> u8 {
@@ -1374,7 +1392,12 @@ fn wire_in_app_notification_dismissal(
         if let Some(window) = weak.upgrade() {
             window.set_in_app_notification_visible(false);
             window.set_in_app_notification_count_label(SharedString::default());
-            window.set_in_app_notification_rows(model(Vec::new()));
+            set_rows!(
+                window,
+                get_in_app_notification_rows,
+                set_in_app_notification_rows,
+                Vec::new()
+            );
             if let Ok(mut batch) = in_app_notification_batch.lock() {
                 *batch = None;
             }
@@ -1876,7 +1899,12 @@ fn apply_command_palette_rows(
     } else {
         saturating_i32(selected as u64)
     });
-    window.set_command_palette_rows(model(rows));
+    set_rows!(
+        window,
+        get_command_palette_rows,
+        set_command_palette_rows,
+        rows
+    );
 }
 
 fn move_command_palette_selection(window: &MainWindow, delta: i32) {
@@ -1895,7 +1923,12 @@ fn move_command_palette_selection(window: &MainWindow, delta: i32) {
         row.selected = index == selected as usize;
     }
     window.set_command_palette_selected_ordinal(selected);
-    window.set_command_palette_rows(model(rows));
+    set_rows!(
+        window,
+        get_command_palette_rows,
+        set_command_palette_rows,
+        rows
+    );
 }
 
 fn refresh_command_palette_if_open(window: &MainWindow, projection: &DesktopProjection) {
@@ -1979,7 +2012,12 @@ fn dismiss_command_palette(window: &MainWindow) {
     window.set_command_palette_visible(false);
     window.set_command_palette_query("".into());
     window.set_command_palette_selected_ordinal(-1);
-    window.set_command_palette_rows(model(Vec::new()));
+    set_rows!(
+        window,
+        get_command_palette_rows,
+        set_command_palette_rows,
+        Vec::new()
+    );
 }
 
 fn wire_history_range_intents(
@@ -2124,7 +2162,7 @@ fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
         .collect::<Vec<_>>();
     let active = projection.route(projection.selected());
 
-    window.set_route_rows(ModelRc::new(VecModel::from(rows)));
+    set_rows!(window, get_route_rows, set_route_rows, rows);
     window.set_active_route_key(SharedString::from(projection.selected().stable_key()));
     window.set_active_route_label(SharedString::from(route_label(
         window,
@@ -2298,7 +2336,7 @@ fn apply_reliable_state_projection(
             compression_label: humanize_key(point.compression_code()).into(),
         })
         .collect::<Vec<_>>();
-    window.set_restore_point_rows(model(rows));
+    set_rows!(window, get_restore_point_rows, set_restore_point_rows, rows);
 }
 
 fn saturating_i32(value: u64) -> i32 {
@@ -2735,7 +2773,12 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
             has_data: section.has_data(),
         })
         .collect::<Vec<_>>();
-    window.set_dashboard_section_rows(model(sections));
+    set_rows!(
+        window,
+        get_dashboard_section_rows,
+        set_dashboard_section_rows,
+        sections
+    );
 
     let header = dashboard.header();
     window.set_dashboard_header_tokens(format_tokens(header.tokens()).into());
@@ -2799,7 +2842,12 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
             }
         })
         .collect::<Vec<_>>();
-    window.set_dashboard_quota_rows(model(quota_rows));
+    set_rows!(
+        window,
+        get_dashboard_quota_rows,
+        set_dashboard_quota_rows,
+        quota_rows
+    );
 
     let benefit_rows = dashboard
         .benefit_scopes()
@@ -2827,7 +2875,12 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
             .into(),
         })
         .collect::<Vec<_>>();
-    window.set_dashboard_benefit_rows(model(benefit_rows));
+    set_rows!(
+        window,
+        get_dashboard_benefit_rows,
+        set_dashboard_benefit_rows,
+        benefit_rows
+    );
 
     apply_code_output(window, dashboard);
     apply_trend(window, dashboard);
@@ -2887,7 +2940,7 @@ fn apply_history_snapshot_projection(window: &MainWindow, history: &DesktopHisto
             }
         })
         .collect::<Vec<_>>();
-    window.set_history_day_rows(model(rows));
+    set_rows!(window, get_history_day_rows, set_history_day_rows, rows);
 }
 
 fn apply_history_range_state(window: &MainWindow, history: &DesktopHistoryProjection) {
@@ -2984,7 +3037,7 @@ fn apply_models_projection(window: &MainWindow, models: &DesktopModelsProjection
             token_ratio: ratio(row.total_tokens().known_sum(), models.token_maximum()),
         })
         .collect::<Vec<_>>();
-    window.set_model_usage_rows(model(rows));
+    set_rows!(window, get_model_usage_rows, set_model_usage_rows, rows);
 }
 
 fn format_models_range(window: &MainWindow, models: &DesktopModelsProjection) -> String {
@@ -3132,7 +3185,7 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
             .into(),
         })
         .collect::<Vec<_>>();
-    window.set_project_usage_rows(model(rows));
+    set_rows!(window, get_project_usage_rows, set_project_usage_rows, rows);
 }
 
 fn format_optional_range(window: &MainWindow, range: Option<crate::DesktopHistoryRange>) -> String {
@@ -3315,8 +3368,18 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
             ratio: ratio(row.total_tokens(), weekday_maximum),
         })
         .collect::<Vec<_>>();
-    window.set_activity_rhythm_hour_rows(model(hour_rows));
-    window.set_activity_rhythm_weekday_rows(model(weekday_rows));
+    set_rows!(
+        window,
+        get_activity_rhythm_hour_rows,
+        set_activity_rhythm_hour_rows,
+        hour_rows
+    );
+    set_rows!(
+        window,
+        get_activity_rhythm_weekday_rows,
+        set_activity_rhythm_weekday_rows,
+        weekday_rows
+    );
     let rows = activity
         .rows()
         .iter()
@@ -3335,7 +3398,12 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
             total_label: format_tokens(row.total_tokens()).into(),
         })
         .collect::<Vec<_>>();
-    window.set_recent_activity_rows(model(rows));
+    set_rows!(
+        window,
+        get_recent_activity_rows,
+        set_recent_activity_rows,
+        rows
+    );
 }
 
 fn apply_notifications_projection(
@@ -3445,7 +3513,12 @@ fn apply_notifications_projection(
                 .invoke_notification_completeness_label(scope.completeness().into()),
         })
         .collect::<Vec<_>>();
-    window.set_reminder_scope_rows(model(scope_rows));
+    set_rows!(
+        window,
+        get_reminder_scope_rows,
+        set_reminder_scope_rows,
+        scope_rows
+    );
 
     let lot_rows = notifications
         .lots()
@@ -3480,7 +3553,7 @@ fn apply_notifications_projection(
             .into(),
         })
         .collect::<Vec<_>>();
-    window.set_benefit_lot_rows(model(lot_rows));
+    set_rows!(window, get_benefit_lot_rows, set_benefit_lot_rows, lot_rows);
 }
 
 pub(crate) fn apply_in_app_notification_batch(
@@ -3554,7 +3627,12 @@ pub(crate) fn apply_in_app_notification_batch(
             batch.len() == 1,
         )
         .to_string();
-    window.set_in_app_notification_rows(model(rows));
+    set_rows!(
+        window,
+        get_in_app_notification_rows,
+        set_in_app_notification_rows,
+        rows
+    );
     window.set_in_app_notification_count_label(count_label.into());
     window.set_in_app_notification_visible(true);
     window.get_in_app_notification_visible()
@@ -3726,7 +3804,7 @@ fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProj
             cost_label: format_cost(session.cost()).into(),
         })
         .collect::<Vec<_>>();
-    window.set_session_list_rows(model(rows));
+    set_rows!(window, get_session_list_rows, set_session_list_rows, rows);
     apply_session_detail_projection(window, sessions);
 }
 
@@ -3873,7 +3951,12 @@ pub(crate) fn apply_session_detail_projection(
             cost_label: format_cost(row.cost()).into(),
         })
         .collect::<Vec<_>>();
-    window.set_session_detail_breakdown_rows(model(rows));
+    set_rows!(
+        window,
+        get_session_detail_breakdown_rows,
+        set_session_detail_breakdown_rows,
+        rows
+    );
 }
 
 fn format_session_duration(
@@ -3983,7 +4066,12 @@ fn apply_trend(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
             .unwrap_or_default()
             .into(),
     );
-    window.set_dashboard_trend_points(model(rows));
+    set_rows!(
+        window,
+        get_dashboard_trend_points,
+        set_dashboard_trend_points,
+        rows
+    );
 }
 
 fn dashboard_trend_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
@@ -4061,7 +4149,12 @@ fn apply_sessions(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
             cost_label: format_cost(session.cost()).into(),
         })
         .collect::<Vec<_>>();
-    window.set_dashboard_session_rows(model(rows));
+    set_rows!(
+        window,
+        get_dashboard_session_rows,
+        set_dashboard_session_rows,
+        rows
+    );
 }
 
 fn apply_activity(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
@@ -4089,7 +4182,12 @@ fn apply_activity(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
             },
         })
         .collect::<Vec<_>>();
-    window.set_dashboard_activity_rows(model(rows));
+    set_rows!(
+        window,
+        get_dashboard_activity_rows,
+        set_dashboard_activity_rows,
+        rows
+    );
 }
 
 fn apply_models(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
@@ -4111,11 +4209,40 @@ fn apply_models(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
             cost_label: format_cost(row.cost()).into(),
         })
         .collect::<Vec<_>>();
-    window.set_dashboard_model_rows(model(rows));
+    set_rows!(
+        window,
+        get_dashboard_model_rows,
+        set_dashboard_model_rows,
+        rows
+    );
 }
 
 fn model<T: Clone + 'static>(rows: Vec<T>) -> ModelRc<T> {
     ModelRc::new(VecModel::from(rows))
+}
+
+/// Patches the model already bound to a property instead of replacing it, and
+/// returns a replacement only when the row count changed.
+///
+/// `ModelRc`'s equality is pointer identity, so a freshly built model is never
+/// equal to the one it replaces. The repeater then discards every instance, each
+/// drop reaches `free_graphics_resources`, and that sets `force_screen_refresh`
+/// unconditionally — a full-window repaint for data that may be identical. Writing
+/// rows through the existing model keeps the instances, and a projection whose rows
+/// all compare equal emits no change notification at all, so it costs no repaint.
+fn patch_rows<T: Clone + PartialEq + 'static>(
+    bound: &ModelRc<T>,
+    rows: Vec<T>,
+) -> Option<ModelRc<T>> {
+    if bound.row_count() != rows.len() {
+        return Some(ModelRc::new(VecModel::from(rows)));
+    }
+    for (index, row) in rows.into_iter().enumerate() {
+        if bound.row_data(index).as_ref() != Some(&row) {
+            bound.set_row_data(index, row);
+        }
+    }
+    None
 }
 
 fn dashboard_section_label(window: &MainWindow, key: DesktopDashboardSectionKey) -> String {

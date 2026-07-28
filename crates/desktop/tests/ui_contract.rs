@@ -2242,7 +2242,11 @@ fn shell_retains_session_page_sink_after_caller_rc_is_dropped() {
 }
 
 fn session_model_replacement_is_pinned(ui: &str) -> bool {
-    const REPLACEMENT: &str = "window.set_session_list_rows(model(rows));";
+    // Pinned to the current call shape. The property this guards is that sessions are
+    // replaced, never appended to; `patch_rows` in ui.rs is the single choke point and
+    // it has no push/insert/extend path.
+    const REPLACEMENT: &str =
+        "set_rows!(window, get_session_list_rows, set_session_list_rows, rows);";
     if ui.matches(REPLACEMENT).count() != 1 {
         return false;
     }
@@ -2509,7 +2513,7 @@ fn history_range_model_replacement_is_bounded_and_has_no_append_or_load_more_pat
         .expect("accepted snapshot history projection body");
     assert_eq!(
         projection
-            .matches("window.set_history_day_rows(model(rows));")
+            .matches("set_rows!(window, get_history_day_rows, set_history_day_rows, rows);")
             .count(),
         1
     );
@@ -2956,5 +2960,51 @@ fn every_route_is_reachable_by_mouse_without_the_command_palette() {
     assert!(
         !window.get_route_sidebar_visible(),
         "the sidebar yields rather than squeeze a view into its narrow layout"
+    );
+}
+
+/// Replacing a `ModelRc` is never `PartialEq` to the one it replaces, so the
+/// repeater discards every instance and the software renderer forces a full-window
+/// repaint. A projection whose rows are unchanged must therefore keep the models it
+/// already bound, or the product repaints everything on every refresh.
+#[test]
+fn an_unchanged_projection_keeps_the_models_it_already_bound() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-model-identity-stable.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 40);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    shell
+        .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+
+    let routes = window.get_route_rows();
+    let sections = window.get_dashboard_section_rows();
+    let sessions = window.get_session_list_rows();
+
+    // Assert the second projection actually ran. Without this the test is vacuous:
+    // a rejected apply never reaches `apply_projection`, so the models would be
+    // unchanged for the wrong reason.
+    let outcome = shell
+        .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(2).expect("epoch"), &snapshot)
+        .expect("rebind the identical snapshot");
+    assert_eq!(outcome, DesktopApplyOutcome::Accepted);
+
+    assert_eq!(
+        window.get_route_rows(),
+        routes,
+        "an identical projection must not swap the route model"
+    );
+    assert_eq!(
+        window.get_dashboard_section_rows(),
+        sections,
+        "an identical projection must not swap the dashboard section model"
+    );
+    assert_eq!(
+        window.get_session_list_rows(),
+        sessions,
+        "an identical projection must not swap the sessions model"
     );
 }
