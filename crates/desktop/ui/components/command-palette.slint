@@ -46,7 +46,7 @@ export component RoutePalette inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: @tr("Go to route"); color: UiTokens.text-primary; font-size: 16px; font-weight: 700; }
+                Text { text: @tr("Go to route"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-medium; }
                 search-focus := FocusScope {
                     height: 32px;
                     forward-focus: search;
@@ -82,7 +82,7 @@ export component RoutePalette inherits Rectangle {
                     TouchArea { clicked => { root.activate-route(route.key); } }
                 }
                 Rectangle { vertical-stretch: 1; background: transparent; }
-                Text { text: @tr("Up/Down to select · Enter to open · Escape to dismiss"); color: UiTokens.text-secondary; font-size: 11px; }
+                Text { text: @tr("Up/Down to select · Enter to open · Escape to dismiss"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
             }
         }
 

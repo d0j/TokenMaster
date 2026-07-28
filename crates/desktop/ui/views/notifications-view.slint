@@ -27,21 +27,21 @@ component NotificationsHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: @tr("Notifications"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
-                Text { text: @tr("Expiry reminders · effective in-app coverage"); color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+                Text { text: @tr("Notifications"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
+                Text { text: @tr("Expiry reminders · effective in-app coverage"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
             }
             SectionState { state: root.state; reasons: root.reasons; }
         }
         if root.narrow: VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 700; overflow: elide; }
-            Text { text: root.completeness-label + " · " + root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; overflow: elide; }
+            Text { text: root.completeness-label + " · " + root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
         }
         if !root.narrow: HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; }
-            Text { text: root.completeness-label; color: UiTokens.accent; font-size: 12px; horizontal-stretch: 1; }
-            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
         }
     }
 }
@@ -62,11 +62,11 @@ component ReminderProfilesCard inherits Rectangle {
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: @tr("Reminder profiles"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Reminder profiles"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
         if root.rows.length == 0: Text {
             text: root.state == "waiting" ? @tr("Waiting for reminder profiles") : (root.state == "ready" ? @tr("No reminder profiles") : @tr("Reminder profiles unavailable"));
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
             height: 34px;
         }
         for scope[i] in root.rows: Rectangle {
@@ -83,16 +83,16 @@ component ReminderProfilesCard inherits Rectangle {
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    Text { text: scope.scope-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; width: 72px; }
-                    Text { text: scope.coverage-label; color: scope.coverage-label == "Disabled" ? UiTokens.degraded : UiTokens.ready; font-size: 11px; font-weight: 700; width: 84px; }
-                    Text { text: scope.source-label; color: UiTokens.text-secondary; font-size: 11px; width: 72px; }
-                    Text { text: scope.lot-count-label; color: UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; }
-                    Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: 10px; width: root.narrow ? 0px : 184px; visible: !root.narrow; horizontal-alignment: right; }
+                    Text { text: scope.scope-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 72px; }
+                    Text { text: scope.coverage-label; color: scope.coverage-label == "Disabled" ? UiTokens.degraded : UiTokens.ready; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 84px; }
+                    Text { text: scope.source-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 72px; }
+                    Text { text: scope.lot-count-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+                    Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: root.narrow ? 0px : 184px; visible: !root.narrow; horizontal-alignment: right; }
                 }
-                Text { text: @tr("Leads · {0}", scope.leads-label); color: UiTokens.accent; font-size: 10px; overflow: elide; }
-                Text { text: scope.next-due-label + " · " + scope.nearest-expiry-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
-                if root.narrow: Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
-                if scope.warning-label != "": Text { text: scope.warning-label; color: UiTokens.degraded; font-size: 10px; overflow: elide; }
+                Text { text: @tr("Leads · {0}", scope.leads-label); color: UiTokens.accent; font-size: UiTokens.text-caption; overflow: elide; }
+                Text { text: scope.next-due-label + " · " + scope.nearest-expiry-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
+                if root.narrow: Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
+                if scope.warning-label != "": Text { text: scope.warning-label; color: UiTokens.degraded; font-size: UiTokens.text-caption; overflow: elide; }
             }
         }
     }
@@ -114,22 +114,22 @@ component BenefitLotsCard inherits Rectangle {
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: @tr("Current benefits"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Current benefits"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
         if root.rows.length == 0: Text {
             text: root.state == "waiting" ? @tr("Waiting for benefit inventory") : (root.state == "ready" ? @tr("No current benefits") : @tr("Benefit inventory unavailable"));
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
             height: 34px;
         }
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 26px;
             spacing: UiTokens.space-sm;
-            Text { text: @tr("Scope"); color: UiTokens.text-secondary; font-size: 10px; width: 66px; }
-            Text { text: @tr("Benefit"); color: UiTokens.text-secondary; font-size: 10px; width: 170px; }
-            Text { text: @tr("Quantity"); color: UiTokens.text-secondary; font-size: 10px; width: 56px; horizontal-alignment: right; }
-            Text { text: @tr("State"); color: UiTokens.text-secondary; font-size: 10px; width: 94px; }
-            Text { text: @tr("Expiry"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; }
-            Text { text: @tr("Evidence"); color: UiTokens.text-secondary; font-size: 10px; width: 210px; horizontal-alignment: right; }
+            Text { text: @tr("Scope"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 66px; }
+            Text { text: @tr("Benefit"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 170px; }
+            Text { text: @tr("Quantity"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 56px; horizontal-alignment: right; }
+            Text { text: @tr("State"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 94px; }
+            Text { text: @tr("Expiry"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; }
+            Text { text: @tr("Evidence"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 210px; horizontal-alignment: right; }
         }
         for lot[i] in root.rows: Rectangle {
             height: root.narrow ? 92px : 58px;
@@ -145,32 +145,32 @@ component BenefitLotsCard inherits Rectangle {
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    Text { text: lot.scope-label; color: UiTokens.text-secondary; font-size: 10px; width: 58px; }
-                    Text { text: lot.kind-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 700; horizontal-stretch: 1; overflow: elide; }
-                    Text { text: lot.quantity-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 750; width: 54px; horizontal-alignment: right; }
-                    Text { text: lot.state-label; color: lot.state-label == "Available" ? UiTokens.ready : UiTokens.degraded; font-size: 10px; width: 90px; horizontal-alignment: right; }
+                    Text { text: lot.scope-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 58px; }
+                    Text { text: lot.kind-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: lot.quantity-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-bold; width: 54px; horizontal-alignment: right; }
+                    Text { text: lot.state-label; color: lot.state-label == "Available" ? UiTokens.ready : UiTokens.degraded; font-size: UiTokens.text-caption; width: 90px; horizontal-alignment: right; }
                 }
-                Text { text: lot.expiry-label; color: UiTokens.accent; font-size: 10px; overflow: elide; }
-                Text { text: lot.evidence-label + " · " + lot.granted-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
+                Text { text: lot.expiry-label; color: UiTokens.accent; font-size: UiTokens.text-caption; overflow: elide; }
+                Text { text: lot.evidence-label + " · " + lot.granted-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
             }
             if !root.narrow: HorizontalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
                 spacing: UiTokens.space-sm;
-                Text { text: lot.scope-label; color: UiTokens.text-secondary; font-size: 10px; width: 66px; }
+                Text { text: lot.scope-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 66px; }
                 VerticalLayout {
                     width: 170px;
-                    Text { text: lot.kind-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 700; overflow: elide; }
-                    Text { text: lot.benefit-label; color: UiTokens.text-secondary; font-size: 9px; overflow: elide; }
+                    Text { text: lot.kind-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; overflow: elide; }
+                    Text { text: lot.benefit-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
                 }
-                Text { text: lot.quantity-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 750; width: 56px; horizontal-alignment: right; }
-                Text { text: lot.state-label; color: lot.state-label == "Available" ? UiTokens.ready : UiTokens.degraded; font-size: 10px; width: 94px; }
+                Text { text: lot.quantity-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-bold; width: 56px; horizontal-alignment: right; }
+                Text { text: lot.state-label; color: lot.state-label == "Available" ? UiTokens.ready : UiTokens.degraded; font-size: UiTokens.text-caption; width: 94px; }
                 VerticalLayout {
                     horizontal-stretch: 1;
-                    Text { text: lot.expiry-label; color: UiTokens.accent; font-size: 10px; overflow: elide; }
-                    Text { text: lot.granted-label; color: UiTokens.text-secondary; font-size: 9px; overflow: elide; }
+                    Text { text: lot.expiry-label; color: UiTokens.accent; font-size: UiTokens.text-caption; overflow: elide; }
+                    Text { text: lot.granted-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
                 }
-                Text { text: lot.evidence-label; color: UiTokens.text-secondary; font-size: 9px; width: 210px; horizontal-alignment: right; overflow: elide; }
+                Text { text: lot.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 210px; horizontal-alignment: right; overflow: elide; }
             }
         }
     }

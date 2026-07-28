@@ -36,11 +36,11 @@ component ModelsHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: @tr("Models"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: @tr("Models"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
                 Text {
                     text: root.range-label + " · " + root.time-zone-label;
                     color: UiTokens.text-secondary;
-                    font-size: 11px;
+                    font-size: UiTokens.text-body;
                     overflow: elide;
                 }
             }
@@ -48,14 +48,14 @@ component ModelsHeaderCard inherits Rectangle {
         }
         if root.narrow: VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
-            Text { text: root.loaded-label + " · " + root.completeness-label; color: UiTokens.accent; font-size: 11px; overflow: elide; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.loaded-label + " · " + root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; overflow: elide; }
         }
         if !root.narrow: HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
-            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 700; }
-            Text { text: root.completeness-label; color: UiTokens.accent; font-size: 11px; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
         }
         HorizontalLayout {
             spacing: UiTokens.space;
@@ -82,25 +82,25 @@ component ModelsTableCard inherits Rectangle {
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: @tr("Usage by model"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Usage by model"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
         if root.rows.length == 0: Text {
             text: root.state == "waiting" ? @tr("Waiting for model evidence") : (root.state == "ready" ? @tr("No model usage in this range") : @tr("Model evidence unavailable"));
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
             height: 34px;
         }
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: @tr("Model"); color: UiTokens.text-secondary; font-size: 10px; width: 150px; }
-            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: 10px; width: 72px; }
-            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Cost · evidence"); color: UiTokens.text-secondary; font-size: 10px; width: 140px; horizontal-alignment: right; }
-            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: 10px; width: 54px; horizontal-alignment: right; }
+            Text { text: @tr("Model"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 150px; }
+            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 72px; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cost · evidence"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 140px; horizontal-alignment: right; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 54px; horizontal-alignment: right; }
         }
         for model[i] in root.rows: Rectangle {
             height: root.narrow ? 70px : 42px;
@@ -116,9 +116,9 @@ component ModelsTableCard inherits Rectangle {
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    Text { text: model.model-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; horizontal-stretch: 1; overflow: elide; }
-                    Text { text: model.total-label; color: model.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 72px; horizontal-alignment: right; }
-                    Text { text: model.cost-label + " · " + model.cost-evidence-label; color: model.cost-availability == "unavailable" ? UiTokens.text-secondary : (model.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: 11px; width: 140px; horizontal-alignment: right; overflow: elide; }
+                    Text { text: model.model-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: model.total-label; color: model.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 72px; horizontal-alignment: right; }
+                    Text { text: model.cost-label + " · " + model.cost-evidence-label; color: model.cost-availability == "unavailable" ? UiTokens.text-secondary : (model.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 140px; horizontal-alignment: right; overflow: elide; }
                 }
                 Rectangle {
                     height: 3px;
@@ -129,7 +129,7 @@ component ModelsTableCard inherits Rectangle {
                 Text {
                     text: @tr("In {0} · Cache {1} · Out {2} · Reason {3} · {4} events", model.input-label, model.cached-label, model.output-label, model.reasoning-label, model.event-label);
                     color: UiTokens.text-secondary;
-                    font-size: 10px;
+                    font-size: UiTokens.text-caption;
                     overflow: elide;
                 }
             }
@@ -137,7 +137,7 @@ component ModelsTableCard inherits Rectangle {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
                 spacing: UiTokens.space-sm;
-                Text { text: model.model-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 650; width: 150px; overflow: elide; }
+                Text { text: model.model-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 150px; overflow: elide; }
                 Rectangle {
                     width: 72px;
                     height: 4px;
@@ -146,13 +146,13 @@ component ModelsTableCard inherits Rectangle {
                     border-radius: 2px;
                     Rectangle { width: max(1px, model.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
                 }
-                Text { text: model.input-label; color: model.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: model.cached-label; color: model.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: model.output-label; color: model.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: model.reasoning-label; color: model.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: model.total-label; color: model.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; font-weight: 700; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: model.cost-label + " · " + model.cost-evidence-label; color: model.cost-availability == "unavailable" ? UiTokens.text-secondary : (model.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: 11px; width: 140px; horizontal-alignment: right; overflow: elide; }
-                Text { text: model.event-label; color: UiTokens.text-secondary; font-size: 11px; width: 54px; horizontal-alignment: right; }
+                Text { text: model.input-label; color: model.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.cached-label; color: model.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.output-label; color: model.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.reasoning-label; color: model.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.total-label; color: model.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.cost-label + " · " + model.cost-evidence-label; color: model.cost-availability == "unavailable" ? UiTokens.text-secondary : (model.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 140px; horizontal-alignment: right; overflow: elide; }
+                Text { text: model.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 54px; horizontal-alignment: right; }
             }
         }
     }

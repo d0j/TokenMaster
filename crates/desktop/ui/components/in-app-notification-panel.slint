@@ -27,14 +27,14 @@ export component InAppNotificationPanel inherits Rectangle {
                 Text {
                     text: @tr("Expiry reminder");
                     color: UiTokens.text-primary;
-                    font-size: 17px;
-                    font-weight: 800;
+                    font-size: UiTokens.text-title;
+                    font-weight: UiTokens.weight-bold;
                 }
                 Text {
                     text: root.count-label;
                     color: UiTokens.accent;
-                    font-size: 11px;
-                    font-weight: 700;
+                    font-size: UiTokens.text-body;
+                    font-weight: UiTokens.weight-medium;
                 }
             }
             Button {
@@ -48,7 +48,7 @@ export component InAppNotificationPanel inherits Rectangle {
             height: 32px;
             text: @tr("These reminders were applied in TokenMaster. Open Notifications for the complete current inventory.");
             color: UiTokens.text-secondary;
-            font-size: 11px;
+            font-size: UiTokens.text-body;
             wrap: word-wrap;
         }
 
@@ -77,34 +77,34 @@ export component InAppNotificationPanel inherits Rectangle {
                             Text {
                                 text: notification.kind-label;
                                 color: UiTokens.text-primary;
-                                font-size: 12px;
-                                font-weight: 750;
+                                font-size: UiTokens.text-body;
+                                font-weight: UiTokens.weight-bold;
                                 horizontal-stretch: 1;
                                 overflow: elide;
                             }
                             Text {
                                 text: @tr("Qty ") + notification.quantity-label;
                                 color: UiTokens.accent;
-                                font-size: 11px;
-                                font-weight: 700;
+                                font-size: UiTokens.text-body;
+                                font-weight: UiTokens.weight-medium;
                             }
                         }
                         Text {
                             text: notification.expiry-label + " · " + notification.lead-label;
                             color: UiTokens.text-primary;
-                            font-size: 11px;
+                            font-size: UiTokens.text-body;
                             overflow: elide;
                         }
                         Text {
                             text: notification.due-label + " · " + notification.delivered-label;
                             color: UiTokens.text-secondary;
-                            font-size: 10px;
+                            font-size: UiTokens.text-caption;
                             overflow: elide;
                         }
                         Text {
                             text: notification.benefit-label;
                             color: UiTokens.text-secondary;
-                            font-size: 10px;
+                            font-size: UiTokens.text-caption;
                             overflow: elide;
                         }
                     }

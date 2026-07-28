@@ -28,21 +28,21 @@ component ActivityHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: @tr("Recent activity"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
-                Text { text: @tr("Newest archive events · {0}", root.context-label); color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+                Text { text: @tr("Recent activity"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
+                Text { text: @tr("Newest archive events · {0}", root.context-label); color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
             }
             SectionState { state: root.state; reasons: root.reasons; }
         }
         if root.narrow: VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: root.loaded-label + " · " + root.page-status-label; color: UiTokens.accent; font-size: 11px; overflow: elide; }
-            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
+            Text { text: root.loaded-label + " · " + root.page-status-label; color: UiTokens.accent; font-size: UiTokens.text-body; overflow: elide; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
         }
         if !root.narrow: HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; }
-            Text { text: root.page-status-label; color: UiTokens.accent; font-size: 12px; horizontal-stretch: 1; }
-            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.page-status-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
         }
     }
 }
@@ -67,23 +67,23 @@ component ActivityTableCard inherits Rectangle {
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: @tr("Latest events"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Latest events"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
         if root.rows.length == 0: Text {
             text: root.empty-message;
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
             height: 34px;
         }
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: @tr("UTC time"); color: UiTokens.text-secondary; font-size: 10px; width: 205px; }
-            Text { text: @tr("Model"); color: UiTokens.text-secondary; font-size: 10px; width: 150px; }
-            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("UTC time"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 205px; }
+            Text { text: @tr("Model"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 150px; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
         }
         for item[i] in root.rows: Rectangle {
             height: root.narrow ? 64px : 42px;
@@ -99,14 +99,14 @@ component ActivityTableCard inherits Rectangle {
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    Text { text: item.time-label; color: UiTokens.text-primary; font-size: 11px; width: 205px; overflow: elide; }
-                    Text { text: item.model-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 700; horizontal-stretch: 1; overflow: elide; }
-                    Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 72px; horizontal-alignment: right; }
+                    Text { text: item.time-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 205px; overflow: elide; }
+                    Text { text: item.model-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 72px; horizontal-alignment: right; }
                 }
                 Text {
                     text: @tr("In {0} · Cache {1} · Out {2} · Reason {3}", item.input-label, item.cached-label, item.output-label, item.reasoning-label);
                     color: UiTokens.text-secondary;
-                    font-size: 10px;
+                    font-size: UiTokens.text-caption;
                     overflow: elide;
                 }
             }
@@ -114,13 +114,13 @@ component ActivityTableCard inherits Rectangle {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
                 spacing: UiTokens.space-sm;
-                Text { text: item.time-label; color: UiTokens.text-primary; font-size: 11px; width: 205px; overflow: elide; }
-                Text { text: item.model-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 650; width: 150px; overflow: elide; }
-                Text { text: item.input-label; color: item.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: item.cached-label; color: item.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: item.output-label; color: item.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: item.reasoning-label; color: item.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; font-weight: 700; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.time-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 205px; overflow: elide; }
+                Text { text: item.model-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 150px; overflow: elide; }
+                Text { text: item.input-label; color: item.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.cached-label; color: item.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.output-label; color: item.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.reasoning-label; color: item.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; horizontal-alignment: right; }
             }
         }
     }
@@ -147,20 +147,20 @@ component ActivityRhythmCard inherits Rectangle {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
         HorizontalLayout {
-            Text { text: root.title; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; horizontal-stretch: 1; }
-            Text { text: root.time-zone-label; color: UiTokens.text-secondary; font-size: 11px; }
+            Text { text: root.title; color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; horizontal-stretch: 1; }
+            Text { text: root.time-zone-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
             SectionState { state: root.state; reasons: root.reasons; }
         }
         Text {
             text: root.range-label + " · " + root.evidence-label;
             color: UiTokens.text-secondary;
-            font-size: 10px;
+            font-size: UiTokens.text-caption;
             overflow: elide;
         }
         if root.rows.length == 0: Text {
             text: root.state == "waiting" ? @tr("Waiting for rhythm evidence") : @tr("Rhythm evidence unavailable");
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
             vertical-stretch: 1;
         }
         if root.rows.length > 0: HorizontalLayout {
@@ -170,8 +170,8 @@ component ActivityRhythmCard inherits Rectangle {
                 spacing: 2px;
                 accessible-role: list-item;
                 accessible-label: item.label + " " + item.tokens-label + " " + item.events-label + " " + item.exposure-label;
-                Text { text: item.tokens-label; color: UiTokens.text-secondary; font-size: 8px; horizontal-alignment: center; overflow: elide; }
-                Text { text: item.events-label; color: UiTokens.text-secondary; font-size: 7px; horizontal-alignment: center; overflow: elide; }
+                Text { text: item.tokens-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-alignment: center; overflow: elide; }
+                Text { text: item.events-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-alignment: center; overflow: elide; }
                 Rectangle {
                     vertical-stretch: 1;
                     background: UiTokens.surface-subtle;
@@ -185,8 +185,8 @@ component ActivityRhythmCard inherits Rectangle {
                         border-radius: 2px;
                     }
                 }
-                Text { text: item.label; color: UiTokens.text-primary; font-size: 9px; horizontal-alignment: center; }
-                Text { text: item.exposure-label; color: UiTokens.text-secondary; font-size: 7px; horizontal-alignment: center; overflow: elide; }
+                Text { text: item.label; color: UiTokens.text-primary; font-size: UiTokens.text-caption; horizontal-alignment: center; }
+                Text { text: item.exposure-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-alignment: center; overflow: elide; }
             }
         }
     }

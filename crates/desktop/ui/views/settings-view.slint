@@ -194,7 +194,7 @@ export component SettingsView inherits Rectangle {
         padding: UiTokens.space;
         spacing: UiTokens.space;
 
-        Text { text: @tr("Settings"); color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
+        Text { text: @tr("Settings"); color: UiTokens.text-primary; font-size: UiTokens.text-display; font-weight: UiTokens.weight-medium; }
         Text { text: @tr("Settings health: {0}", root.settings-health); color: UiTokens.text-secondary; }
 
         reminder-card := Rectangle {
@@ -206,7 +206,7 @@ export component SettingsView inherits Rectangle {
             reminder-content := VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: @tr("Expiry reminders"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: @tr("Expiry reminders"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
                 Text { text: @tr("Sync state: {0}", root.reminder-sync-state); color: UiTokens.text-secondary; accessible-label: @tr("Reminder synchronization state {0}", root.reminder-sync-state); }
                 reminder-enabled-control := CheckBox { text: @tr("Enable expiry reminders"); checked: root.reminder-enabled; accessible-label: @tr("Enable expiry reminders"); toggled => { root.reminder-enabled-edited(self.checked); } }
                 Text { text: @tr("Recommended lead times"); color: UiTokens.text-secondary; }
@@ -244,7 +244,7 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: @tr("Automatic backup policy"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: @tr("Automatic backup policy"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
                 enabled := CheckBox { text: @tr("Enable periodic backups"); checked <=> root.periodic-enabled; accessible-label: @tr("Enable periodic backups"); }
                 GridLayout {
                     spacing: UiTokens.space-sm;
@@ -269,7 +269,7 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: @tr("Start with Windows"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: @tr("Start with Windows"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
                 Text {
                     text: root.current-user-startup-status == "disabled" ? @tr("Disabled. TokenMaster will not start when you sign in.")
                         : root.current-user-startup-status == "enabled_verified" ? @tr("Enabled and verified for this executable.")
@@ -317,7 +317,7 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: @tr("Portable configuration"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: @tr("Portable configuration"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
                     Button { text: @tr("Export configuration"); accessible-label: @tr("Export TokenMaster configuration"); clicked => { root.export-config(); } }
@@ -349,7 +349,7 @@ export component SettingsView inherits Rectangle {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
                 HorizontalLayout {
-                    Text { text: @tr("Dashboard board"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; horizontal-stretch: 1; }
+                    Text { text: @tr("Dashboard board"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; }
                     Button {
                         text: @tr("Reset board");
                         accessible-label: @tr("Reset dashboard board");
@@ -370,7 +370,7 @@ export component SettingsView inherits Rectangle {
                     if root.settings-layout-mode == "narrow": VerticalLayout {
                         padding: UiTokens.space-xs;
                         spacing: UiTokens.space-xs;
-                        Text { text: row.label; color: UiTokens.text-primary; font-weight: 650; }
+                        Text { text: row.label; color: UiTokens.text-primary; font-weight: UiTokens.weight-medium; }
                         HorizontalLayout {
                             spacing: UiTokens.space-xs;
                             Button { text: @tr("Up"); enabled: row.can-move-up; accessible-label: @tr("Move {0} up", row.label); clicked => { root.move-dashboard-board-row(index, -1); } }
@@ -383,7 +383,7 @@ export component SettingsView inherits Rectangle {
                         padding-left: UiTokens.space-sm;
                         padding-right: UiTokens.space-sm;
                         spacing: UiTokens.space-sm;
-                        Text { text: row.label; color: UiTokens.text-primary; font-weight: 650; horizontal-stretch: 1; vertical-alignment: center; }
+                        Text { text: row.label; color: UiTokens.text-primary; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; vertical-alignment: center; }
                         Button { text: @tr("Up"); enabled: row.can-move-up; accessible-label: @tr("Move {0} up", row.label); clicked => { root.move-dashboard-board-row(index, -1); } }
                         Button { text: @tr("Down"); enabled: row.can-move-down; accessible-label: @tr("Move {0} down", row.label); clicked => { root.move-dashboard-board-row(index, 1); } }
                         CheckBox { text: @tr("Visible"); checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: @tr("Show {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
@@ -392,7 +392,7 @@ export component SettingsView inherits Rectangle {
                 }
             }
         }
-        Text { text: root.reduced-motion ? @tr("Reduced motion enabled") : @tr("Reduced motion ready"); color: UiTokens.text-secondary; font-size: 12px; }
+        Text { text: root.reduced-motion ? @tr("Reduced motion enabled") : @tr("Reduced motion ready"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
         Rectangle { vertical-stretch: 1; background: transparent; }
         }
     }

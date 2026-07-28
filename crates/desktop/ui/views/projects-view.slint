@@ -41,11 +41,11 @@ component ProjectsHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: @tr("Projects"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: @tr("Projects"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
                 Text {
                     text: @tr("Recent usage · {0} · {1}", root.usage-range-label, root.usage-time-zone-label);
                     color: UiTokens.text-secondary;
-                    font-size: 11px;
+                    font-size: UiTokens.text-body;
                     overflow: elide;
                 }
             }
@@ -53,21 +53,21 @@ component ProjectsHeaderCard inherits Rectangle {
         }
         if root.narrow: VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: root.usage-evidence-label + " · " + root.loaded-label + " · " + root.completeness-label; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
-            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: 11px; overflow: elide; }
-            Text { text: root.code-evidence-label + " · " + root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+            Text { text: root.usage-evidence-label + " · " + root.loaded-label + " · " + root.completeness-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
+            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: UiTokens.text-body; overflow: elide; }
+            Text { text: root.code-evidence-label + " · " + root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
         }
         if !root.narrow: HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: root.usage-evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
-            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 700; }
-            Text { text: root.completeness-label; color: UiTokens.accent; font-size: 11px; horizontal-stretch: 1; }
+            Text { text: root.usage-evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
         }
         if !root.narrow: HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: 11px; }
-            Text { text: root.code-evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
-            Text { text: root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
+            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: UiTokens.text-body; }
+            Text { text: root.code-evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; overflow: elide; }
         }
         HorizontalLayout {
             spacing: UiTokens.space;
@@ -94,26 +94,26 @@ component ProjectsTableCard inherits Rectangle {
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: @tr("Usage by project"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Usage by project"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
         if root.rows.length == 0: Text {
             text: root.state == "waiting" ? @tr("Waiting for project evidence") : (root.state == "ready" ? @tr("No project usage in this range") : @tr("Project evidence unavailable"));
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
             height: 34px;
         }
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: @tr("Project"); color: UiTokens.text-secondary; font-size: 10px; width: 128px; }
-            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: 10px; width: 60px; }
-            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: 10px; width: 62px; horizontal-alignment: right; }
-            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: 10px; width: 96px; horizontal-alignment: right; }
-            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: 10px; width: 42px; horizontal-alignment: right; }
-            Text { text: @tr("Commits"); color: UiTokens.text-secondary; font-size: 10px; width: 48px; horizontal-alignment: right; }
-            Text { text: @tr("+Added"); color: UiTokens.text-secondary; font-size: 10px; width: 54px; horizontal-alignment: right; }
-            Text { text: @tr("-Removed"); color: UiTokens.text-secondary; font-size: 10px; width: 58px; horizontal-alignment: right; }
-            Text { text: @tr("Net"); color: UiTokens.text-secondary; font-size: 10px; width: 52px; horizontal-alignment: right; }
-            Text { text: @tr("Cost / 100 added product-code lines"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Project"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 128px; }
+            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 60px; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 62px; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 96px; horizontal-alignment: right; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 42px; horizontal-alignment: right; }
+            Text { text: @tr("Commits"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 48px; horizontal-alignment: right; }
+            Text { text: @tr("+Added"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 54px; horizontal-alignment: right; }
+            Text { text: @tr("-Removed"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 58px; horizontal-alignment: right; }
+            Text { text: @tr("Net"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 52px; horizontal-alignment: right; }
+            Text { text: @tr("Cost / 100 added product-code lines"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
         }
         for project[i] in root.rows: Rectangle {
             height: root.narrow ? 106px : 56px;
@@ -129,9 +129,9 @@ component ProjectsTableCard inherits Rectangle {
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    Text { text: project.project-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; horizontal-stretch: 1; overflow: elide; }
-                    Text { text: project.total-label; color: project.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 72px; horizontal-alignment: right; }
-                    Text { text: project.cost-label + " · " + project.cost-evidence-label; color: project.cost-availability == "unavailable" ? UiTokens.text-secondary : (project.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: 11px; width: 140px; horizontal-alignment: right; overflow: elide; }
+                    Text { text: project.project-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: project.total-label; color: project.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 72px; horizontal-alignment: right; }
+                    Text { text: project.cost-label + " · " + project.cost-evidence-label; color: project.cost-availability == "unavailable" ? UiTokens.text-secondary : (project.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 140px; horizontal-alignment: right; overflow: elide; }
                 }
                 Rectangle {
                     height: 3px;
@@ -142,19 +142,19 @@ component ProjectsTableCard inherits Rectangle {
                 Text {
                     text: @tr("Recent · In {0} · Cache {1} · Out {2} · Reason {3} · {4} events", project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.event-label);
                     color: UiTokens.text-secondary;
-                    font-size: 10px;
+                    font-size: UiTokens.text-caption;
                     overflow: elide;
                 }
                 Text {
                     text: @tr("Today code · {0} · {1} · {2} commits · {3} / {4} · net {5}", project.code-status-label, project.repository-label, project.commits-label, project.added-label, project.removed-label, project.net-label);
                     color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary;
-                    font-size: 10px;
+                    font-size: UiTokens.text-caption;
                     overflow: elide;
                 }
                 Text {
                     text: project.efficiency-label + " · " + project.code-evidence-label + (project.efficiency-reason-label == "" ? "" : " · " + project.efficiency-reason-label);
                     color: project.code-complete ? UiTokens.text-secondary : UiTokens.accent;
-                    font-size: 10px;
+                    font-size: UiTokens.text-caption;
                     overflow: elide;
                 }
             }
@@ -165,7 +165,7 @@ component ProjectsTableCard inherits Rectangle {
                 HorizontalLayout {
                     height: 32px;
                     spacing: UiTokens.space-sm;
-                    Text { text: project.project-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 650; width: 128px; overflow: elide; }
+                    Text { text: project.project-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 128px; overflow: elide; }
                     Rectangle {
                         width: 60px;
                         height: 4px;
@@ -174,19 +174,19 @@ component ProjectsTableCard inherits Rectangle {
                         border-radius: 2px;
                         Rectangle { width: max(1px, project.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
                     }
-                    Text { text: project.total-label; color: project.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; font-weight: 700; width: 62px; horizontal-alignment: right; }
-                    Text { text: project.cost-label; color: project.cost-availability == "unavailable" ? UiTokens.text-secondary : (project.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: 11px; width: 96px; horizontal-alignment: right; }
-                    Text { text: project.event-label; color: UiTokens.text-secondary; font-size: 11px; width: 42px; horizontal-alignment: right; }
-                    Text { text: project.commits-label; color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary; font-size: 11px; width: 48px; horizontal-alignment: right; }
-                    Text { text: project.added-label; color: project.code-available ? UiTokens.ready : UiTokens.text-secondary; font-size: 11px; width: 54px; horizontal-alignment: right; }
-                    Text { text: project.removed-label; color: project.code-available ? UiTokens.degraded : UiTokens.text-secondary; font-size: 11px; width: 58px; horizontal-alignment: right; }
-                    Text { text: project.net-label; color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary; font-size: 11px; width: 52px; horizontal-alignment: right; }
-                    Text { text: project.efficiency-label; color: project.efficiency-label == "—" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
+                    Text { text: project.total-label; color: project.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 62px; horizontal-alignment: right; }
+                    Text { text: project.cost-label; color: project.cost-availability == "unavailable" ? UiTokens.text-secondary : (project.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 96px; horizontal-alignment: right; }
+                    Text { text: project.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 42px; horizontal-alignment: right; }
+                    Text { text: project.commits-label; color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 48px; horizontal-alignment: right; }
+                    Text { text: project.added-label; color: project.code-available ? UiTokens.ready : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 54px; horizontal-alignment: right; }
+                    Text { text: project.removed-label; color: project.code-available ? UiTokens.degraded : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 58px; horizontal-alignment: right; }
+                    Text { text: project.net-label; color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 52px; horizontal-alignment: right; }
+                    Text { text: project.efficiency-label; color: project.efficiency-label == "—" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
                 }
                 Text {
                     text: @tr("Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}", project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.cost-evidence-label, project.code-status-label, project.repository-label, project.code-evidence-label, project.efficiency-reason-label);
                     color: UiTokens.text-secondary;
-                    font-size: 9px;
+                    font-size: UiTokens.text-caption;
                     overflow: elide;
                 }
             }

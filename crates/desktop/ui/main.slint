@@ -41,14 +41,14 @@ component ShellTab inherits Rectangle {
         Text {
             text: root.glyph;
             color: root.selected ? UiTokens.accent : UiTokens.text-secondary;
-            font-size: 13px;
-            font-weight: 750;
+            font-size: UiTokens.text-body;
+            font-weight: UiTokens.weight-bold;
             horizontal-alignment: center;
         }
         Text {
             text: root.label;
             color: root.selected ? UiTokens.text-primary : UiTokens.text-secondary;
-            font-size: 10px;
+            font-size: UiTokens.text-caption;
             horizontal-alignment: center;
             overflow: elide;
         }
@@ -387,14 +387,14 @@ export component MainWindow inherits Window {
                 Text {
                     text: @tr("TokenMaster");
                     color: UiTokens.degraded;
-                    font-size: 17px;
-                    font-weight: 800;
+                    font-size: UiTokens.text-title;
+                    font-weight: UiTokens.weight-bold;
                     vertical-alignment: center;
                 }
                 Text {
                     text: @tr("Local usage intelligence") + " · " + root.active-route-label;
                     color: UiTokens.text-secondary;
-                    font-size: 10px;
+                    font-size: UiTokens.text-caption;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     overflow: elide;

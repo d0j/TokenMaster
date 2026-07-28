@@ -57,7 +57,7 @@ export component DataHealthView inherits Rectangle {
 
         HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: @tr("Data & Recovery"); color: UiTokens.text-primary; font-size: 24px; font-weight: 700; horizontal-stretch: 1; }
+            Text { text: @tr("Data & Recovery"); color: UiTokens.text-primary; font-size: UiTokens.text-display; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; }
             Text { text: root.health; color: root.health == "healthy" ? UiTokens.ready : root.health == "degraded" ? UiTokens.degraded : UiTokens.unavailable; vertical-alignment: center; }
         }
 
@@ -108,11 +108,11 @@ export component DataHealthView inherits Rectangle {
                         }
                     }
                 }
-                Text { text: @tr("Use 12–128 Unicode characters. Values are cleared after admission."); color: UiTokens.text-secondary; font-size: 12px; }
+                Text { text: @tr("Use 12–128 Unicode characters. Values are cleared after admission."); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
             }
         }
 
-        Text { text: @tr("Restore points"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+        Text { text: @tr("Restore points"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
         if root.restore-confirmation-visible: Rectangle {
             height: 78px;
             background: UiTokens.surface-raised;
@@ -146,6 +146,6 @@ export component DataHealthView inherits Rectangle {
                 }
             }
         }
-        Text { text: @tr("Generation {0}", root.generation) + (root.latest-failure-code == "" ? "" : @tr(" · Latest failure {0}", root.latest-failure-code)); color: UiTokens.text-secondary; font-size: 12px; }
+        Text { text: @tr("Generation {0}", root.generation) + (root.latest-failure-code == "" ? "" : @tr(" · Latest failure {0}", root.latest-failure-code)); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
     }
 }

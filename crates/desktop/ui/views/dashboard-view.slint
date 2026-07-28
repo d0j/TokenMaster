@@ -20,8 +20,8 @@ component CardHeader inherits Rectangle {
         Text {
             text: root.title;
             color: UiTokens.text-secondary;
-            font-size: 11px;
-            font-weight: 700;
+            font-size: UiTokens.text-body;
+            font-weight: UiTokens.weight-medium;
             letter-spacing: 0.8px;
             horizontal-stretch: 1;
             vertical-alignment: center;
@@ -141,7 +141,7 @@ component InitialImportCard inherits Rectangle {
         }
         VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: root.phase-label; color: UiTokens.degraded; font-size: 11px; font-weight: 750; letter-spacing: 0.6px; }
+            Text { text: root.phase-label; color: UiTokens.degraded; font-size: UiTokens.text-body; font-weight: UiTokens.weight-bold; letter-spacing: 0.6px; }
             if root.progress-known: HorizontalLayout {
                 spacing: UiTokens.space-sm;
                 Rectangle {
@@ -155,9 +155,9 @@ component InitialImportCard inherits Rectangle {
                         border-radius: 3px;
                     }
                 }
-                Text { text: root.progress-label; color: UiTokens.text-secondary; font-size: 11px; width: 92px; horizontal-alignment: right; }
+                Text { text: root.progress-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 92px; horizontal-alignment: right; }
             }
-            if !root.progress-known: Text { text: @tr("TokenMaster keeps available safe data visible while it imports the rest."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
+            if !root.progress-known: Text { text: @tr("TokenMaster keeps available safe data visible while it imports the rest."); color: UiTokens.text-secondary; font-size: UiTokens.text-body; wrap: word-wrap; }
         }
     }
 }
@@ -182,7 +182,7 @@ component PlanUsageCard inherits Rectangle {
         if root.quotas.length == 0: Text {
             text: root.section.state == "waiting" ? @tr("Waiting for quota evidence") : @tr("Quota evidence unavailable");
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
         }
         for quota in root.quotas: QuotaRowView { quota-data: quota; }
         for benefit in root.benefits: Rectangle {
@@ -195,19 +195,19 @@ component PlanUsageCard inherits Rectangle {
                 padding: UiTokens.space-sm;
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
-                    Text { text: @tr("Banked resets"); color: UiTokens.text-primary; font-weight: 700; horizontal-stretch: 1; }
-                    Text { text: benefit.reset-quantity-label; color: UiTokens.accent; font-size: 18px; font-weight: 800; }
+                    Text { text: @tr("Banked resets"); color: UiTokens.text-primary; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; }
+                    Text { text: benefit.reset-quantity-label; color: UiTokens.accent; font-size: UiTokens.text-title; font-weight: UiTokens.weight-bold; }
                 }
                 Text {
                     text: benefit.expiry-label + " · " + benefit.reminder-label;
                     color: UiTokens.text-secondary;
-                    font-size: 11px;
+                    font-size: UiTokens.text-body;
                     overflow: elide;
                 }
                 Text {
                     text: @tr("Credits {0} · Temporary {1} · Unavailable {2}", benefit.credit-quantity-label, benefit.temporary-quantity-label, benefit.unavailable-quantity-label);
                     color: UiTokens.text-secondary;
-                    font-size: 11px;
+                    font-size: UiTokens.text-body;
                     overflow: elide;
                 }
             }
@@ -243,8 +243,8 @@ component CodeOutputCard inherits Rectangle {
             MetricValue { label: @tr("-Removed"); value: root.removed; availability: root.section.state; horizontal-stretch: 1; }
             MetricValue { label: @tr("Net"); value: root.net; availability: root.section.state; horizontal-stretch: 1; }
         }
-        Text { text: root.efficiency; color: UiTokens.accent; font-size: 12px; }
-        Text { text: root.evidence; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+        Text { text: root.efficiency; color: UiTokens.accent; font-size: UiTokens.text-body; }
+        Text { text: root.evidence; color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
     }
 }
 
@@ -279,8 +279,8 @@ component TrendCard inherits Rectangle {
                 spacing: UiTokens.space-lg;
                 VerticalLayout {
                     spacing: UiTokens.space-xs;
-                    Text { text: @tr("Today"); color: UiTokens.text-secondary; font-size: 11px; }
-                    Text { text: root.points[0].date-label; color: UiTokens.text-primary; font-size: 12px; overflow: elide; }
+                    Text { text: @tr("Today"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+                    Text { text: root.points[0].date-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; overflow: elide; }
                 }
                 MetricValue {
                     label: @tr("Tokens");
@@ -307,8 +307,8 @@ component TrendCard inherits Rectangle {
             Rectangle { x: UiTokens.space-sm; y: parent.height * 0.25; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border.with-alpha(0.55); }
             Rectangle { x: UiTokens.space-sm; y: parent.height * 0.5; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border.with-alpha(0.55); }
             Rectangle { x: UiTokens.space-sm; y: parent.height * 0.75; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border.with-alpha(0.55); }
-            Text { x: UiTokens.space-sm; y: 3px; text: root.token-axis; color: UiTokens.text-secondary.with-alpha(0.65); font-size: 8px; }
-            Text { x: parent.width - self.width - UiTokens.space-sm; y: 3px; text: root.cost-axis; color: UiTokens.text-secondary.with-alpha(0.65); font-size: 8px; }
+            Text { x: UiTokens.space-sm; y: 3px; text: root.token-axis; color: UiTokens.text-secondary.with-alpha(0.65); font-size: UiTokens.text-caption; }
+            Text { x: parent.width - self.width - UiTokens.space-sm; y: 3px; text: root.cost-axis; color: UiTokens.text-secondary.with-alpha(0.65); font-size: UiTokens.text-caption; }
             Path {
                 x: UiTokens.space-sm;
                 y: 10px;
@@ -395,8 +395,8 @@ component TrendCard inherits Rectangle {
                         VerticalLayout {
                             padding: UiTokens.space-xs;
                             spacing: 1px;
-                            Text { text: point.date-label; color: UiTokens.text-primary; font-size: 10px; overflow: elide; }
-                            Text { text: point.tokens-label + " · " + point.cost-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
+                            Text { text: point.date-label; color: UiTokens.text-primary; font-size: UiTokens.text-caption; overflow: elide; }
+                            Text { text: point.tokens-label + " · " + point.cost-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
                         }
                     }
                     // The newest column is the one a reader looks for first, so it is
@@ -408,7 +408,7 @@ component TrendCard inherits Rectangle {
                         color: i == root.points.length - 1
                             ? UiTokens.accent
                             : UiTokens.text-secondary.with-alpha(0.65);
-                        font-size: 8px;
+                        font-size: UiTokens.text-caption;
                         font-weight: i == root.points.length - 1 ? 700 : 400;
                     }
                 }
@@ -443,9 +443,9 @@ component SessionsCard inherits Rectangle {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
                 spacing: UiTokens.space-sm;
-                Text { text: row.time-label; color: UiTokens.text-secondary; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
-                Text { width: 72px; text: row.tokens-label; color: UiTokens.text-primary; font-size: 11px; horizontal-alignment: right; overflow: elide; }
-                Text { width: 82px; text: row.cost-label; color: UiTokens.text-secondary; font-size: 11px; horizontal-alignment: right; overflow: elide; }
+                Text { text: row.time-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; horizontal-stretch: 1; overflow: elide; }
+                Text { width: 72px; text: row.tokens-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-alignment: right; overflow: elide; }
+                Text { width: 82px; text: row.cost-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; horizontal-alignment: right; overflow: elide; }
             }
         }
     }
@@ -470,7 +470,7 @@ component ActivityCard inherits Rectangle {
         for row in root.rows: HorizontalLayout {
             height: 20px;
             spacing: UiTokens.space-sm;
-            Text { text: row.label; color: UiTokens.text-secondary; font-size: 11px; width: 74px; overflow: elide; }
+            Text { text: row.label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 74px; overflow: elide; }
             Rectangle {
                 height: 6px;
                 horizontal-stretch: 1;
@@ -478,7 +478,7 @@ component ActivityCard inherits Rectangle {
                 border-radius: 3px;
                 Rectangle { width: row.ratio * parent.width; background: UiTokens.accent-secondary; border-radius: 3px; }
             }
-            Text { text: row.count-label; color: UiTokens.text-primary; font-size: 11px; width: 36px; horizontal-alignment: right; }
+            Text { text: row.count-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 36px; horizontal-alignment: right; }
         }
     }
 }
@@ -502,7 +502,7 @@ component ModelsCard inherits Rectangle {
         for row in root.rows: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: row.label; color: UiTokens.text-primary; font-size: 11px; width: 130px; overflow: elide; }
+            Text { text: row.label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 130px; overflow: elide; }
             Rectangle {
                 height: 6px;
                 horizontal-stretch: 1;
@@ -510,8 +510,8 @@ component ModelsCard inherits Rectangle {
                 border-radius: 3px;
                 Rectangle { width: row.tokens-ratio * parent.width; background: UiTokens.accent-tertiary; border-radius: 3px; }
             }
-            Text { text: row.tokens-label; color: UiTokens.text-primary; font-size: 11px; width: 60px; horizontal-alignment: right; }
-            Text { text: row.cost-label; color: UiTokens.text-secondary; font-size: 11px; width: 76px; horizontal-alignment: right; }
+            Text { text: row.tokens-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 60px; horizontal-alignment: right; }
+            Text { text: row.cost-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 76px; horizontal-alignment: right; }
         }
     }
 }
@@ -532,7 +532,7 @@ component CollapsedSectionCard inherits Rectangle {
         padding: UiTokens.space;
         spacing: UiTokens.space-xs;
         CardHeader { title: @tr("{0} (collapsed)", root.title); state: root.state; reasons: root.reasons; }
-        Text { text: @tr("Section collapsed; its data remains available."); color: UiTokens.text-secondary; font-size: 11px; }
+        Text { text: @tr("Section collapsed; its data remains available."); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
     }
 }
 

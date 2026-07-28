@@ -22,15 +22,15 @@ component CompactQuotaRow inherits Rectangle {
             Text {
                 text: root.quota.label;
                 color: UiTokens.text-primary;
-                font-size: 13px;
-                font-weight: 700;
+                font-size: UiTokens.text-body;
+                font-weight: UiTokens.weight-medium;
                 horizontal-stretch: 1;
                 overflow: elide;
             }
             Text {
                 text: root.quota.usage-label;
                 color: UiTokens.text-secondary;
-                font-size: 11px;
+                font-size: UiTokens.text-body;
             }
         }
         if root.quota.ratio-known: Rectangle {
@@ -46,7 +46,7 @@ component CompactQuotaRow inherits Rectangle {
         if !root.quota.ratio-known: Text {
             text: @tr("Usage ratio unavailable");
             color: UiTokens.unavailable;
-            font-size: 11px;
+            font-size: UiTokens.text-body;
             accessible-label: @tr("Usage ratio unavailable");
         }
         HorizontalLayout {
@@ -54,21 +54,21 @@ component CompactQuotaRow inherits Rectangle {
             Text {
                 text: root.quota.units-label == "" ? root.quota.remaining-label : root.quota.units-label;
                 color: UiTokens.text-secondary;
-                font-size: 11px;
+                font-size: UiTokens.text-body;
                 horizontal-stretch: 1;
                 overflow: elide;
             }
             Text {
                 text: root.quota.reset-label;
                 color: UiTokens.text-secondary;
-                font-size: 11px;
+                font-size: UiTokens.text-body;
                 overflow: elide;
             }
         }
         Text {
             text: root.quota.evidence-label;
             color: UiTokens.text-secondary;
-            font-size: 10px;
+            font-size: UiTokens.text-caption;
             overflow: elide;
         }
     }
@@ -105,8 +105,8 @@ export component CompactWidgetView inherits Rectangle {
                 VerticalLayout {
                     spacing: UiTokens.space-xs;
                     horizontal-stretch: 1;
-                    Text { text: @tr("TokenMaster"); color: UiTokens.text-primary; font-size: 18px; font-weight: 800; }
-                    Text { text: @tr("Current quota"); color: UiTokens.text-secondary; font-size: 11px; }
+                    Text { text: @tr("TokenMaster"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-bold; }
+                    Text { text: @tr("Current quota"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
                 }
                 SectionState { state: root.state; reasons: root.reasons; }
             }

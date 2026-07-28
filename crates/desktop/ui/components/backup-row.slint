@@ -27,12 +27,12 @@ export component BackupRow inherits Rectangle {
             Text {
                 text: root.created-label + " · " + root.purpose-label;
                 color: UiTokens.text-primary;
-                font-weight: 650;
+                font-weight: UiTokens.weight-medium;
             }
             Text {
                 text: root.size-label + " · " + root.schema-label + " · " + root.compression-label;
                 color: UiTokens.text-secondary;
-                font-size: 12px;
+                font-size: UiTokens.text-body;
             }
         }
         Text {

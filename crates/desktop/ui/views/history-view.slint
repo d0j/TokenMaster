@@ -40,11 +40,11 @@ component HistoryHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: @tr("Usage History"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: @tr("Usage History"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
                 Text {
                     text: root.range-label + " · " + root.time-zone-label;
                     color: UiTokens.text-secondary;
-                    font-size: 11px;
+                    font-size: UiTokens.text-body;
                     overflow: elide;
                 }
             }
@@ -100,11 +100,11 @@ component HistoryHeaderCard inherits Rectangle {
             Text {
                 text: root.range-pending ? @tr("Loading history…") : @tr("Selected range");
                 color: UiTokens.text-secondary;
-                font-size: 11px;
+                font-size: UiTokens.text-body;
                 horizontal-stretch: 1;
             }
         }
-        Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
+        Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
         HorizontalLayout {
             spacing: UiTokens.space;
             MetricValue { label: @tr("Total tokens"); value: root.total-tokens; availability: root.total-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
@@ -151,13 +151,13 @@ component HistoryTrendCard inherits Rectangle {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
         HorizontalLayout {
-            Text { text: @tr("Daily trend"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; horizontal-stretch: 1; }
+            Text { text: @tr("Daily trend"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; horizontal-stretch: 1; }
             SectionState { state: root.state; reasons: root.reasons; }
         }
         if root.rows.length == 0: Text {
             text: root.state == "waiting" ? @tr("Waiting for history evidence") : @tr("History evidence unavailable");
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
         }
         Rectangle {
             min-height: 104px;
@@ -221,26 +221,26 @@ component HistoryTableCard inherits Rectangle {
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: @tr("Daily details"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Daily details"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
         if root.narrow: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: @tr("Date"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; }
-            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: 10px; width: 54px; horizontal-alignment: right; }
-            Text { text: @tr("Tokens"); color: UiTokens.text-secondary; font-size: 10px; width: 70px; horizontal-alignment: right; }
-            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: 10px; width: 78px; horizontal-alignment: right; }
+            Text { text: @tr("Date"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 54px; horizontal-alignment: right; }
+            Text { text: @tr("Tokens"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 70px; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 78px; horizontal-alignment: right; }
         }
         if !root.narrow: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: @tr("Date"); color: UiTokens.text-secondary; font-size: 10px; width: 84px; }
-            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: 10px; width: 52px; horizontal-alignment: right; }
-            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: 10px; width: 78px; horizontal-alignment: right; }
+            Text { text: @tr("Date"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 84px; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 52px; horizontal-alignment: right; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 78px; horizontal-alignment: right; }
         }
         for row[i] in root.rows: Rectangle {
             height: 34px;
@@ -252,23 +252,23 @@ component HistoryTableCard inherits Rectangle {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
                 spacing: UiTokens.space-sm;
-                Text { text: row.date-label; color: UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; }
-                Text { text: row.event-label; color: UiTokens.text-secondary; font-size: 11px; width: 54px; horizontal-alignment: right; }
-                Text { text: row.total-label; color: row.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 70px; horizontal-alignment: right; }
-                Text { text: row.cost-label; color: row.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 78px; horizontal-alignment: right; }
+                Text { text: row.date-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+                Text { text: row.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 54px; horizontal-alignment: right; }
+                Text { text: row.total-label; color: row.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 70px; horizontal-alignment: right; }
+                Text { text: row.cost-label; color: row.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 78px; horizontal-alignment: right; }
             }
             if !root.narrow: HorizontalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
                 spacing: UiTokens.space-sm;
-                Text { text: row.date-label; color: UiTokens.text-primary; font-size: 11px; width: 84px; }
-                Text { text: row.event-label; color: UiTokens.text-secondary; font-size: 11px; width: 52px; horizontal-alignment: right; }
-                Text { text: row.input-label; color: row.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: row.cached-label; color: row.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: row.output-label; color: row.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: row.reasoning-label; color: row.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: row.total-label; color: row.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
-                Text { text: row.cost-label; color: row.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 78px; horizontal-alignment: right; }
+                Text { text: row.date-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 84px; }
+                Text { text: row.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 52px; horizontal-alignment: right; }
+                Text { text: row.input-label; color: row.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.cached-label; color: row.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.output-label; color: row.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.reasoning-label; color: row.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.total-label; color: row.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.cost-label; color: row.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 78px; horizontal-alignment: right; }
             }
         }
     }

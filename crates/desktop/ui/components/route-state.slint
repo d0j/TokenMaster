@@ -18,13 +18,13 @@ export component RouteState inherits Rectangle {
         Text {
             text: root.route-label;
             color: UiTokens.text-primary;
-            font-size: 26px;
-            font-weight: 700;
+            font-size: UiTokens.text-display;
+            font-weight: UiTokens.weight-medium;
         }
         Text {
             text: @tr("State: ") + root.state;
             color: root.state == "ready" ? UiTokens.ready : root.state == "degraded" ? UiTokens.degraded : root.state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
-            font-size: 16px;
+            font-size: UiTokens.text-subhead;
         }
         Text {
             text: root.reasons == "" ? @tr("No blocking reasons") : @tr("Reasons: ") + root.reasons;
@@ -35,7 +35,7 @@ export component RouteState inherits Rectangle {
         Text {
             text: @tr("Product generation ") + root.generation;
             color: UiTokens.text-secondary;
-            font-size: 12px;
+            font-size: UiTokens.text-body;
         }
     }
 }

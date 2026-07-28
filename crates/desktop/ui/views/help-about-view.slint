@@ -20,28 +20,28 @@ component HelpSectionCard inherits Rectangle {
         Text {
             text: root.title;
             color: UiTokens.text-primary;
-            font-size: 15px;
-            font-weight: 750;
+            font-size: UiTokens.text-subhead;
+            font-weight: UiTokens.weight-bold;
         }
         Text {
             text: root.summary;
             color: UiTokens.text-primary;
-            font-size: 11px;
+            font-size: UiTokens.text-body;
             wrap: word-wrap;
             vertical-stretch: 1;
         }
         Text {
             text: root.detail;
             color: UiTokens.text-secondary;
-            font-size: 10px;
+            font-size: UiTokens.text-caption;
             wrap: word-wrap;
             vertical-stretch: 1;
         }
         Text {
             text: root.status;
             color: UiTokens.accent;
-            font-size: 10px;
-            font-weight: 700;
+            font-size: UiTokens.text-caption;
+            font-weight: UiTokens.weight-medium;
             wrap: word-wrap;
         }
     }
@@ -61,19 +61,19 @@ component AttributionCard inherits Rectangle {
         Text {
             text: @tr("About and licenses");
             color: UiTokens.text-primary;
-            font-size: 15px;
-            font-weight: 750;
+            font-size: UiTokens.text-subhead;
+            font-weight: UiTokens.weight-bold;
         }
         Text {
             text: @tr("TokenMaster · Apache-2.0");
             color: UiTokens.text-primary;
-            font-size: 11px;
-            font-weight: 700;
+            font-size: UiTokens.text-body;
+            font-weight: UiTokens.weight-medium;
         }
         Text {
             text: @tr("WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.");
             color: UiTokens.text-secondary;
-            font-size: 10px;
+            font-size: UiTokens.text-caption;
             wrap: word-wrap;
         }
         AboutSlint {
@@ -116,19 +116,19 @@ export component HelpAboutView inherits Rectangle {
                     Text {
                         text: @tr("TokenMaster");
                         color: UiTokens.text-primary;
-                        font-size: 24px;
-                        font-weight: 800;
+                        font-size: UiTokens.text-display;
+                        font-weight: UiTokens.weight-bold;
                     }
                     Text {
                         text: @tr("Version {0} · local-first Windows desktop", root.product-version);
                         color: UiTokens.accent;
-                        font-size: 11px;
-                        font-weight: 700;
+                        font-size: UiTokens.text-body;
+                        font-weight: UiTokens.weight-medium;
                     }
                     Text {
                         text: @tr("Fast Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.");
                         color: UiTokens.text-secondary;
-                        font-size: 11px;
+                        font-size: UiTokens.text-body;
                         wrap: word-wrap;
                     }
                 }
