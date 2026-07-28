@@ -1232,11 +1232,38 @@ impl ApplicationDesktopLifecycleSink {
         if window.show().is_err() {
             return DesktopLifecycleIntentAdmission::Rejected;
         }
+        force_full_repaint(window);
         tokenmaster_desktop::activate_window(window.window())
             .map_or(DesktopLifecycleIntentAdmission::Rejected, |()| {
                 DesktopLifecycleIntentAdmission::Accepted
             })
     }
+}
+
+/// Forces the software renderer to repaint the whole window.
+///
+/// softbuffer's Win32 surface reports a buffer age of 1 after the first present, so
+/// Slint keeps `RepaintBufferType::ReusedBuffer` and paints only the dirty region.
+/// Windows clears that buffer on events the age does not reflect. Slint compensates in
+/// its `occluded()` hook -- the upstream comment says so in as many words -- but winit
+/// emits no `Occluded` on Windows, so the hook only ever runs for a minimize. After any
+/// other clear the untouched area holds nothing and the desktop shows through the
+/// window; measured here, a capture after a plain move differed from one taken before
+/// it in 27.5% of sampled pixels.
+///
+/// A size change takes the `NewBuffer` path and repaints everything. One pixel, applied
+/// twice, is the smallest nudge that does it, and a full repaint is what a restore
+/// needs anyway. This does not cover a window the user drags, because Slint surfaces no
+/// move event; that half is upstream.
+fn force_full_repaint(window: &MainWindow) {
+    let size = window.window().size();
+    if size.width < 2 || size.height < 2 {
+        return;
+    }
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(size.width - 1, size.height));
+    window.window().set_size(size);
 }
 
 impl DesktopLifecycleIntentSink for ApplicationDesktopLifecycleSink {

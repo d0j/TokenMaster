@@ -64,6 +64,24 @@ to count as delivered should therefore be retryable rather than asserted.
 renderer, the softbuffer surface, the position and the item tree all survive. Only
 Wayland or `SLINT_DESTROY_WINDOW_ON_HIDE` takes the teardown path.
 
+**The window can render nothing at all, and the buffer age is why.** softbuffer's Win32
+surface reports a buffer age of 1 after the first present, so Slint keeps
+`RepaintBufferType::ReusedBuffer` and paints only the dirty region. Windows clears that
+buffer on events the age does not reflect. Slint compensates in the software renderer's
+`occluded()` hook and says so in the source -- *"the buffer is completely cleared when
+the window is hidden and the buffer age doesn't respect that"* -- but winit emits no
+`Occluded` on Windows, so that hook is reached only through `Resized(0,0)`, which means
+a minimize and nothing else. After any other clear the untouched area holds nothing and
+the desktop shows through the window.
+
+Measured here: a capture taken after a plain `SetWindowPos` move differed from one taken
+before it in 27.5% of sampled pixels, and mean luma rose from 28 to 44 as the lighter
+desktop bled through. A one-pixel size change heals it completely, because a resize takes
+the `NewBuffer` path. `fn force_full_repaint` applies that nudge on the restore path,
+which measured 27.7 luma afterwards against 48.4 for a move. **A window the user drags is
+still affected**: Slint surfaces no move event, so there is nothing to hook. That half is
+upstream.
+
 **hide → show skips the cache invalidation that minimize → restore gets.** The
 software renderer has an `occluded()` hook that resets to `NewBuffer` and clears the
 partial-render cache, with the comment that the Windows surface is cleared while
