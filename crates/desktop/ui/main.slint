@@ -222,12 +222,12 @@ export component MainWindow inherits Window {
     out property <bool> help-about-visible: root.active-route-key == "help_about";
     in property <bool> refresh-in-flight;
     out property <bool> compact-widget-visible: root.active-route-key == "compact_widget";
-    // Every route is reachable by mouse from the sidebar when there is room for it.
-    // Below the breakpoint the bottom tab bar carries navigation instead, so neither
-    // layout leaves the command palette as the only way to reach a route.
+    // Above the breakpoint every route has a clickable sidebar entry. Below it the
+    // header's route-palette button is the affordance on every route; the bottom tab
+    // bar is NOT a fallback -- it renders only on Dashboard and Notifications.
     //
-    // 1180px is the widest content breakpoint (1010px) plus the sidebar: the sidebar
-    // must never be the reason a view drops to its narrow layout.
+    // 1180px is the widest content breakpoint (1010px) plus the sidebar width: the
+    // sidebar must never be the reason a view drops to its narrow layout.
     out property <bool> route-sidebar-visible: !root.compact-widget-visible && root.width >= 1180px;
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> dashboard-layout-preset: root.presentation-layout-key;

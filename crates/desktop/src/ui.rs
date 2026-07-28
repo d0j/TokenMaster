@@ -1496,7 +1496,13 @@ fn wire_reliable_state_intents(
         }
     });
     let sink = intent_sink.clone();
+    let busy_window = window.as_weak();
     window.on_request_refresh(move || {
+        // Cleared by `apply_projection` when the next snapshot lands, which is the
+        // observable end of a refresh from the shell's point of view.
+        if let Some(window) = busy_window.upgrade() {
+            window.set_refresh_in_flight(true);
+        }
         let _ = sink.submit(DesktopIntent::RefreshData);
     });
     let sink = intent_sink.clone();
@@ -2102,6 +2108,7 @@ fn wire_session_page_intents(
 }
 
 pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
+    window.set_refresh_in_flight(false);
     apply_route_projection(window, projection);
     apply_dashboard_projection(window, projection.dashboard());
     apply_history_snapshot_projection(window, projection.history());
