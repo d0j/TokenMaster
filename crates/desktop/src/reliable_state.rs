@@ -904,6 +904,9 @@ pub enum DesktopIntent {
         selection: DesktopRestoreSelection,
         portable_settings: bool,
     },
+    /// A user-initiated refresh. Distinct from `RebuildData`, which discards and
+    /// re-derives the archive and takes minutes on a real history.
+    RefreshData,
     RebuildData,
     RetryOperation,
     CancelOperation,
@@ -1046,6 +1049,7 @@ impl fmt::Debug for DesktopIntent {
                 .field("selection", selection)
                 .field("portable_settings", portable_settings)
                 .finish(),
+            Self::RefreshData => formatter.write_str("DesktopIntent::RefreshData"),
             Self::RebuildData => formatter.write_str("DesktopIntent::RebuildData"),
             Self::RetryOperation => formatter.write_str("DesktopIntent::RetryOperation"),
             Self::CancelOperation => formatter.write_str("DesktopIntent::CancelOperation"),

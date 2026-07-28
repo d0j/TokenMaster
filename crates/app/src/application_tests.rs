@@ -1285,8 +1285,12 @@ fn current_user_startup_intents_use_one_typed_port_and_publish_failures() {
         ApplicationCommandExecution::Succeeded
     })
     .expect("operation worker");
-    let sink =
-        ApplicationDesktopIntentSink::new_with_startup(worker.submitter(), port.clone(), presenter);
+    let sink = ApplicationDesktopIntentSink::new_with_startup(
+        worker.submitter(),
+        port.clone(),
+        presenter,
+        std::sync::Weak::new(),
+    );
 
     port.next.set(Ok(CurrentUserStartupStatus::EnabledVerified));
     assert_eq!(

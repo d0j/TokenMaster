@@ -220,6 +220,7 @@ export component MainWindow inherits Window {
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <bool> help-about-visible: root.active-route-key == "help_about";
+    in property <bool> refresh-in-flight;
     out property <bool> compact-widget-visible: root.active-route-key == "compact_widget";
     // Every route is reachable by mouse from the sidebar when there is room for it.
     // Below the breakpoint the bottom tab bar carries navigation instead, so neither
@@ -317,6 +318,7 @@ export component MainWindow inherits Window {
     callback verify-backups();
     callback preview-restore(int);
     callback confirm-restore(int, bool);
+    callback request-refresh();
     callback rebuild-data();
     callback retry-operation();
     callback cancel-operation();
@@ -396,12 +398,22 @@ export component MainWindow inherits Window {
                     overflow: elide;
                 }
                 Button {
+                    text: root.refresh-in-flight ? @tr("Refreshing…") : @tr("Refresh");
+                    accessible-label: @tr("Refresh usage data");
+                    enabled: !root.refresh-in-flight;
+                    clicked => { root.request-refresh(); }
+                }
+                Button {
                     text: @tr("Go to route");
                     accessible-label: @tr("Open route palette");
                     clicked => { root.open-command-palette(); }
                 }
                 Text {
-                    text: root.active-route-state;
+                    // The header showed the raw state key, so it read as lowercase
+                    // English in every locale exactly as the section chip used to.
+                    text: root.active-route-state == "ready" ? @tr("Ready")
+                        : root.active-route-state == "degraded" ? @tr("Degraded")
+                        : root.active-route-state == "waiting" ? @tr("Waiting") : @tr("Unavailable");
                     color: root.active-route-state == "ready" ? UiTokens.ready : root.active-route-state == "degraded" ? UiTokens.degraded : root.active-route-state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
                     vertical-alignment: center;
         }

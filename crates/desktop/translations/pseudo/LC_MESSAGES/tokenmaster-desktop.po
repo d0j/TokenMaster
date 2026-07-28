@@ -144,6 +144,15 @@ msgstr "［Qţÿ ···］"
 msgid "Reliable state operation "
 msgstr "［Řêļîåβļê šţåţê õþêřåţîõñ ···］"
 
+msgid "Refresh"
+msgstr "［Rêfřêšĥ ···］"
+
+msgid "Refreshing…"
+msgstr "［Rêfřêšĥîñğ… ···］"
+
+msgid "Refresh usage data"
+msgstr "［Rêfřêšĥ ûšåğê ðåţå ···］"
+
 msgid "Retry"
 msgstr "［Řêţřÿ ···］"
 

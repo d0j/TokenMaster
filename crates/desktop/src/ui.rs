@@ -1496,6 +1496,10 @@ fn wire_reliable_state_intents(
         }
     });
     let sink = intent_sink.clone();
+    window.on_request_refresh(move || {
+        let _ = sink.submit(DesktopIntent::RefreshData);
+    });
+    let sink = intent_sink.clone();
     window.on_rebuild_data(move || {
         let _ = sink.submit(DesktopIntent::RebuildData);
     });

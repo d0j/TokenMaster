@@ -606,6 +606,7 @@ impl Application {
                 commands.submitter(),
                 current_user_startup_port,
                 current_user_startup_presenter,
+                Arc::downgrade(&bundle),
             )))
             .map_err(|_| ApplicationError::internal())?;
         history_range_router
@@ -922,6 +923,9 @@ struct ApplicationDesktopIntentSink {
     dialog: NativeFileDialog,
     submitter: ApplicationOperationSubmitter,
     current_user_startup: Option<ApplicationCurrentUserStartupBinding>,
+    /// A manual refresh goes through the controller, not the operation worker, so
+    /// this sink needs the live bundle the same way the range and page sinks do.
+    bundle: Weak<Mutex<ApplicationBundleSlot>>,
 }
 
 struct ApplicationCurrentUserStartupBinding {
@@ -1358,6 +1362,7 @@ impl ApplicationDesktopIntentSink {
             dialog: NativeFileDialog::default(),
             submitter,
             current_user_startup: None,
+            bundle: Weak::new(),
         }
     }
 
@@ -1365,11 +1370,38 @@ impl ApplicationDesktopIntentSink {
         submitter: ApplicationOperationSubmitter,
         port: Rc<dyn ApplicationCurrentUserStartupPort>,
         presenter: DesktopCurrentUserStartupPresenter,
+        bundle: Weak<Mutex<ApplicationBundleSlot>>,
     ) -> Self {
         Self {
             dialog: NativeFileDialog::default(),
             submitter,
             current_user_startup: Some(ApplicationCurrentUserStartupBinding { port, presenter }),
+            bundle,
+        }
+    }
+
+    fn request_refresh(&self) -> DesktopIntentAdmission {
+        let Some(bundle) = self.bundle.upgrade() else {
+            return DesktopIntentAdmission::Rejected;
+        };
+        let Ok(slot) = bundle.try_lock() else {
+            return DesktopIntentAdmission::Rejected;
+        };
+        let Some(bundle) = slot.as_ref() else {
+            return DesktopIntentAdmission::Rejected;
+        };
+        match bundle
+            .refresh_ingress
+            .refresh(DesktopRefreshUrgency::Interactive)
+        {
+            // Coalescing into an in-flight refresh is a success: the user asked for
+            // current data and current data is already on its way.
+            Ok(
+                DesktopRefreshAdmission::Started { .. } | DesktopRefreshAdmission::Coalesced { .. },
+            ) => DesktopIntentAdmission::Started,
+            Ok(DesktopRefreshAdmission::DeadlineExceeded { .. }) | Err(_) => {
+                DesktopIntentAdmission::Rejected
+            }
         }
     }
 
@@ -1532,6 +1564,7 @@ impl DesktopIntentSink for ApplicationDesktopIntentSink {
             DesktopIntent::DisableCurrentUserStartup => {
                 self.submit_current_user_startup(CurrentUserStartupAction::Disable)
             }
+            DesktopIntent::RefreshData => self.request_refresh(),
             DesktopIntent::RebuildData => self.submit_plain(ApplicationCommand::Rebuild),
         }
     }

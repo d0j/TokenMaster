@@ -144,6 +144,15 @@ msgstr "Кол-во "
 msgid "Reliable state operation "
 msgstr "Операция надёжного состояния "
 
+msgid "Refresh"
+msgstr "Обновить"
+
+msgid "Refreshing…"
+msgstr "Обновление…"
+
+msgid "Refresh usage data"
+msgstr "Обновить данные об использовании"
+
 msgid "Retry"
 msgstr "Повторить"
 
