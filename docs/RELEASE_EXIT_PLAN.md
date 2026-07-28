@@ -50,8 +50,6 @@ survives edits and is greppable.
 | post-tag | Compact-window sizing samples `window().size()` before the window is shown and compares physical pixels against logical constants. Wrong on any non-100% display. | `fn update_compact_window_mode` |
 | post-tag | The Dashboard indexes its six sections positionally with nothing enforcing the order. | `dashboard-view.slint`, `out property <DashboardSectionRow> active-section` |
 | post-tag | The Win32 tray carries 39 `unsafe` blocks and one SAFETY comment, and lives in the UI crate rather than `platform`, which exists to own OS FFI and documents 23 of its 25 blocks. Moving it there and then adding `#![forbid(unsafe_code)]` to `desktop` is what stops it drifting back. | `crates/desktop/src/native_tray.rs` |
-| post-tag | `RegisterClassW`'s result is discarded and `CLASS_REGISTERED` latches true regardless, so a genuine registration failure is permanent and indistinguishable from the benign already-registered case. | `fn register_window_class` |
-| post-tag | `show_menu` holds a `&'static Inner` minted from `GWLP_USERDATA` across `TrackPopupMenu`'s nested modal message loop and dereferences it afterwards. Safe today only because nothing dispatched inside that loop can drop the owner. Re-read the pointer after the loop instead. | `fn show_menu`, `fn inner_from_window` |
 
 ## Abort rules
 

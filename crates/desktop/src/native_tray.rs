@@ -25,7 +25,10 @@ mod platform {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows::{
         Win32::{
-            Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM},
+            Foundation::{
+                ERROR_CLASS_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, POINT,
+                WIN32_ERROR, WPARAM,
+            },
             Graphics::Gdi::{
                 BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateBitmap, CreateDIBSection,
                 DIB_RGB_COLORS, DeleteObject, GetDC, ReleaseDC,
@@ -280,7 +283,7 @@ mod platform {
             let inner = unsafe { inner_from_window(hwnd) };
             if let Some(inner) = inner {
                 if event == WM_RBUTTONUP || event == WM_CONTEXTMENU {
-                    show_menu(inner);
+                    show_menu(hwnd);
                 } else if event == WM_LBUTTONUP {
                     inner.submit(DesktopLifecycleIntent::Show);
                 }
@@ -306,26 +309,41 @@ mod platform {
         unsafe { pointer.as_ref() }
     }
 
-    fn show_menu(inner: &Inner) {
+    /// Runs the tray context menu and submits whatever it returned.
+    ///
+    /// Takes the window rather than the owner on purpose. `TrackPopupMenu` pumps a
+    /// nested modal message loop, and a message dispatched inside it can drop the
+    /// owner: `Drop` clears `GWLP_USERDATA` before it destroys the menu and the
+    /// window, so a reference minted before the call would be dangling by the time
+    /// the loop returns. The handles are copied out first because they are `Copy`
+    /// and the borrow ends there, and the owner is read again afterwards -- a null
+    /// pointer then means the tray is gone and there is nobody left to submit to.
+    fn show_menu(hwnd: HWND) {
         let mut cursor = POINT::default();
         if unsafe { GetCursorPos(&raw mut cursor) }.is_err() {
             return;
         }
-        let _ = unsafe { SetForegroundWindow(inner.hwnd) };
+        let Some(menu) = (unsafe { inner_from_window(hwnd) }).map(|inner| inner.menu) else {
+            return;
+        };
+        let _ = unsafe { SetForegroundWindow(hwnd) };
         let command = unsafe {
             TrackPopupMenu(
-                inner.menu,
+                menu,
                 TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_BOTTOMALIGN,
                 cursor.x,
                 cursor.y,
                 None,
-                inner.hwnd,
+                hwnd,
                 None,
             )
         }
         .0 as u32;
-        let _ = unsafe { PostMessageW(Some(inner.hwnd), WM_NULL, WPARAM(0), LPARAM(0)) };
-        if let Some(intent) = command_intent(command) {
+        let _ = unsafe { PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0)) };
+        let Some(intent) = command_intent(command) else {
+            return;
+        };
+        if let Some(inner) = unsafe { inner_from_window(hwnd) } {
             inner.submit(intent);
         }
     }
@@ -341,6 +359,26 @@ mod platform {
         }
     }
 
+    /// Decides whether a `RegisterClassW` result may latch `CLASS_REGISTERED`.
+    ///
+    /// The call returns 0 on failure, and exactly one failure is benign: the class
+    /// already exists because an earlier owner in this process registered it. The
+    /// previous code discarded the result and latched regardless, which made every
+    /// other failure permanent for the life of the process and indistinguishable
+    /// from that benign case. The decision lives here rather than at the call site
+    /// because a failing `RegisterClassW` cannot be produced from a test, while this
+    /// can.
+    const fn class_registration_outcome(
+        atom: u16,
+        last_error: WIN32_ERROR,
+    ) -> Result<(), DesktopNativeTrayError> {
+        if atom != 0 || last_error.0 == ERROR_CLASS_ALREADY_EXISTS.0 {
+            Ok(())
+        } else {
+            Err(DesktopNativeTrayError)
+        }
+    }
+
     fn register_window_class() -> Result<(), DesktopNativeTrayError> {
         if CLASS_REGISTERED.load(Ordering::Acquire) {
             return Ok(());
@@ -352,7 +390,13 @@ mod platform {
             lpszClassName: CLASS_NAME,
             ..Default::default()
         };
-        let _ = unsafe { RegisterClassW(&raw const class) };
+        let atom = unsafe { RegisterClassW(&raw const class) };
+        let last_error = if atom == 0 {
+            unsafe { GetLastError() }
+        } else {
+            WIN32_ERROR(0)
+        };
+        class_registration_outcome(atom, last_error)?;
         CLASS_REGISTERED.store(true, Ordering::Release);
         Ok(())
     }
@@ -529,13 +573,13 @@ mod platform {
         };
 
         use windows::Win32::{
-            Foundation::HWND,
+            Foundation::{ERROR_ACCESS_DENIED, ERROR_CLASS_ALREADY_EXISTS, HWND, WIN32_ERROR},
             UI::WindowsAndMessaging::{HICON, HMENU},
         };
 
         use super::{
             COMMAND_COMPACT, COMMAND_DASHBOARD, COMMAND_HIDE, COMMAND_QUIT, COMMAND_SHOW, Inner,
-            command_intent, tokenmaster_icon_pixels,
+            class_registration_outcome, command_intent, tokenmaster_icon_pixels,
         };
         use crate::{
             DesktopLifecycleIntent, DesktopLifecycleIntentAdmission, DesktopLifecycleIntentSink,
@@ -560,6 +604,28 @@ mod platform {
                 self.intents.borrow_mut().push(intent);
                 DesktopLifecycleIntentAdmission::Accepted
             }
+        }
+
+        #[test]
+        fn class_registration_latches_only_on_success_or_an_existing_class() {
+            // A real registration.
+            assert_eq!(
+                class_registration_outcome(0x0042, WIN32_ERROR(0)),
+                Ok(()),
+                "a non-zero atom is a registration"
+            );
+            // A second owner in the same process: benign, and the class is usable.
+            assert_eq!(
+                class_registration_outcome(0, ERROR_CLASS_ALREADY_EXISTS),
+                Ok(()),
+                "an already-registered class must not fail the tray"
+            );
+            // Anything else: the class is not there, and latching would make that
+            // permanent for the life of the process.
+            assert!(
+                class_registration_outcome(0, ERROR_ACCESS_DENIED).is_err(),
+                "a genuine registration failure must not be swallowed"
+            );
         }
 
         #[test]
