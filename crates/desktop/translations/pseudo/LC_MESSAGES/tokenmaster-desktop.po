@@ -1078,6 +1078,9 @@ msgstr "［Šåţûřðåÿ ···］"
 msgid "Sunday"
 msgstr "［Šûñðåÿ ···］"
 
+msgid "Degraded"
+msgstr "［Ðêğřåðêð ···］"
+
 msgid "Waiting"
 msgstr "［Ŵåîţîñĝ ···］"
 

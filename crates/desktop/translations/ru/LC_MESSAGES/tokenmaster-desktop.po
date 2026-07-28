@@ -1078,6 +1078,9 @@ msgstr "Суббота"
 msgid "Sunday"
 msgstr "Воскресенье"
 
+msgid "Degraded"
+msgstr "Деградировано"
+
 msgid "Waiting"
 msgstr "Ожидание"
 
