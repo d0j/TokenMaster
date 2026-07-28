@@ -1633,7 +1633,7 @@ fn assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place()
     );
     assert_eq!(window.get_projects_total_tokens(), "140");
     assert_eq!(window.get_projects_total_availability(), "known");
-    assert_eq!(window.get_projects_cost(), "$0.010000");
+    assert_eq!(window.get_projects_cost(), "$0.01");
     assert_eq!(window.get_projects_cost_availability(), "complete");
     assert_eq!(
         window.get_projects_cost_evidence_label(),
@@ -1662,7 +1662,7 @@ fn assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place()
     assert_eq!(row.output_label, "30");
     assert_eq!(row.reasoning_label, "10");
     assert_eq!(row.total_label, "140");
-    assert_eq!(row.cost_label, "$0.010000");
+    assert_eq!(row.cost_label, "$0.01");
     assert_eq!(row.cost_evidence_label, "Complete · reported");
     assert_eq!(row.token_ratio, 1.0);
     assert!(row.code_available);
@@ -1672,10 +1672,7 @@ fn assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place()
     assert_eq!(row.added_label, "+200");
     assert_eq!(row.removed_label, "-20");
     assert_eq!(row.net_label, "+180");
-    assert_eq!(
-        row.efficiency_label,
-        "$0.005000 / 100 added product-code lines"
-    );
+    assert_eq!(row.efficiency_label, "$0.01 / 100 added product-code lines");
     assert_eq!(row.code_status_label, "Complete code");
     assert_eq!(row.code_evidence_label, "Fresh · Authoritative");
 
@@ -2641,7 +2638,7 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
     assert_eq!(sections.row_data(5).expect("models").key, "models");
     assert!(sections.iter().all(|section| section.state == "ready"));
     assert_eq!(window.get_dashboard_header_tokens(), "140");
-    assert_eq!(window.get_dashboard_header_cost(), "$0.010000");
+    assert_eq!(window.get_dashboard_header_cost(), "$0.01");
     assert_eq!(window.get_dashboard_header_events(), "1 event");
     assert_eq!(
         window.get_dashboard_header_evidence(),
@@ -2671,10 +2668,7 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
     assert_eq!(window.get_dashboard_code_added(), "+200");
     assert_eq!(window.get_dashboard_code_removed(), "−20");
     assert_eq!(window.get_dashboard_code_net(), "+180");
-    assert_eq!(
-        window.get_dashboard_code_efficiency(),
-        "$0.005000 / 100 lines"
-    );
+    assert_eq!(window.get_dashboard_code_efficiency(), "$0.01 / 100 lines");
 
     let trend = window.get_dashboard_trend_points();
     assert_eq!(trend.row_count(), 30);
@@ -2737,14 +2731,14 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
     assert_eq!(window.get_history_time_zone_label(), "UTC");
     assert_eq!(window.get_history_evidence_label(), "Fresh · Authoritative");
     assert_eq!(window.get_history_total_tokens(), "140");
-    assert_eq!(window.get_history_cost(), "$0.010000");
+    assert_eq!(window.get_history_cost(), "$0.01");
     assert_eq!(window.get_history_events(), "1 event");
     let history = window.get_history_day_rows();
     assert_eq!(history.row_count(), 30);
     let newest = history.row_data(0).expect("newest history day");
     assert_eq!(newest.date_label, "2026-07-16");
     assert_eq!(newest.total_label, "140");
-    assert_eq!(newest.cost_label, "$0.010000");
+    assert_eq!(newest.cost_label, "$0.01");
 
     drop(shell);
     let scale_directory = tempfile::TempDir::new().expect("scale directory");
@@ -2786,7 +2780,7 @@ fn assert_compiled_models_render_complete_bounded_mix_without_recreating_the_win
     assert_eq!(window.get_models_evidence_label(), "Fresh · Authoritative");
     assert_eq!(window.get_models_total_tokens(), "268");
     assert_eq!(window.get_models_total_availability(), "known");
-    assert_eq!(window.get_models_cost(), "$0.010064");
+    assert_eq!(window.get_models_cost(), "$0.01");
     assert_eq!(window.get_models_cost_availability(), "complete");
     assert_eq!(
         window.get_models_cost_evidence_label(),
@@ -2809,7 +2803,7 @@ fn assert_compiled_models_render_complete_bounded_mix_without_recreating_the_win
     assert_eq!(primary.output_label, "30");
     assert_eq!(primary.reasoning_label, "10");
     assert_eq!(primary.total_label, "140");
-    assert_eq!(primary.cost_label, "$0.010000");
+    assert_eq!(primary.cost_label, "$0.01");
     assert_eq!(primary.cost_availability, "complete");
     assert_eq!(primary.cost_evidence_label, "Complete · reported");
     assert_eq!(primary.token_ratio, 1.0);
@@ -2841,7 +2835,7 @@ fn assert_compiled_models_render_partial_cost_evidence() {
     assert_eq!(window.get_models_state(), "ready");
     assert_eq!(window.get_models_total_tokens(), "205");
     assert_eq!(window.get_models_total_availability(), "known");
-    assert_eq!(window.get_models_cost(), "$0.010000");
+    assert_eq!(window.get_models_cost(), "$0.01");
     assert_eq!(window.get_models_cost_availability(), "partial");
     assert_eq!(
         window.get_models_cost_evidence_label(),
@@ -2855,7 +2849,7 @@ fn assert_compiled_models_render_partial_cost_evidence() {
     assert_eq!(row.input_availability, "partial");
     assert_eq!(row.input_label, "50 (1/2)");
     assert_eq!(row.cost_availability, "partial");
-    assert_eq!(row.cost_label, "$0.010000");
+    assert_eq!(row.cost_label, "$0.01");
     assert_eq!(row.cost_evidence_label, "Partial · reported");
 
     window.show().expect("show partial models window");
@@ -2864,7 +2858,7 @@ fn assert_compiled_models_render_partial_cost_evidence() {
         .match_predicate(|element| {
             element
                 .accessible_label()
-                .is_some_and(|label| label.contains("cost $0.010000 Partial · reported"))
+                .is_some_and(|label| label.contains("cost $0.01 Partial · reported"))
         })
         .find_all();
     assert_eq!(accessible_rows.len(), 1);
@@ -2901,7 +2895,7 @@ fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_windo
     assert_eq!(newest.event_label, "1");
     assert_eq!(newest.input_label, "1");
     assert_eq!(newest.total_label, "2");
-    assert_eq!(newest.cost_label, "$0.000001");
+    assert_eq!(newest.cost_label, "<$0.01");
 
     window.window().set_size(slint::PhysicalSize::new(760, 720));
     assert_eq!(window.get_sessions_layout_mode(), "narrow");

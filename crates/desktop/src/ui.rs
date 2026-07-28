@@ -4217,9 +4217,16 @@ fn format_signed(value: i128) -> String {
 }
 
 fn format_usd_micros(value: u64) -> String {
-    let dollars = value / 1_000_000;
-    let micros = value % 1_000_000;
-    format!("${}.{:06}", format_integer(dollars), micros)
+    if value == 0 {
+        return "$0.00".to_owned();
+    }
+    let cents = (value + 5_000) / 10_000;
+    if cents == 0 {
+        // A real cost below half a cent. Rendering it as `$0.00` would claim the work
+        // was free, which is the same fabrication the token pipeline refuses to make.
+        return "<$0.01".to_owned();
+    }
+    format!("${}.{:02}", format_integer(cents / 100), cents % 100)
 }
 
 fn ppm_ratio(value: u32) -> f32 {
@@ -4944,5 +4951,34 @@ mod duration_tests {
         terminal_presentation_outcomes_survive_generic_replacement_until_one_delivery()?;
         config_and_portable_restore_terminals_survive_generic_replacement()?;
         pending_reminder_publications_wait_for_the_visible_atomic_projection()
+    }
+}
+
+#[cfg(test)]
+mod cost_format_tests {
+    use super::format_usd_micros;
+
+    #[test]
+    fn a_real_cost_below_half_a_cent_never_renders_as_free() {
+        // Every cost in the product used to render with six decimals, so a sub-cent
+        // value was legible. At two decimals it would round to `$0.00` and claim the
+        // work cost nothing, which is the fabrication the token pipeline refuses to
+        // make. It is marked instead.
+        assert_eq!(format_usd_micros(1), "<$0.01");
+        assert_eq!(format_usd_micros(4_999), "<$0.01");
+    }
+
+    #[test]
+    fn a_legitimate_zero_stays_distinct_from_a_rounded_one() {
+        assert_eq!(format_usd_micros(0), "$0.00");
+    }
+
+    #[test]
+    fn cents_round_half_up_and_dollars_keep_their_separators() {
+        assert_eq!(format_usd_micros(5_000), "$0.01");
+        assert_eq!(format_usd_micros(10_000), "$0.01");
+        assert_eq!(format_usd_micros(14_999), "$0.01");
+        assert_eq!(format_usd_micros(15_000), "$0.02");
+        assert_eq!(format_usd_micros(1_234_567_890), "$1,234.57");
     }
 }
