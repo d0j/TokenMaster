@@ -27,6 +27,22 @@ impl QueryClock for FixedClock {
     }
 }
 
+/// Polls until `ready` reports completion, sleeping between attempts.
+///
+/// Spinning on `yield_now` starves the runtime thread being waited on whenever the
+/// machine has few cores and the test binary is already running its cases in
+/// parallel, which is the ordinary shape of a CI runner rather than a rare one. A
+/// five-second wall-clock budget was not reachable there once a process spawn was
+/// involved: both callers passed locally and timed out on the runner. The budget is
+/// generous because it bounds a hang, not a latency claim.
+fn await_completion(mut ready: impl FnMut() -> bool, what: &str) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !ready() {
+        assert!(Instant::now() < deadline, "{what} timed out");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 fn attempt(value: u64) -> ProductAttemptGeneration {
     ProductAttemptGeneration::new(value).expect("non-zero product attempt")
 }
@@ -300,14 +316,10 @@ fn reminder_failure_maps_to_owned_code_and_pending_metadata_is_bounded() {
         BenefitReminderRuntimeConfig::new(path).expect("reminder config"),
     )
     .expect("reminder runtime");
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        if reminder.try_completion().expect("completion").is_some() {
-            break;
-        }
-        assert!(Instant::now() < deadline, "reminder completion timed out");
-        std::thread::yield_now();
-    }
+    await_completion(
+        || reminder.try_completion().expect("completion").is_some(),
+        "reminder completion",
+    );
     let source = reminder.snapshot().expect("reminder snapshot");
     assert_eq!(
         source.refresh().failure(),
@@ -353,14 +365,10 @@ fn quota_transport_failure_is_copied_without_executable_or_archive_identity() {
         .with_transport_timeout(Duration::from_secs(1))
         .expect("transport timeout");
     let mut quota = ProviderQuotaRuntime::start(config).expect("quota runtime");
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        if quota.try_completion().expect("completion").is_some() {
-            break;
-        }
-        assert!(Instant::now() < deadline, "quota completion timed out");
-        std::thread::yield_now();
-    }
+    await_completion(
+        || quota.try_completion().expect("completion").is_some(),
+        "quota completion",
+    );
 
     let mut reducer = ProductReducer::new();
     reducer
