@@ -36,7 +36,14 @@ export component QuotaRowView inherits Rectangle {
             border-radius: 4px;
             Rectangle {
                 width: root.quota-data.ratio-known ? max(0px, min(parent.width, root.quota-data.used-ratio * parent.width)) : 0px;
-                background: UiTokens.accent;
+                // A quota bar that keeps one colour to the very end tells the user
+                // nothing until they read the number. Approaching the limit is the
+                // fact the row exists to communicate.
+                background: root.quota-data.used-ratio >= 0.9
+                    ? UiTokens.unavailable
+                    : root.quota-data.used-ratio >= 0.75
+                    ? UiTokens.waiting
+                    : UiTokens.accent;
                 border-radius: 4px;
             }
         }

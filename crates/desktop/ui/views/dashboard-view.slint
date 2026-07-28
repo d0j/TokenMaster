@@ -279,11 +279,13 @@ component TrendCard inherits Rectangle {
             border-radius: UiTokens.radius;
             accessible-role: image;
             accessible-label: @tr("Daily token trend");
-            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.25; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border; }
-            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.5; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border; }
-            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.75; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border; }
-            Text { x: UiTokens.space-sm; y: 3px; text: root.token-axis; color: UiTokens.text-secondary; font-size: 9px; }
-            Text { x: parent.width - self.width - UiTokens.space-sm; y: 3px; text: root.cost-axis; color: UiTokens.text-secondary; font-size: 9px; }
+            // Gridlines and axis labels sit behind the data, not beside it: at full
+            // border contrast they read as content and compete with the two series.
+            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.25; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border.with-alpha(0.55); }
+            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.5; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border.with-alpha(0.55); }
+            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.75; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border.with-alpha(0.55); }
+            Text { x: UiTokens.space-sm; y: 3px; text: root.token-axis; color: UiTokens.text-secondary.with-alpha(0.65); font-size: 8px; }
+            Text { x: parent.width - self.width - UiTokens.space-sm; y: 3px; text: root.cost-axis; color: UiTokens.text-secondary.with-alpha(0.65); font-size: 8px; }
             Path {
                 x: UiTokens.space-sm;
                 y: 10px;
@@ -309,8 +311,8 @@ component TrendCard inherits Rectangle {
                 viewbox-height: 100;
                 fit: fill;
                 clip: true;
-                stroke: UiTokens.accent-secondary;
-                stroke-width: 2px;
+                stroke: UiTokens.accent-secondary.with-alpha(0.9);
+                stroke-width: 1.8px;
                 stroke-line-cap: round;
                 stroke-line-join: round;
             }
@@ -331,12 +333,12 @@ component TrendCard inherits Rectangle {
                         && point.tokens-availability != "unavailable": Rectangle {
                         x: parent.width / 2 - 3px;
                         y: 0px + (1.0 - point.tokens-ratio) * (parent.height - 26px);
-                        width: 6px;
-                        height: 6px;
-                        border-radius: 3px;
+                        width: 5px;
+                        height: 5px;
+                        border-radius: 2.5px;
                         background: UiTokens.surface-subtle;
                         border-color: UiTokens.accent;
-                        border-width: 2px;
+                        border-width: 1.5px;
                     }
                     if (mod(i, 3) == 0 || i == root.points.length - 1)
                         && point.cost-availability != "unavailable": Rectangle {
@@ -348,6 +350,15 @@ component TrendCard inherits Rectangle {
                         background: UiTokens.accent-secondary;
                     }
                     point-touch := TouchArea { }
+                    // A crosshair ties the tooltip to the column it describes; without
+                    // it the reader has to guess which point the numbers belong to.
+                    if point-touch.has-hover: Rectangle {
+                        x: parent.width / 2;
+                        y: 0px;
+                        width: 1px;
+                        height: parent.height - 18px;
+                        background: UiTokens.border;
+                    }
                     if point-touch.has-hover: Rectangle {
                         z: 20;
                         x: i > root.points.length / 2 ? -154px : 8px;
@@ -365,12 +376,17 @@ component TrendCard inherits Rectangle {
                             Text { text: point.tokens-label + " · " + point.cost-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
                         }
                     }
+                    // The newest column is the one a reader looks for first, so it is
+                    // the only label that carries accent weight.
                     if i == 0 || i == root.points.length / 2 || i == root.points.length - 1: Text {
                         y: parent.height - 15px;
                         x: parent.width / 2 - self.width / 2;
                         text: point.axis-label;
-                        color: UiTokens.text-secondary;
+                        color: i == root.points.length - 1
+                            ? UiTokens.accent
+                            : UiTokens.text-secondary.with-alpha(0.65);
                         font-size: 8px;
+                        font-weight: i == root.points.length - 1 ? 700 : 400;
                     }
                 }
             }
