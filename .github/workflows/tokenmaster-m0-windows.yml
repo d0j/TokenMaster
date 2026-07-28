@@ -5,6 +5,11 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "deny.toml"
+      - ".gitattributes"
+      - ".gitleaks.toml"
+      - ".gitleaksignore"
       - "crates/**"
       - "scripts/**"
       - "spec/**"
@@ -14,6 +19,11 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "deny.toml"
+      - ".gitattributes"
+      - ".gitleaks.toml"
+      - ".gitleaksignore"
       - "crates/**"
       - "scripts/**"
       - "spec/**"

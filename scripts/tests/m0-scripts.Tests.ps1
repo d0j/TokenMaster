@@ -27,6 +27,26 @@ Describe "TokenMaster M0 script contracts" {
         $Workflow | Should -Match 'Install-Module Pester -RequiredVersion 5\.7\.1'
     }
 
+    # A push touching only one of these files changed what the build produces while
+    # triggering nothing, so the change landed ungated. `.gitattributes` is the case
+    # that occurred: it decides the bytes `include_str!` compiles in.
+    It "triggers on every root file that decides what the build produces" {
+        $Workflow = Get-Content -LiteralPath (
+            Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml"
+        ) -Raw
+        # No `s` flag: with it, `.` swallows newlines and both blocks merge into one.
+        $triggers = [regex]::Matches($Workflow, '(?m)^ {4}paths:\r?\n(?<body>(?: {6}-[^\r\n]*\r?\n)+)')
+        $triggers.Count | Should -Be 2
+        foreach ($trigger in $triggers) {
+            foreach ($path in @(
+                'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'deny.toml',
+                '.gitattributes', '.gitleaks.toml', '.gitleaksignore'
+            )) {
+                $trigger.Groups['body'].Value | Should -Match ([regex]::Escape("- `"$path`""))
+            }
+        }
+    }
+
     It "runs the baseline when any GitHub workflow changes" {
         $Workflow = Get-Content -LiteralPath (Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml") -Raw
         $Workflow | Should -Match '(?m)^\s+-\s+"\.github/workflows/\*\*"\s*$'
