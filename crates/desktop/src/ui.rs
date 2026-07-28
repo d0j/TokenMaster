@@ -70,13 +70,18 @@ const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;
 const COMPACT_WINDOW_WIDTH: f32 = 420.0;
 const COMPACT_WINDOW_HEIGHT: f32 = 560.0;
-const NORMAL_WINDOW_WIDTH: u32 = 1_120;
-const NORMAL_WINDOW_HEIGHT: u32 = 720;
+const NORMAL_WINDOW_WIDTH: f32 = 1_120.0;
+const NORMAL_WINDOW_HEIGHT: f32 = 720.0;
+/// Below this the current window is too small to be worth restoring, so the normal
+/// size falls back to the design default. Logical, like every other size here: the
+/// same physical threshold means a different apparent window on every scale factor.
+const MIN_RESTORABLE_WINDOW_WIDTH: f32 = 560.0;
+const MIN_RESTORABLE_WINDOW_HEIGHT: f32 = 480.0;
 
 #[derive(Default)]
 struct CompactWindowMode {
     active: bool,
-    normal_size: Option<slint::PhysicalSize>,
+    normal_size: Option<slint::LogicalSize>,
 }
 
 type SharedCompactWindowMode = Rc<RefCell<CompactWindowMode>>;
@@ -1971,6 +1976,30 @@ fn apply_selected_route(
     update_compact_window_mode(window, projection.selected(), compact_window_mode);
 }
 
+/// Chooses the size to remember before the compact widget takes the window over.
+///
+/// Everything here is logical. The window reports physical pixels and these constants
+/// are design values in logical ones, so comparing them without converting made the
+/// threshold mean a different apparent window at every scale factor, and rebuilding
+/// the fallback as physical restored a window two thirds of the intended size on a
+/// 150% display.
+///
+/// The conversion is inside on purpose: with it outside, the unit test received an
+/// already-converted size and could not tell the corrected logic from the original.
+/// The decision lives in a function at all because the testing backend hard-codes a
+/// scale factor of 1.0 inside `set_size`, so an integration test cannot tell logical
+/// from physical either -- it would measure the harness rather than this.
+fn remembered_normal_size(current: slint::PhysicalSize, scale_factor: f32) -> slint::LogicalSize {
+    let current = current.to_logical(scale_factor);
+    if current.width >= MIN_RESTORABLE_WINDOW_WIDTH
+        && current.height >= MIN_RESTORABLE_WINDOW_HEIGHT
+    {
+        current
+    } else {
+        slint::LogicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
+    }
+}
+
 fn update_compact_window_mode(
     window: &MainWindow,
     selected: DesktopRouteKey,
@@ -1982,22 +2011,22 @@ fn update_compact_window_mode(
             if mode.active {
                 None
             } else {
-                let current = window.window().size();
-                mode.normal_size = Some(if current.width >= 560 && current.height >= 480 {
-                    current
-                } else {
-                    slint::PhysicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
-                });
+                // `size()` is physical and the constants are logical, so the two are
+                // only comparable after conversion.
+                mode.normal_size = Some(remembered_normal_size(
+                    window.window().size(),
+                    window.window().scale_factor(),
+                ));
                 mode.active = true;
-                Some(
-                    slint::LogicalSize::new(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
-                        .to_physical(window.window().scale_factor()),
-                )
+                Some(slint::LogicalSize::new(
+                    COMPACT_WINDOW_WIDTH,
+                    COMPACT_WINDOW_HEIGHT,
+                ))
             }
         } else if mode.active {
             mode.active = false;
             Some(mode.normal_size.take().unwrap_or_else(|| {
-                slint::PhysicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
+                slint::LogicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
             }))
         } else {
             None
@@ -5101,5 +5130,49 @@ mod cost_format_tests {
         assert_eq!(format_usd_micros(14_999), "$0.01");
         assert_eq!(format_usd_micros(15_000), "$0.02");
         assert_eq!(format_usd_micros(1_234_567_890), "$1,234.57");
+    }
+}
+
+#[cfg(test)]
+mod compact_window_tests {
+    use super::{
+        MIN_RESTORABLE_WINDOW_HEIGHT, MIN_RESTORABLE_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT,
+        NORMAL_WINDOW_WIDTH, remembered_normal_size,
+    };
+
+    #[test]
+    fn the_restorable_floor_is_logical_and_not_physical() {
+        let design = slint::LogicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT);
+        let logical = |size: slint::PhysicalSize, scale: f32| remembered_normal_size(size, scale);
+
+        // At 100% the physical numbers are the logical ones.
+        let roomy = slint::PhysicalSize::new(1_400, 900);
+        assert_eq!(logical(roomy, 1.0), slint::LogicalSize::new(1_400.0, 900.0));
+
+        // Exactly on the floor still counts, so the boundary is not off by one.
+        let floor = slint::PhysicalSize::new(
+            MIN_RESTORABLE_WINDOW_WIDTH as u32,
+            MIN_RESTORABLE_WINDOW_HEIGHT as u32,
+        );
+        assert_eq!(
+            logical(floor, 1.0),
+            slint::LogicalSize::new(MIN_RESTORABLE_WINDOW_WIDTH, MIN_RESTORABLE_WINDOW_HEIGHT)
+        );
+
+        // The discriminating case. 600x480 physical at 150% is 400x320 logical: a
+        // window far too small to restore. Comparing the physical numbers against the
+        // floor accepted it and handed the user a 400x320 "normal" window.
+        assert_eq!(
+            logical(slint::PhysicalSize::new(600, 480), 1.5),
+            design,
+            "the floor is logical, so a scaled-up tiny window must not pass it"
+        );
+
+        // Its mirror. 1680x1080 physical at 150% is 1120x720 logical, comfortably
+        // above the floor, and the user's own size is what must come back.
+        assert_eq!(
+            logical(slint::PhysicalSize::new(1_680, 1_080), 1.5),
+            slint::LogicalSize::new(1_120.0, 720.0)
+        );
     }
 }

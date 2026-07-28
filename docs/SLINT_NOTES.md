@@ -155,6 +155,13 @@ binary; `init_integration_test_*` installs a process-wide proxy and panics on th
 second call, hence one test per binary. `take_snapshot` needs the software renderer
 backend, not the default mock one.
 
+**The testing window ignores the scale factor in `set_size`.** `TestingWindow::set_size`
+calls `size.to_logical(1.)` and `size.to_physical(1.)`, so a `LogicalSize` handed to it
+is stored unconverted no matter what `scale_factor()` reports. Dispatching
+`ScaleFactorChanged` does move `scale_factor()`, but any assertion that reads the size
+back measures the harness rather than the product. DPI-dependent arithmetic has to be
+unit-tested as a pure function instead.
+
 **Not assertable in-process:** what a screen reader announces, focus location, and
 per-pixel text (system fonts are live).
 
