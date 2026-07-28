@@ -515,23 +515,6 @@ impl DesktopShell {
         )
     }
 
-    pub fn new_with_reliable_state_and_all_sinks(
-        snapshot: &ProductSnapshot,
-        reliable_state: DesktopReliableStateProjection,
-        intent_sink: Rc<dyn DesktopIntentSink>,
-        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
-        lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>,
-    ) -> Result<Self, slint::PlatformError> {
-        Self::new_with_reliable_state_and_all_session_sinks(
-            snapshot,
-            reliable_state,
-            intent_sink,
-            session_sink,
-            Rc::new(UnavailableDesktopSessionPageIntentSink),
-            lifecycle_sink,
-        )
-    }
-
     pub fn new_with_reliable_state_and_all_session_sinks(
         snapshot: &ProductSnapshot,
         reliable_state: DesktopReliableStateProjection,

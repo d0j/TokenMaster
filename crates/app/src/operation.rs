@@ -613,7 +613,10 @@ fn install_panic_redaction() {
     INSTALL_OPERATION_PANIC_REDACTION.call_once(|| {
         let previous = take_hook();
         set_hook(Box::new(move |information| {
-            let redacted = REDACT_OPERATION_PANIC.with(Cell::get);
+            // `LocalKey::with` panics once the thread-local is destroyed. Panic
+            // hooks chain, so a panic during thread teardown would panic inside the
+            // hook and abort the process with no diagnostic.
+            let redacted = REDACT_OPERATION_PANIC.try_with(Cell::get).unwrap_or(false);
             if !redacted {
                 previous(information);
             }
