@@ -18,6 +18,32 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Removed the two writes that held a processor core while the archive sat idle, both
+  found by measuring writes rather than by reading code. Source presence was recorded in
+  its own IMMEDIATE transaction per source, so one pass over 4016 sources committed once
+  per file and put 8032 of 9564 journal frames on `usage_source` across 237 distinct
+  pages; presence is now batched per scope. Separately, the filesystem hint names the
+  profile root rather than the sessions directory, and the tools owning that root write
+  into it constantly, so any changed path outside a source directory failed the whole
+  targeted batch and fell back to walking every source. A path under no source directory
+  is now skipped, while a path whose file merely disappeared is still reconciled. Journal
+  growth over 120 seconds fell from 165 MB to 4.91 MB, and processor time from 151.8-171.1
+  seconds per 180 to 27.4 per 120.
+
+- Stopped a Dashboard section discarding the answer computed by its own refresh. A refresh
+  publishes its status first and its usage answers second under one attempt number, and
+  invalidation raised the section's attempt to the status's, so classification met an equal
+  number and coalesced. The section now keeps its own attempt generation; an answer against
+  a superseded dataset is still refused by the compatibility predicate, where that check
+  belongs. Because dataset identity changes on every pass of a first import, the Today card
+  had filled with real numbers and then gone back to claiming no evidence.
+
+- Stopped an enormous cost rendering as a trivial one. `format_usd_micros` added its
+  rounding term before dividing and overflowed within 5,000 micros of the top of the range,
+  where a debug build panics and a release build wraps. The addition now saturates, pinned
+  by a sweep over every micro value to a dollar and then powers of ten and their
+  neighbours to `u64::MAX`.
+
 - Prevented an incomplete current replay from processing relation work ahead of
   pending manifest sources, and changed session-selection invalidation from a
   correlated archive scan to indexed observation and selection seeks.
@@ -45,6 +71,18 @@ All notable changes are recorded here.
   behavior.
 
 ### Added
+
+- Added the archive's lifetime total, carried the whole way rather than around it: an
+  unbounded aggregate over `usage_time_rollup` in the store, `LifetimeUsage` in the query
+  layer, its own section in the product snapshot, a projection field, and a shell header
+  property, because every number this interface shows arrives by snapshot. It is read from
+  the rollup and never from `usage_event`, which analytics is contractually forbidden to
+  touch.
+
+- Drew the Dashboard closer to the owner's mockup: Today is three bordered cells at equal
+  stretch, the trend series carry a soft area fill under a named two-dot legend, the route
+  column is labelled, a metric is coloured by its direction, and every font size and weight
+  moved behind a token.
 
 - Added an isolated trusted GitHub workflow for the canonical unsigned Windows ZIP:
   default-branch manual dispatch or `v*` tag push only, immutable action commits,
