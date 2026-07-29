@@ -25,6 +25,8 @@ pub struct StoreArchive {
     store: UsageStore,
     last_timestamp_ms: i64,
     pending_discovered: Vec<SourceKey>,
+    pending_presence: Vec<SourceKey>,
+    pending_presence_scan: Option<ScanId>,
     pending_current_batches: Vec<PreparedCurrentBatch>,
     pending_current_events: usize,
     pending_current_relations: usize,
@@ -33,6 +35,14 @@ pub struct StoreArchive {
 }
 
 const MAX_PENDING_CURRENT_SOURCES: usize = 256;
+
+/// Sources whose presence may wait for one shared transaction.
+///
+/// Presence is recorded for every source a scan sees, changed or not, so writing it one
+/// transaction at a time made an unchanged rescan cost a journal frame per file: 31.4 MB per
+/// pass over 4016 files that had not moved. The batch is bounded rather than unlimited so a
+/// transaction stays small and an interrupted scan keeps most of its recorded presence.
+const MAX_PENDING_PRESENCE: usize = 512;
 
 pub(crate) struct PreparedCurrentBatch {
     command: CurrentReplayAppendBatch,
@@ -69,6 +79,8 @@ impl StoreArchive {
             store,
             last_timestamp_ms: 0,
             pending_discovered: Vec::new(),
+            pending_presence: Vec::new(),
+            pending_presence_scan: None,
             pending_current_batches: Vec::new(),
             pending_current_events: 0,
             pending_current_relations: 0,
@@ -440,6 +452,33 @@ impl StoreArchive {
         Ok(replay)
     }
 
+    /// Queues a source's presence for the batch belonging to `scan_id`.
+    fn record_presence(&mut self, scan_id: ScanId, source_key: SourceKey) -> Result<(), PortError> {
+        if self.pending_presence_scan != Some(scan_id) {
+            self.flush_presence()?;
+            self.pending_presence_scan = Some(scan_id);
+        }
+        self.pending_presence.push(source_key);
+        if self.pending_presence.len() >= MAX_PENDING_PRESENCE {
+            self.flush_presence()?;
+        }
+        Ok(())
+    }
+
+    /// Writes the queued presence. Must run before anything reads `last_seen_scan_id`.
+    fn flush_presence(&mut self) -> Result<(), PortError> {
+        let Some(scan_id) = self.pending_presence_scan else {
+            return Ok(());
+        };
+        if self.pending_presence.is_empty() {
+            return Ok(());
+        }
+        let batch = core::mem::take(&mut self.pending_presence);
+        self.store
+            .observe_scan_sources(scan_id, &batch)
+            .map_err(|error| store_port_error(&error))
+    }
+
     pub(crate) fn complete_current_source(
         &mut self,
         cursor: CurrentCursor,
@@ -643,9 +682,7 @@ impl Archive for StoreArchive {
                     .map_err(|error| store_port_error(&error))?;
             }
         }
-        self.store
-            .observe_scan_source(scan_id, source_key)
-            .map_err(|error| store_port_error(&error))
+        self.record_presence(scan_id, source_key)
     }
 
     fn finish_scope(
@@ -655,6 +692,10 @@ impl Archive for StoreArchive {
         completion: AdapterCompletion,
     ) -> Result<(), PortError> {
         let scan_id = self.scan_for_scope(scan_set, scope)?;
+        // `finish_scan` counts the sources it saw out of `last_seen_scan_id`, so the queue has
+        // to be on disk before it runs.
+        self.flush_presence()?;
+        self.pending_presence_scan = None;
         let counters = completion.counters();
         let counters = ScanCounters::new(
             counters.files_read(),
@@ -679,6 +720,8 @@ impl Archive for StoreArchive {
         &mut self,
         scan_set: ArchiveScanSetId,
     ) -> Result<CompletionQuality, PortError> {
+        self.flush_presence()?;
+        self.pending_presence_scan = None;
         let completed_at = self.timestamp_ms()?;
         let snapshot = self
             .store

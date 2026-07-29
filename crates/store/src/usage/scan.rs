@@ -142,45 +142,68 @@ impl UsageStore {
         scan_id: ScanId,
         source_key: SourceKey,
     ) -> Result<(), StoreError> {
+        self.observe_scan_sources(scan_id, &[source_key])
+    }
+
+    /// Records presence for a batch of sources under one scan.
+    ///
+    /// Presence is written once per source per scan whether or not the source changed, so the
+    /// transaction boundary decides the cost of an unchanged rescan. A transaction per source
+    /// appends a journal frame per file: measured on a real archive, 4016 unchanged files cost
+    /// 31.4 MB of write-ahead log per pass, against 237 pages actually dirtied. Batching moves
+    /// only the boundary -- every source is still bound to a running scan and to that scan's
+    /// own scope, and one rejected source still rejects the whole batch.
+    pub fn observe_scan_sources(
+        &mut self,
+        scan_id: ScanId,
+        source_keys: &[SourceKey],
+    ) -> Result<(), StoreError> {
+        if source_keys.is_empty() {
+            return Ok(());
+        }
+        let scan_sql = scan_id.as_sql()?;
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let scan: Option<ObservedScanScope> = transaction
-            .query_row(
+        {
+            let mut scope_of = transaction.prepare(
                 "SELECT scan.completion_state, scan.provider_id, scan.profile_id,
                         source.provider_id, source.profile_id
                  FROM usage_scan AS scan
                  LEFT JOIN usage_source AS source ON source.file_key = ?2
                  WHERE scan.scan_id = ?1",
-                params![scan_id.as_sql()?, source_key.as_bytes().as_slice()],
-                |row| {
-                    Ok(ObservedScanScope {
-                        state: row.get(0)?,
-                        scan_provider: row.get(1)?,
-                        scan_profile: row.get(2)?,
-                        source_provider: row.get(3)?,
-                        source_profile: row.get(4)?,
+            )?;
+            let mut mark_seen = transaction
+                .prepare("UPDATE usage_source SET last_seen_scan_id = ?1 WHERE file_key = ?2")?;
+            for source_key in source_keys {
+                let source_bytes = source_key.as_bytes();
+                let scan: Option<ObservedScanScope> = scope_of
+                    .query_row(params![scan_sql, source_bytes.as_slice()], |row| {
+                        Ok(ObservedScanScope {
+                            state: row.get(0)?,
+                            scan_provider: row.get(1)?,
+                            scan_profile: row.get(2)?,
+                            source_provider: row.get(3)?,
+                            source_profile: row.get(4)?,
+                        })
                     })
-                },
-            )
-            .optional()?;
-        let Some(scan) = scan else {
-            return Err(StoreError::new(StoreErrorCode::StaleScan));
-        };
-        if scan.state != "running" {
-            return Err(StoreError::new(StoreErrorCode::StaleScan));
-        }
-        if scan.source_provider.as_deref() != Some(scan.scan_provider.as_str())
-            || scan.source_profile.as_deref() != Some(scan.scan_profile.as_str())
-        {
-            return Err(StoreError::new(StoreErrorCode::InvalidValue));
-        }
-        let updated = transaction.execute(
-            "UPDATE usage_source SET last_seen_scan_id = ?1 WHERE file_key = ?2",
-            params![scan_id.as_sql()?, source_key.as_bytes().as_slice()],
-        )?;
-        if updated != 1 {
-            return Err(StoreError::new(StoreErrorCode::StaleScan));
+                    .optional()?;
+                let Some(scan) = scan else {
+                    return Err(StoreError::new(StoreErrorCode::StaleScan));
+                };
+                if scan.state != "running" {
+                    return Err(StoreError::new(StoreErrorCode::StaleScan));
+                }
+                if scan.source_provider.as_deref() != Some(scan.scan_provider.as_str())
+                    || scan.source_profile.as_deref() != Some(scan.scan_profile.as_str())
+                {
+                    return Err(StoreError::new(StoreErrorCode::InvalidValue));
+                }
+                let updated = mark_seen.execute(params![scan_sql, source_bytes.as_slice()])?;
+                if updated != 1 {
+                    return Err(StoreError::new(StoreErrorCode::StaleScan));
+                }
+            }
         }
         transaction.commit()?;
         Ok(())

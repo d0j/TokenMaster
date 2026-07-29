@@ -764,3 +764,67 @@ fn child_scan_id_exhaustion_rolls_back_the_new_parent() {
         .expect("scan-set count");
     assert_eq!(set_count, 1, "new parent insert must roll back");
 }
+
+/// Reads the frame count out of a write-ahead log without disturbing it.
+fn wal_frames(path: &std::path::Path) -> u64 {
+    let bytes = std::fs::read(path).unwrap_or_default();
+    if bytes.len() <= 32 {
+        return 0;
+    }
+    let page_size = u64::from(u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]));
+    (bytes.len() as u64 - 32) / (page_size + 24)
+}
+
+/// Recording presence must not cost one journalled transaction per file.
+///
+/// A rescan that changes nothing still records presence for every source it sees. While each
+/// source carried its own transaction, an archive of 4016 unchanged files appended 31.4 MB to
+/// the write-ahead log on every pass -- one frame per file, over just 237 pages that actually
+/// held data -- and passes repeated every ten seconds. The bound below is what refuses that
+/// shape: it fails for a batch implemented as a loop of per-source transactions.
+#[test]
+fn observing_a_batch_of_sources_does_not_journal_a_frame_per_source() {
+    const SOURCES: u8 = 200;
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("usage.sqlite3");
+    let journal = directory.path().join("usage.sqlite3-wal");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    let sources: Vec<SourceKey> = (0..SOURCES)
+        .map(|seed| register_source(&mut store, seed, "codex", "default"))
+        .collect();
+    let manifest = ScanSetManifest::new(
+        vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
+    )
+    .unwrap();
+    let scan_set = store.begin_scan_set(&manifest, 1).unwrap();
+    let scan = store.scan_page(scan_set.id(), None, 1).unwrap()[0].id();
+
+    // Measure from an empty journal, so the automatic checkpoint at 1000 pages cannot fire
+    // inside the measurement and hide the growth being measured.
+    Connection::open(&path)
+        .expect("checkpoint connection")
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+        .expect("truncate the journal");
+    let before = wal_frames(&journal);
+    store
+        .observe_scan_sources(scan, &sources)
+        .expect("observe every source");
+    let written = wal_frames(&journal) - before;
+
+    assert!(
+        written < u64::from(SOURCES) / 4,
+        "observing {SOURCES} sources appended {written} journal frames;          a frame per source is the defect this bound exists to refuse"
+    );
+    // Cheaper journalling must not cost recorded presence: every source carries the mark, and
+    // all of them carry the same one.
+    let (recorded, distinct): (i64, i64) = Connection::open(&path)
+        .expect("presence connection")
+        .query_row(
+            "SELECT count(last_seen_scan_id), count(DISTINCT last_seen_scan_id) FROM usage_source",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("presence");
+    assert_eq!(recorded, i64::from(SOURCES));
+    assert_eq!(distinct, 1);
+}
