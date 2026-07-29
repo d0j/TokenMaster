@@ -97,11 +97,22 @@ component DashboardHeaderCard inherits Rectangle {
                 vertical-alignment: center;
             }
         }
+        // The reference draws Today as three bordered cells in one strip rather than three
+        // columns sharing a background. The border is what separates them; the spacing that
+        // used to do it is gone, so the strip reads as one object divided, not three floating.
         HorizontalLayout {
-            spacing: UiTokens.space-lg;
-            VerticalLayout {
+            spacing: UiTokens.space-sm;
+            Rectangle {
+                // Equal thirds, as the reference draws them. A wider cost cell starves the
+                // other two: a full token count elides to `162,790…` at a quarter width.
+                horizontal-stretch: 1;
+                background: UiTokens.surface-subtle;
+                border-color: UiTokens.border;
+                border-width: 1px;
+                border-radius: UiTokens.radius;
+                VerticalLayout {
+                padding: UiTokens.space-sm;
                 spacing: 2px;
-                horizontal-stretch: 2;
                 accessible-role: groupbox;
                 accessible-label: @tr("Cost {0}", root.cost);
                 Text {
@@ -119,9 +130,38 @@ component DashboardHeaderCard inherits Rectangle {
                     font-weight: UiTokens.weight-bold;
                     overflow: elide;
                 }
+                }
             }
-            MetricValue { label: @tr("Tokens"); value: root.tokens; availability: root.tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            Rectangle {
+                horizontal-stretch: 1;
+                background: UiTokens.surface-subtle;
+                border-color: UiTokens.border;
+                border-width: 1px;
+                border-radius: UiTokens.radius;
+                MetricValue {
+                    x: UiTokens.space-sm;
+                    y: UiTokens.space-sm;
+                    width: parent.width - 2 * UiTokens.space-sm;
+                    label: @tr("Tokens");
+                    value: root.tokens;
+                    availability: root.tokens == "—" ? "unavailable" : "known";
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                background: UiTokens.surface-subtle;
+                border-color: UiTokens.border;
+                border-width: 1px;
+                border-radius: UiTokens.radius;
+                MetricValue {
+                    x: UiTokens.space-sm;
+                    y: UiTokens.space-sm;
+                    width: parent.width - 2 * UiTokens.space-sm;
+                    label: @tr("Events");
+                    value: root.events;
+                    availability: root.events == "—" ? "unavailable" : "known";
+                }
+            }
         }
     }
 }

@@ -93,8 +93,10 @@ semantic colour on `+Added` and `-Removed`; per-column accessible labels on the 
 Not yet, and purely presentational — no new data needed:
 
 - `VIEWS` heading over the route list
-- the trend subtitle and the two-dot legend
-- splitting Today into three bordered cells
+- the two-dot legend on the trend (**built**), and three bordered Today cells (**built**)
+- the trend subtitle `30d · $4552 · 1.08B tokens` was listed here by mistake: it needs the
+  period's summed cost and tokens, which the projection does not carry, so it belongs in the
+  list below
 - the `day` / `week` toggle in Code Output
 - area fill under the trend series
 
