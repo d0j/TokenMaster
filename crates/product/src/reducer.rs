@@ -246,8 +246,9 @@ impl ProductReducer {
         GitRuntimeSnapshot,
         ProductGitRuntimeHealth
     );
-    // The archive's own total, answered once rather than on every refresh: it changes only
-    // when the archive does, and the analytics path cannot express it -- `UsageRange::custom`
+    // The archive's own total. Published on every refresh like its neighbours -- it does not
+    // move with the clock, but it does move as the archive grows, and during a first import
+    // that is constantly. The analytics path cannot express it at all: `UsageRange::custom`
     // rejects a span over 400 days, so a lifetime is not a long range. Always compatible,
     // because it is bound to no scope, range or dataset that another section could contradict.
     section_methods!(
