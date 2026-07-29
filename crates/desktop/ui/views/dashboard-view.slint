@@ -3,6 +3,7 @@ import {
     DashboardSessionRow, DashboardActivityRow, DashboardModelRow
 } from "../models.slint";
 import { UiTokens } from "../tokens.slint";
+import { ProjectionStrings } from "../projection-strings.slint";
 import { SectionState } from "../components/section-state.slint";
 import { MetricValue } from "../components/metric-value.slint";
 import { QuotaRowView } from "../components/quota-row.slint";
@@ -577,7 +578,7 @@ component ActivityCard inherits Rectangle {
         for row in root.rows: HorizontalLayout {
             height: 20px;
             spacing: UiTokens.space-sm;
-            Text { text: row.label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 74px; overflow: elide; }
+            Text { text: ProjectionStrings.activity-label(row.key); color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 74px; overflow: elide; }
             Rectangle {
                 height: 6px;
                 horizontal-stretch: 1;

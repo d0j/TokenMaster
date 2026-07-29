@@ -910,6 +910,30 @@ msgstr "［{0} ûšêð ···］"
 msgid "Alerts"
 msgstr "[!! Alerts !!]"
 
+msgid "Read"
+msgstr "[!! Read !!]"
+
+msgid "Edit / Write"
+msgstr "[!! Edit / Write !!]"
+
+msgid "Search"
+msgstr "[!! Search !!]"
+
+msgid "Git"
+msgstr "[!! Git !!]"
+
+msgid "Build / Test"
+msgstr "[!! Build / Test !!]"
+
+msgid "Web"
+msgstr "[!! Web !!]"
+
+msgid "Subagents"
+msgstr "[!! Subagents !!]"
+
+msgid "Terminal"
+msgstr "[!! Terminal !!]"
+
 msgid "Activity"
 msgstr "［Åçţîṽîţÿ ···］"
 msgid "Aging"

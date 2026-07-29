@@ -910,6 +910,30 @@ msgstr "Использовано {0}"
 msgid "Alerts"
 msgstr "Оповещения"
 
+msgid "Read"
+msgstr "Чтение"
+
+msgid "Edit / Write"
+msgstr "Правка / запись"
+
+msgid "Search"
+msgstr "Поиск"
+
+msgid "Git"
+msgstr "Git"
+
+msgid "Build / Test"
+msgstr "Сборка / тесты"
+
+msgid "Web"
+msgstr "Веб"
+
+msgid "Subagents"
+msgstr "Субагенты"
+
+msgid "Terminal"
+msgstr "Терминал"
+
 msgid "Activity"
 msgstr "Активность"
 msgid "Aging"

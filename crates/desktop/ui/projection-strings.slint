@@ -1,6 +1,22 @@
 // Localized, display-only atoms for bounded Rust-to-Slint projections.
 // Stable keys and codes remain in Rust data rows; callers use these only for text shown to people.
 export global ProjectionStrings {
+    // Activity categories translate here rather than in Rust, like every other stable key.
+    // They used to be emitted as bare English from `activity_label`, which put them outside
+    // the localization contract by construction: it walks `@tr` in this tree, so a string
+    // that never becomes one is invisible to it in both directions.
+    public pure function activity-label(key: string) -> string {
+        if (key == "read") { return @tr("Read"); }
+        if (key == "edit_write") { return @tr("Edit / Write"); }
+        if (key == "search") { return @tr("Search"); }
+        if (key == "git") { return @tr("Git"); }
+        if (key == "build_test") { return @tr("Build / Test"); }
+        if (key == "web") { return @tr("Web"); }
+        if (key == "subagents") { return @tr("Subagents"); }
+        if (key == "terminal") { return @tr("Terminal"); }
+        return key;
+    }
+
     public pure function route-label(key: string) -> string {
         if (key == "dashboard") { return @tr("Dashboard"); }
         if (key == "history") { return @tr("History"); }

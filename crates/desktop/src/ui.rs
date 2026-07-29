@@ -25,13 +25,13 @@ macro_rules! set_rows {
 use crate::{
     ActivityRhythmRow, BenefitLotRow, DashboardActivityRow, DashboardBenefitRow,
     DashboardBoardEditorRow, DashboardBoardSlotRow, DashboardModelRow, DashboardQuotaRow,
-    DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
-    DesktopActivityProjection, DesktopBenefitExpiry, DesktopBoardPreferences,
-    DesktopBoardSectionKey, DesktopCloseEffect, DesktopCostComposition, DesktopCostValue,
-    DesktopCurrentUserStartupStatus, DesktopDashboardProjection, DesktopDashboardSectionKey,
-    DesktopFreshness, DesktopHistoryProjection, DesktopHistoryRangeIntentAdmission,
-    DesktopHistoryRangeIntentSink, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
-    DesktopIntent, DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
+    DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityProjection,
+    DesktopBenefitExpiry, DesktopBoardPreferences, DesktopBoardSectionKey, DesktopCloseEffect,
+    DesktopCostComposition, DesktopCostValue, DesktopCurrentUserStartupStatus,
+    DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
+    DesktopHistoryProjection, DesktopHistoryRangeIntentAdmission, DesktopHistoryRangeIntentSink,
+    DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
+    DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
     DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
     DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
@@ -4248,7 +4248,6 @@ fn apply_activity(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
         .iter()
         .map(|row| DashboardActivityRow {
             key: row.key().stable_key().into(),
-            label: activity_label(row.key()).into(),
             count_label: if has_data {
                 format_integer(row.count()).into()
             } else {
@@ -4330,19 +4329,6 @@ fn dashboard_section_label(window: &MainWindow, key: DesktopDashboardSectionKey)
         .global::<ProjectionStrings>()
         .invoke_dashboard_section_label(key.stable_key().into())
         .to_string()
-}
-
-const fn activity_label(key: DesktopActivityKey) -> &'static str {
-    match key {
-        DesktopActivityKey::Read => "Read",
-        DesktopActivityKey::EditWrite => "Edit / Write",
-        DesktopActivityKey::Search => "Search",
-        DesktopActivityKey::Git => "Git",
-        DesktopActivityKey::BuildTest => "Build / Test",
-        DesktopActivityKey::Web => "Web",
-        DesktopActivityKey::Subagents => "Subagents",
-        DesktopActivityKey::Terminal => "Terminal",
-    }
 }
 
 const fn availability_code(value: DesktopValueAvailability) -> &'static str {
