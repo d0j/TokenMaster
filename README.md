@@ -74,14 +74,16 @@ binary and requires network access to the current RustSec database. The last com
 also requires Pester 5.7.1 and a validated Windows GNU linker. Both record developer
 evidence only; neither claims release acceptance.
 
-## Run the M0 probe
+## Run it
 
 ```powershell
-cargo +1.97.0 run -p tokenmaster-m0 --release
+cargo +1.97.0 run --release --bin TokenMaster
 ```
 
-The software renderer is the default. `TOKENMASTER_RENDERER=femtovg` is retained only
-for diagnostic comparison and cannot be the default renderer.
+The renderer is Skia, chosen by measurement rather than taste: forcing OpenGL cost
+518 MB against 56 MB for the default, and the software renderer is not compiled in at
+all. `.cargo/config.toml` sets `SLINT_BACKEND=winit-skia` without forcing it, so the
+environment can still override it for a diagnostic comparison.
 
 ## Quality commitments
 
