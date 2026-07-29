@@ -26,9 +26,9 @@ virtualized presentation models, and resource gates. It is not a product release
 an accepted interactive Windows validation.
 
 The data/runtime foundation has bounded Codex discovery/parsing, replay-safe
-accounting, strict SQLite schema v13, exact full rebuild, and a production incremental
-tail refresh. Unchanged refreshes
-read zero JSONL payload bytes; append resumes from the persisted checkpoint; new and
+accounting, a strict migrated SQLite schema at `USAGE_SCHEMA_VERSION`, exact full
+rebuild, and a production incremental tail refresh. Unchanged refreshes read zero
+JSONL payload bytes; append resumes from the persisted checkpoint; new and
 missing sources follow exact complete-scan authority; replacement, rewrite, and
 truncation or a changed profile scope durably request a non-destructive full rebuild.
 That rebuild safely recovers an unadmitted provisional source. The live runtime now
@@ -62,22 +62,28 @@ scan, attestation, signing, and release remain absent.
 ## Build and verify
 
 ```powershell
-cargo +1.97.0 test --workspace --locked
+cargo test --workspace --locked
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
 pwsh -NoProfile -File scripts\verify-dependency-policy.ps1 -RepositoryRoot (Get-Location).Path
 pwsh -NoProfile -File scripts\verify-secret-scan.ps1 -RepositoryRoot (Get-Location).Path -PackagePath dist\TokenMaster-0.1.0-windows-x64-unsigned.zip
 pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
+**Do not add a `+toolchain` override to these commands.** `rust-toolchain.toml` already
+pins `1.97.0-x86_64-pc-windows-msvc`, and rustup installs it on demand. A bare
+`cargo +1.97.0` overrides that pin and resolves the version against the machine's
+default host instead, so on a host defaulting to `windows-gnu` it selects the GNU
+toolchain, which has no `dlltool.exe` and cannot build `getrandom` at all.
+
 The dependency command bootstraps the exact reviewed `cargo-deny` 0.20.2 Windows
 binary and requires network access to the current RustSec database. The last command
-also requires Pester 5.7.1 and a validated Windows GNU linker. Both record developer
-evidence only; neither claims release acceptance.
+also requires Pester 5.7.1. Both record developer evidence only; neither claims
+release acceptance.
 
 ## Run it
 
 ```powershell
-cargo +1.97.0 run --release --bin TokenMaster
+cargo run --release --bin TokenMaster
 ```
 
 The renderer is Skia, chosen by measurement rather than taste: forcing OpenGL cost

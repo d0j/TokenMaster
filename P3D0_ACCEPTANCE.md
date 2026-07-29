@@ -43,7 +43,10 @@ recording a receipt:
 
 1. `git rev-parse HEAD` MUST return a full 40-character commit ID.
 2. `git status --porcelain=v1 --untracked-files=all` MUST be empty, so `dirty=false`.
-3. `cargo +1.97.0 build -p tokenmaster-app --release --locked` MUST pass.
+3. `cargo build -p tokenmaster-app --release --locked` MUST pass. The toolchain comes
+   from `rust-toolchain.toml`; a `+toolchain` override MUST NOT be added, because a
+   bare version resolves against the machine's default host and selects a GNU
+   toolchain wherever that is the default, which cannot build the workspace.
 4. The SHA-256 of the exact built `TokenMaster.exe` MUST be recorded after the build.
 5. The target triple, Windows build, CPU model/logical count, and physical-memory size
    MUST be recorded without usernames, absolute paths, machine names, or other private
@@ -56,13 +59,13 @@ be established, discard the receipt and start a new run.
 ## Mandatory commands
 
 ```powershell
-$arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-state', '--test', 'backup_performance_contract', '--release', '--locked', '--', '--ignored', '--nocapture', '--test-threads=1')
+$arguments = @('test', '-p', 'tokenmaster-state', '--test', 'backup_performance_contract', '--release', '--locked', '--', '--ignored', '--nocapture', '--test-threads=1')
 & cargo @arguments
 
-$arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-state', '--test', 'recovery_resource_contract', '--release', '--locked', '--', '--nocapture', '--test-threads=1')
+$arguments = @('test', '-p', 'tokenmaster-state', '--test', 'recovery_resource_contract', '--release', '--locked', '--', '--nocapture', '--test-threads=1')
 & cargo @arguments
 
-$arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-app', '--test', 'backup_ui_latency_contract', '--release', '--locked', '--', '--nocapture', '--test-threads=1')
+$arguments = @('test', '-p', 'tokenmaster-app', '--test', 'backup_ui_latency_contract', '--release', '--locked', '--', '--nocapture', '--test-threads=1')
 & cargo @arguments
 ```
 
