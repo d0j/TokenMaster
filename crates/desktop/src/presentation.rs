@@ -239,8 +239,6 @@ pub struct DesktopProjection {
 }
 
 impl DesktopProjection {
-    #[must_use]
-
     /// Every event the archive holds, with no date bounds.
     ///
     /// Lives on the projection rather than on one route's: it is the same number on every
@@ -250,6 +248,7 @@ impl DesktopProjection {
         self.lifetime_tokens
     }
 
+    #[must_use]
     pub fn from_snapshot(snapshot: &ProductSnapshot, selected: DesktopRouteKey) -> Self {
         Self::from_snapshot_with_selection(
             snapshot,
