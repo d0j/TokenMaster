@@ -1,10 +1,10 @@
 use std::num::NonZeroU64;
 
 use tokenmaster_query::{
-    LifetimeUsage,
     BenefitOverviewEnvelope, BenefitOverviewSnapshot, GitEnvelope, GitOutputSnapshot,
-    LatestActivityPage, ProductDataStatusEnvelope, QueryEnvelope, QuotaCurrentSnapshot,
-    QuotaEnvelope, UsageAnalytics, UsageSessionDetailResult, UsageSessionPage,
+    LatestActivityPage, LifetimeUsage, ProductDataStatusEnvelope, QueryEnvelope,
+    QuotaCurrentSnapshot, QuotaEnvelope, UsageAnalytics, UsageSessionDetailResult,
+    UsageSessionPage,
 };
 
 use crate::{

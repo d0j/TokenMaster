@@ -21,14 +21,13 @@ use tokenmaster_product::{
     ProductSessionDetailSelectionGeneration, ProductSnapshot, ProductUsageRuntimeHealth,
 };
 use tokenmaster_query::{
-    LifetimeUsage,
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
-    GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
-    ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryService,
-    QuotaCurrentSnapshot, QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest,
-    UsageBreakdownKind, UsageRange, UsageRhythmSelection, UsageSeriesSelection,
-    UsageSessionDetailResult, UsageSessionKey, UsageSessionPage, UsageSessionPageRequest,
-    UsageTimeZone, WeekStart,
+    GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, LifetimeUsage,
+    PageSize, ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode,
+    QueryService, QuotaCurrentSnapshot, QuotaEnvelope, SystemQueryClock, UsageAnalytics,
+    UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageRhythmSelection,
+    UsageSeriesSelection, UsageSessionDetailResult, UsageSessionKey, UsageSessionPage,
+    UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
 use crate::presentation::DesktopSnapshotEpoch;

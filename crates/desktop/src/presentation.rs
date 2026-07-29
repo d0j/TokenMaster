@@ -272,10 +272,12 @@ impl DesktopProjection {
             routes: std::array::from_fn(|index| {
                 DesktopRouteProjection::from_status(snapshot.route(ProductRoute::ALL[index]))
             }),
-            lifetime_tokens: snapshot.lifetime().payload().map_or(
-                DesktopTokenValue::UNAVAILABLE,
-                |lifetime| crate::dashboard::map_tokens(lifetime.tokens(), lifetime.event_count()),
-            ),
+            lifetime_tokens: snapshot
+                .lifetime()
+                .payload()
+                .map_or(DesktopTokenValue::UNAVAILABLE, |lifetime| {
+                    crate::dashboard::map_tokens(lifetime.tokens(), lifetime.event_count())
+                }),
             dashboard: DesktopDashboardProjection::from_snapshot(snapshot),
             history: DesktopHistoryProjection::from_snapshot_with_range(
                 snapshot,

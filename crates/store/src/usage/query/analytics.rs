@@ -1099,27 +1099,33 @@ mod lifetime_tests {
 
     const ROLLUP_COLUMNS: &str = "aggregate_generation, dataset_kind, bucket_width,         bucket_start_seconds, provider_id, profile_id, dimension_kind, dimension_value,         event_count, input_known_count, input_known_sum, cached_known_count,         cached_known_sum, output_known_count, output_known_sum, reasoning_known_count,         reasoning_known_sum, total_known_count, total_known_sum, fallback_model_count,         long_context_yes_count, long_context_no_count, long_context_unavailable_count,         activity_read, activity_edit_write, activity_search, activity_git,         activity_build_test, activity_web, activity_subagents, activity_terminal";
 
+    /// `expect` is denied crate-wide, and the deny is worth keeping for product paths.
+    /// A fixture still has to stop on failure, so it stops through a match instead.
+    fn require<T, E: std::fmt::Display>(result: Result<T, E>) -> T {
+        match result {
+            Ok(value) => value,
+            Err(error) => panic!("expected success, received {error}"),
+        }
+    }
+
     fn seeded(rollups: &[(&str, i64, i64, i64)]) -> (tempfile::TempDir, UsageReadStore) {
-        let directory = tempfile::TempDir::new().expect("temporary directory");
+        let directory = require(tempfile::TempDir::new());
         let path = directory.path().join("usage.sqlite3");
         {
-            let store = UsageStore::open(&path).expect("migrate");
+            let store = require(UsageStore::open(&path));
             for (width, events, known, sum) in rollups {
-                store
-                    .connection
-                    .execute(
-                        &format!(
-                            "INSERT INTO usage_time_rollup({ROLLUP_COLUMNS})
+                require(store.connection.execute(
+                    &format!(
+                        "INSERT INTO usage_time_rollup({ROLLUP_COLUMNS})
                              VALUES (0, 'current', ?1, 3600, 'codex', 'default', 'all', '',
                                      ?2, ?3, ?4, 0, 0, 0, 0, 0, 0, ?3, ?4,
                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
-                        ),
-                        rusqlite::params![width, events, known, sum],
-                    )
-                    .expect("insert rollup");
+                    ),
+                    rusqlite::params![width, events, known, sum],
+                ));
             }
         }
-        let read = UsageReadStore::open(&path).expect("open read store");
+        let read = require(UsageReadStore::open(&path));
         (directory, read)
     }
 
@@ -1132,7 +1138,7 @@ mod lifetime_tests {
     fn a_lifetime_total_counts_each_event_once_across_bucket_widths() {
         let (_directory, store) = seeded(&[("hour", 3, 3, 100), ("minute", 3, 3, 100)]);
 
-        let totals = store.lifetime_totals().expect("lifetime totals");
+        let totals = require(store.lifetime_totals());
 
         assert_eq!(totals.event_count(), 3);
         assert_eq!(totals.total().known_count(), 3);
@@ -1144,7 +1150,7 @@ mod lifetime_tests {
     fn an_empty_archive_totals_zero() {
         let (_directory, store) = seeded(&[]);
 
-        let totals = store.lifetime_totals().expect("lifetime totals");
+        let totals = require(store.lifetime_totals());
 
         assert_eq!(totals.event_count(), 0);
         assert_eq!(totals.total().known_count(), 0);

@@ -771,7 +771,9 @@ fn wal_frames(path: &std::path::Path) -> u64 {
     if bytes.len() <= 32 {
         return 0;
     }
-    let page_size = u64::from(u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]));
+    let page_size = u64::from(u32::from_be_bytes([
+        bytes[8], bytes[9], bytes[10], bytes[11],
+    ]));
     (bytes.len() as u64 - 32) / (page_size + 24)
 }
 
@@ -792,10 +794,9 @@ fn observing_a_batch_of_sources_does_not_journal_a_frame_per_source() {
     let sources: Vec<SourceKey> = (0..SOURCES)
         .map(|seed| register_source(&mut store, seed, "codex", "default"))
         .collect();
-    let manifest = ScanSetManifest::new(
-        vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
-    )
-    .unwrap();
+    let manifest =
+        ScanSetManifest::new(vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice())
+            .unwrap();
     let scan_set = store.begin_scan_set(&manifest, 1).unwrap();
     let scan = store.scan_page(scan_set.id(), None, 1).unwrap()[0].id();
 

@@ -71,7 +71,7 @@ pub use usage::{
     UsageAggregateActivity, UsageAggregateBucketWidth, UsageAggregateMetrics, UsageAggregateRange,
     UsageAggregateSegment, UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown,
     UsageBreakdownIdentity, UsageBreakdownItem, UsageBreakdownKind, UsageBreakdownPriceBasisQuery,
-    UsageOverviewCapture, UsageOverviewQuery, UsagePriceBasisBatchCapture,
+    UsageLifetimeTotals, UsageOverviewCapture, UsageOverviewQuery, UsagePriceBasisBatchCapture,
     UsagePriceBasisBatchQuery, UsagePriceBasisCapture, UsagePriceBasisKey, UsagePriceBasisMetrics,
     UsagePriceBasisQuery, UsagePriceBasisRow, UsagePriceBasisTargetCapture, UsagePriceLongContext,
     UsagePriceTier, UsageQueryCapture, UsageQueryDatasetIdentity, UsageQueryEvent,
@@ -80,6 +80,6 @@ pub use usage::{
     UsageSeriesPointCapture, UsageSessionBreakdownPriceBasisQuery, UsageSessionCursor,
     UsageSessionDetail, UsageSessionDetailCapture, UsageSessionDetailQuery, UsageSessionKey,
     UsageSessionPageCapture, UsageSessionPageQuery, UsageSessionPriceBasisBatchQuery,
-    UsageSessionPriceBasisQuery, UsageSessionSummary, UsageLifetimeTotals, UsageStore, UsageStoreCounts,
+    UsageSessionPriceBasisQuery, UsageSessionSummary, UsageStore, UsageStoreCounts,
     UsageTokenAggregate,
 };

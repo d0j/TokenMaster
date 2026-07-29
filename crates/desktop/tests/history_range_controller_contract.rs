@@ -25,13 +25,11 @@ use tokenmaster_product::{
 };
 use tokenmaster_query::QueryService;
 use tokenmaster_query::{
-    AggregateTokenValue,
-    LifetimeUsage,
-    BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
-    GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest,
-    ProductDataStatusEnvelope, QueryEnvelope, QueryError, QuotaCurrentSnapshot, QuotaEnvelope,
-    UsageAnalytics, UsageAnalyticsRequest, UsageRange, UsageSessionDetailResult, UsageSessionKey,
-    UsageSessionPage, UsageSessionPageRequest,
+    AggregateTokenValue, BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot,
+    GitEnvelope, GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest,
+    LifetimeUsage, ProductDataStatusEnvelope, QueryEnvelope, QueryError, QuotaCurrentSnapshot,
+    QuotaEnvelope, UsageAnalytics, UsageAnalyticsRequest, UsageRange, UsageSessionDetailResult,
+    UsageSessionKey, UsageSessionPage, UsageSessionPageRequest,
 };
 
 #[test]

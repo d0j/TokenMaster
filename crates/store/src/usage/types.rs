@@ -6,8 +6,8 @@ use tokenmaster_accounting::{
 };
 use tokenmaster_domain::SessionRelationDraft;
 
-use crate::{StoreError, StoreErrorCode};
 use super::query::UsageTokenAggregate;
+use crate::{StoreError, StoreErrorCode};
 
 pub const MAX_RESUME_BYTES: usize = 32 * 1024;
 pub const MAX_USAGE_EVENT_PAGE_SIZE: usize = 256;

@@ -5227,9 +5227,8 @@ mod cost_format_tests {
                     fraction.len()
                 );
             }
-            assert_eq!(
+            assert!(
                 rendered.matches('.').count() <= 1,
-                true,
                 "{micros} micros rendered as {rendered}"
             );
         }
@@ -5296,7 +5295,12 @@ mod trend_area_tests {
     fn point(ratio: f32, available: bool) -> DashboardTrendPoint {
         DashboardTrendPoint {
             tokens_ratio: ratio,
-            tokens_availability: if available { "available" } else { "unavailable" }.into(),
+            tokens_availability: if available {
+                "available"
+            } else {
+                "unavailable"
+            }
+            .into(),
             ..Default::default()
         }
     }
@@ -5312,7 +5316,10 @@ mod trend_area_tests {
         assert_eq!(path.matches('M').count(), 1, "path: {path}");
         assert_eq!(path.matches('Z').count(), 1, "path: {path}");
         assert!(path.starts_with(&format!("M 28.00 {foot}")), "path: {path}");
-        assert!(path.ends_with(&format!("L 972.00 {foot} Z ")), "path: {path}");
+        assert!(
+            path.ends_with(&format!("L 972.00 {foot} Z ")),
+            "path: {path}"
+        );
     }
 
     /// A day without evidence breaks the shading, exactly as it breaks the line.

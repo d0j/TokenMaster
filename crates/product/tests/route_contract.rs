@@ -283,7 +283,9 @@ fn a_section_blanked_by_a_status_still_accepts_that_refresh_own_answer() {
         .expect("create legacy schema");
     drop(UsageStore::open(&legacy_path).expect("migrate legacy fixture"));
     let mut legacy_service = QueryService::open(&legacy_path, FixedClock).expect("legacy service");
-    let _ = legacy_service.product_data_status().expect("generation one");
+    let _ = legacy_service
+        .product_data_status()
+        .expect("generation one");
     let legacy_status = legacy_service.product_data_status().expect("legacy status");
 
     // one refresh: the status lands, then the answer computed in the same refresh
