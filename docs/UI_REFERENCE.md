@@ -35,6 +35,19 @@ beside a filled green square.
 mockup from what is built: not more numbers, but each number explained by smaller facts
 directly beneath, in the secondary colour at caption size.
 
+**The whole Dashboard fits at the size the mockup is drawn at, and nothing scrolls.** This
+is a layout constraint, not a preference: everything on this screen is visible at once, so
+density is achieved by making cells compact rather than by giving the view a scroll
+surface. A scrollbar appearing on the Dashboard at this size is a defect. Below this size
+the responsive rules still apply -- the constraint is that scrolling is never how the
+design is made to fit at its own size.
+
+**Inner cells inherit from TokenMaster.** The nested cells -- the four in the top strip,
+Plan Usage's three sub-cards, the Sessions rows, the Cost by Model blocks -- take their
+surface, border, radius, spacing, type size and weight from the existing token set, and
+their values from the archive. Nothing here is styled per cell and nothing is filled from
+this document. Apply the design everywhere else; inside a cell, inherit.
+
 ## Screen by screen
 
 ### Header
