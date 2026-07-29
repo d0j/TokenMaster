@@ -5158,6 +5158,30 @@ mod duration_tests {
 }
 
 #[cfg(test)]
+mod availability_format_tests {
+    use super::{format_cost, format_tokens};
+    use crate::dashboard::{DesktopCostValue, DesktopTokenValue, map_tokens};
+    use tokenmaster_query::AggregateTokenValue;
+
+    /// A day with no evidence and a day that really cost nothing must not read alike.
+    ///
+    /// This is a release criterion and nothing pinned it: the behaviour existed in both
+    /// formatters and could have been changed by either without a test noticing.
+    #[test]
+    fn an_absent_value_never_renders_like_a_measured_zero() {
+        let absent_tokens = format_tokens(DesktopTokenValue::UNAVAILABLE);
+        let measured_zero_tokens = format_tokens(map_tokens(AggregateTokenValue::Known(0), 0));
+        assert_eq!(absent_tokens, "—");
+        assert_eq!(measured_zero_tokens, "0");
+        assert_ne!(absent_tokens, measured_zero_tokens);
+
+        let absent_cost = format_cost(DesktopCostValue::UNAVAILABLE);
+        assert_eq!(absent_cost, "—");
+        assert_ne!(absent_cost, "$0.00");
+    }
+}
+
+#[cfg(test)]
 mod cost_format_tests {
     use super::format_usd_micros;
 
