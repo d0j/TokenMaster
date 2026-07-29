@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#07090d; }
+  * { box-sizing: border-box; }
+  a { color:#2ee6a6; text-decoration:none; }
+  a:hover { color:#7df3ca; }
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-thumb { background:#1e2a38; border-radius:3px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  @keyframes tmPulse { 0%,100% { opacity:.35 } 50% { opacity:1 } }
+</style>
+</helmet>
+
+<div style="width:462px; height:900px; display:flex; flex-direction:column; background:#0a0e13; border:1px solid #1b2431; border-radius:8px; overflow:hidden; font-family:'IBM Plex Sans',system-ui,sans-serif; color:#dbe3ec; box-shadow:0 24px 60px rgba(0,0,0,.55)">
+
+  <div style="display:flex; align-items:center; gap:8px; padding:9px 10px; background:#0d1218; border-bottom:1px solid #1b2431; flex-shrink:0">
+    <div style="display:flex; align-items:baseline; gap:6px; margin-right:2px">
+      <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; letter-spacing:-.3px; color:#2ee6a6">token<span style="color:#e8eef5">master</span></span>
+      <span style="font-size:9px; color:#4d5b6b; font-family:'JetBrains Mono',monospace">v0.4</span>
+    </div>
+    <div style="display:flex; gap:2px; margin-left:auto; background:#111922; border:1px solid #1e2a38; border-radius:5px; padding:2px">
+      <div onClick="{{ goOverview }}" style="{{ tabOverview }}">overview</div>
+      <div onClick="{{ goModels }}" style="{{ tabModels }}">models</div>
+      <div onClick="{{ goLog }}" style="{{ tabLog }}">log</div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; padding-left:6px; color:#3f4c5c; font-family:'JetBrains Mono',monospace; font-size:12px">
+      <span style="cursor:default" style-hover="color:#8b9aab">▭</span>
+      <span style="cursor:default" style-hover="color:#8b9aab">—</span>
+      <span style="cursor:default" style-hover="color:#e05252">✕</span>
+    </div>
+  </div>
+
+  <div style="flex:1; overflow-y:auto; overflow-x:hidden; padding:10px; display:flex; flex-direction:column; gap:9px">
+
+    <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex; flex-direction:column; gap:9px">
+
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:12px 13px 13px; background:linear-gradient(180deg,#101823,#0c131b); border:1px solid #1e2a38; border-radius:7px">
+          <div>
+            <div style="font-size:10px; letter-spacing:1.4px; color:#6b7c8f; font-weight:600">SPEND TODAY</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:38px; line-height:1.05; letter-spacing:-1.5px; color:#f2f7fb; margin-top:2px">$46.98</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7b8b9d; margin-top:3px"><span style="color:#dbe3ec">902</span> calls · <span style="color:#dbe3ec">194</span> sessions</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:10px; letter-spacing:1.4px; color:#6b7c8f; font-weight:600">CACHE HIT</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:30px; line-height:1.1; color:#2ee6a6; margin-top:2px">97%</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#2ee6a6; opacity:.75; margin-top:3px">saved $293</div>
+          </div>
+        </div>
+
+        <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; gap:9px; padding:10px 12px; background:#1a1508; border:1px solid #4a3a10; border-radius:7px">
+            <span style="font-family:'JetBrains Mono',monospace; color:#f0b429; font-size:12px; animation:tmPulse 1.8s infinite">●</span>
+            <div>
+              <div style="font-size:11px; font-weight:700; letter-spacing:.9px; color:#f0b429">INDEXING 98 / 104 SOURCES</div>
+              <div style="font-size:11px; color:#a3906a; margin-top:2px">Totals stay partial until the scan finishes.</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="background:#101720; border:1px solid #1a2431; border-radius:7px; overflow:hidden">
+          <div style="padding:9px 12px; border-bottom:1px solid #1a2431; font-size:10px; letter-spacing:1.4px; color:#8b9aab; font-weight:700">PLAN USAGE</div>
+          <div style="padding:11px 12px 12px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.6px; color:#7b8b9d">PRO · WEEKLY WINDOW</div>
+              <div style="display:flex; gap:6px">
+                <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#f0b429; border:1px solid #4a3a10; background:#1a1508; padding:2px 6px; border-radius:4px">log</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#2ee6a6; border:1px solid #14453a; background:#0c1d19; padding:2px 6px; border-radius:4px">cache 97%</span>
+              </div>
+            </div>
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-top:6px">
+              <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:30px; color:#2ee6a6; line-height:1">34%</div>
+              <div style="text-align:right; font-family:'JetBrains Mono',monospace; font-size:10px; color:#5f6f80">TIME ELAPSED<br /><span style="color:#9fb0c1; font-size:13px">41%</span></div>
+            </div>
+            <div style="position:relative; height:6px; background:#16202b; border-radius:3px; margin-top:9px">
+              <div style="position:absolute; inset:0 66% 0 0; background:linear-gradient(90deg,#1c8f6c,#2ee6a6); border-radius:3px"></div>
+              <div style="position:absolute; top:-3px; bottom:-3px; left:41%; width:1px; background:#63768a"></div>
+            </div>
+            <div style="display:flex; gap:14px; margin-top:9px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#a9b8c8">
+              <span><span style="color:#4a9eff">●</span> in 3.1M</span>
+              <span><span style="color:#2ee6a6">●</span> out 337.6K</span>
+              <span><span style="color:#3fd0c9">●</span> cache 108.5M</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:8px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#5f6f80">
+              <span>↻ 152h 52m · resets Sat</span>
+              <span style="color:#e05252">$46.98</span>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border-top:1px solid #1a2431; background:#0d141c; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7b8b9d">
+            <span>resets available <span style="color:#f2f7fb">1</span></span>
+            <span>next in 17d 5h</span>
+          </div>
+        </div>
+
+        <div style="background:#101720; border:1px solid #1a2431; border-radius:7px; overflow:hidden">
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border-bottom:1px solid #1a2431">
+            <div>
+              <div style="font-size:10px; letter-spacing:1.4px; color:#8b9aab; font-weight:700">CODE OUTPUT</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f; margin-top:2px">4 repos in session</div>
+            </div>
+            <div style="display:flex; gap:2px; background:#0d141c; border:1px solid #1e2a38; border-radius:5px; padding:2px">
+              <div onClick="{{ setDay }}" style="{{ rangeDay }}">day</div>
+              <div onClick="{{ setWeek }}" style="{{ rangeWeek }}">week</div>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(3,1fr)">
+            <div style="padding:11px 12px; text-align:center; border-right:1px solid #1a2431">
+              <div style="font-size:9px; letter-spacing:1.2px; color:#6b7c8f; font-weight:600">COMMITS</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:22px; color:#2ee6a6; line-height:1.3">3</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f">695 total</div>
+            </div>
+            <div style="padding:11px 12px; text-align:center; border-right:1px solid #1a2431">
+              <div style="font-size:9px; letter-spacing:1.2px; color:#6b7c8f; font-weight:600">NET LINES</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:22px; color:#2ee6a6; line-height:1.3">+2747</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f">+3056 / −309</div>
+            </div>
+            <div style="padding:11px 12px; text-align:center">
+              <div style="font-size:9px; letter-spacing:1.2px; color:#6b7c8f; font-weight:600">$ / 100 LINES</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:22px; color:#f2f7fb; line-height:1.3">$1.54</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f">avg $5.77</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #1a2431; padding:11px 12px 8px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline">
+              <div style="font-size:10px; letter-spacing:1.3px; color:#8b9aab; font-weight:700">OUTPUT GROWTH</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#2ee6a6">+444.7K net</div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f; margin-top:2px">last 7 days on all-time baseline</div>
+            <svg viewBox="0 0 400 96" preserveAspectRatio="none" style="width:100%; height:96px; margin-top:6px; display:block">
+              <line x1="0" y1="82" x2="400" y2="82" stroke="#1a2431" stroke-width="1" />
+              <polyline points="14,78 76,62 138,50 200,40 262,34 324,30 386,20" fill="none" stroke="#2ee6a6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+              <circle cx="14" cy="78" r="3" fill="#0a0e13" stroke="#2ee6a6" stroke-width="2" />
+              <circle cx="76" cy="62" r="3" fill="#0a0e13" stroke="#2ee6a6" stroke-width="2" />
+              <circle cx="138" cy="50" r="3" fill="#0a0e13" stroke="#2ee6a6" stroke-width="2" />
+              <circle cx="200" cy="40" r="3" fill="#0a0e13" stroke="#2ee6a6" stroke-width="2" />
+              <circle cx="262" cy="34" r="3" fill="#0a0e13" stroke="#2ee6a6" stroke-width="2" />
+              <circle cx="324" cy="30" r="3" fill="#0a0e13" stroke="#2ee6a6" stroke-width="2" />
+              <circle cx="386" cy="20" r="5" fill="#2ee6a6" />
+            </svg>
+            <div style="display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f">
+              <span>7/20</span><span>7/21</span><span>7/22</span><span>7/23</span><span>7/24</span><span>7/25</span><span style="color:#9fb0c1">today</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#101720; border:1px solid #1a2431; border-radius:7px; overflow:hidden">
+          <div style="display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid #1a2431">
+            <div style="font-size:10px; letter-spacing:1.4px; color:#8b9aab; font-weight:700">TREND</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f">14d · $4552</div>
+            <div style="display:flex; gap:2px; margin-left:auto; background:#0d141c; border:1px solid #1e2a38; border-radius:5px; padding:2px">
+              <div onClick="{{ setCost }}" style="{{ metricCost }}">cost</div>
+              <div onClick="{{ setTokens }}" style="{{ metricTokens }}">tokens</div>
+            </div>
+          </div>
+          <div style="padding:10px 12px 8px">
+            <svg viewBox="0 0 400 120" preserveAspectRatio="none" style="width:100%; height:118px; display:block">
+              <line x1="0" y1="14" x2="400" y2="14" stroke="#16202b" stroke-width="1" />
+              <line x1="0" y1="60" x2="400" y2="60" stroke="#16202b" stroke-width="1" />
+              <line x1="0" y1="106" x2="400" y2="106" stroke="#16202b" stroke-width="1" />
+              <polyline points="10,96 42,94 74,90 106,30 138,70 170,86 202,22 234,74 266,44 298,50 330,68 362,92 390,78" fill="none" stroke="#4a9eff" stroke-width="2" stroke-linejoin="round" />
+              <polyline points="10,104 42,102 74,88 106,100 138,96 170,78 202,84 234,110 266,92 298,98 330,104 362,100 390,88" fill="none" stroke="#2ee6a6" stroke-width="2" stroke-linejoin="round" />
+            </svg>
+            <div style="display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f; padding-top:2px">
+              <span>7/14</span><span>peak $730</span><span>today $46.98</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isModels }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; flex-direction:column; gap:9px">
+        <div style="background:#101720; border:1px solid #1a2431; border-radius:7px; overflow:hidden">
+          <div style="display:flex; justify-content:space-between; padding:9px 12px; border-bottom:1px solid #1a2431">
+            <span style="font-size:10px; letter-spacing:1.4px; color:#8b9aab; font-weight:700">COST BY MODEL</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f">today</span>
+          </div>
+          <div style="padding:4px 0">
+            <div style="padding:9px 12px; border-bottom:1px solid #141d27">
+              <div style="display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:12px"><span style="color:#e8eef5">opus-4.6</span><span style="color:#f2f7fb">$28.40</span></div>
+              <div style="height:4px; background:#16202b; border-radius:2px; margin-top:6px"><div style="width:61%; height:4px; background:#4a9eff; border-radius:2px"></div></div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f; margin-top:4px">312 calls · in 1.4M · out 121K · cache 92%</div>
+            </div>
+            <div style="padding:9px 12px; border-bottom:1px solid #141d27">
+              <div style="display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:12px"><span style="color:#e8eef5">sonnet-4.6</span><span style="color:#f2f7fb">$13.10</span></div>
+              <div style="height:4px; background:#16202b; border-radius:2px; margin-top:6px"><div style="width:28%; height:4px; background:#2ee6a6; border-radius:2px"></div></div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f; margin-top:4px">468 calls · in 1.5M · out 190K · cache 99%</div>
+            </div>
+            <div style="padding:9px 12px">
+              <div style="display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:12px"><span style="color:#e8eef5">haiku-4</span><span style="color:#f2f7fb">$5.48</span></div>
+              <div style="height:4px; background:#16202b; border-radius:2px; margin-top:6px"><div style="width:11%; height:4px; background:#3fd0c9; border-radius:2px"></div></div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#54626f; margin-top:4px">122 calls · in 0.2M · out 26K · cache 88%</div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#101720; border:1px solid #1a2431; border-radius:7px; overflow:hidden">
+          <div style="padding:9px 12px; border-bottom:1px solid #1a2431; font-size:10px; letter-spacing:1.4px; color:#8b9aab; font-weight:700">TOP REPOS</div>
+          <div style="display:grid; grid-template-columns:1fr auto auto; font-family:'JetBrains Mono',monospace; font-size:11px">
+            <div style="padding:8px 12px; color:#e8eef5; border-bottom:1px solid #141d27">tokenmaster</div><div style="padding:8px 8px; color:#2ee6a6; border-bottom:1px solid #141d27">+1902</div><div style="padding:8px 12px; color:#9fb0c1; border-bottom:1px solid #141d27">$22.10</div>
+            <div style="padding:8px 12px; color:#e8eef5; border-bottom:1px solid #141d27">slint-ui</div><div style="padding:8px 8px; color:#2ee6a6; border-bottom:1px solid #141d27">+611</div><div style="padding:8px 12px; color:#9fb0c1; border-bottom:1px solid #141d27">$14.80</div>
+            <div style="padding:8px 12px; color:#e8eef5; border-bottom:1px solid #141d27">indexer</div><div style="padding:8px 8px; color:#2ee6a6; border-bottom:1px solid #141d27">+204</div><div style="padding:8px 12px; color:#9fb0c1; border-bottom:1px solid #141d27">$6.90</div>
+            <div style="padding:8px 12px; color:#e8eef5">docs</div><div style="padding:8px 8px; color:#e05252">−309</div><div style="padding:8px 12px; color:#9fb0c1">$3.18</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLog }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#0c1118; border:1px solid #1a2431; border-radius:7px; overflow:hidden">
+        <div style="display:flex; justify-content:space-between; padding:9px 12px; border-bottom:1px solid #1a2431">
+          <span style="font-size:10px; letter-spacing:1.4px; color:#8b9aab; font-weight:700">SESSION LOG</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#2ee6a6">live · tail</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; line-height:1.9; padding:8px 12px 12px; color:#8fa0b2">
+          <div><span style="color:#4a5867">14:33:54</span> <span style="color:#2ee6a6">opus</span> tokenmaster/ui.slint <span style="color:#f2f7fb">$0.41</span> <span style="color:#3fd0c9">cache 96%</span></div>
+          <div><span style="color:#4a5867">14:33:12</span> <span style="color:#4a9eff">sonnet</span> tokenmaster/store.rs <span style="color:#f2f7fb">$0.08</span> <span style="color:#3fd0c9">cache 99%</span></div>
+          <div><span style="color:#4a5867">14:31:47</span> <span style="color:#f0b429">reset</span> weekly window recalculated</div>
+          <div><span style="color:#4a5867">14:30:02</span> <span style="color:#2ee6a6">opus</span> indexer/scan.rs <span style="color:#f2f7fb">$0.77</span> <span style="color:#3fd0c9">cache 90%</span></div>
+          <div><span style="color:#4a5867">14:28:39</span> <span style="color:#4a9eff">sonnet</span> commit a91f2c <span style="color:#2ee6a6">+412 / −31</span></div>
+          <div><span style="color:#4a5867">14:26:10</span> <span style="color:#e05252">warn</span> budget 80% of daily cap</div>
+          <div><span style="color:#4a5867">14:24:55</span> <span style="color:#4a9eff">haiku</span> docs/readme.md <span style="color:#f2f7fb">$0.01</span></div>
+          <div><span style="color:#4a5867">14:22:31</span> <span style="color:#2ee6a6">opus</span> slint-ui/panel.slint <span style="color:#f2f7fb">$0.53</span> <span style="color:#3fd0c9">cache 94%</span></div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid #1b2431; background:#0d1218; flex-shrink:0">
+    <div style="padding:9px 0 8px; text-align:center; cursor:default" style-hover="background:#131b24">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#7b8b9d">⚙</div>
+      <div style="font-size:10px; color:#7b8b9d; margin-top:2px">settings</div>
+    </div>
+    <div style="padding:9px 0 8px; text-align:center; cursor:default" style-hover="background:#131b24">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#f0b429">!</div>
+      <div style="font-size:10px; color:#7b8b9d; margin-top:2px">alerts</div>
+    </div>
+    <div style="padding:9px 0 8px; text-align:center; cursor:default" style-hover="background:#131b24">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#7b8b9d">?</div>
+      <div style="font-size:10px; color:#7b8b9d; margin-top:2px">help</div>
+    </div>
+    <div style="padding:9px 0 8px; text-align:center; cursor:default" style-hover="background:#131b24">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#2ee6a6">↻</div>
+      <div style="font-size:10px; color:#7b8b9d; margin-top:2px">just now</div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:462,&quot;height&quot;:900},&quot;showBanner&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;State&quot;}}">
+class Component extends DCLogic {
+  state = { view: "overview", range: "day", metric: "cost" };
+
+  seg(active) {
+    return "padding:3px 9px; border-radius:4px; cursor:default; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.2px;" +
+      (active
+        ? "background:#123128; color:#2ee6a6; font-weight:700;"
+        : "background:transparent; color:#67788a;");
+  }
+
+  renderVals() {
+    const v = this.state.view, r = this.state.range, m = this.state.metric;
+    return {
+      showBanner: this.props.showBanner ?? true,
+      isOverview: v === "overview",
+      isModels: v === "models",
+      isLog: v === "log",
+      tabOverview: this.seg(v === "overview"),
+      tabModels: this.seg(v === "models"),
+      tabLog: this.seg(v === "log"),
+      rangeDay: this.seg(r === "day"),
+      rangeWeek: this.seg(r === "week"),
+      metricCost: this.seg(m === "cost"),
+      metricTokens: this.seg(m === "tokens"),
+      goOverview: () => this.setState({ view: "overview" }),
+      goModels: () => this.setState({ view: "models" }),
+      goLog: () => this.setState({ view: "log" }),
+      setDay: () => this.setState({ range: "day" }),
+      setWeek: () => this.setState({ range: "week" }),
+      setCost: () => this.setState({ metric: "cost" }),
+      setTokens: () => this.setState({ metric: "tokens" })
+    };
+  }
+}
+
+</script>
+</body>
+</html>
