@@ -302,6 +302,12 @@ pub struct DesktopHeaderProjection {
     input: DesktopTokenValue,
     cached: DesktopTokenValue,
     output: DesktopTokenValue,
+    /// How much of the input was served from cache, in parts per million, matching the
+    /// idiom the quota rows already use for a fraction.
+    ///
+    /// `None` unless both parts are known and the input is non-zero, because a hit rate
+    /// over an unknown or empty input is not a small number -- it is no number.
+    cache_hit_ppm: Option<u32>,
     cost: DesktopCostValue,
     event_count: Option<u64>,
     freshness: Option<DesktopFreshness>,
@@ -328,6 +334,11 @@ impl DesktopHeaderProjection {
     #[must_use]
     pub const fn output(self) -> DesktopTokenValue {
         self.output
+    }
+
+    #[must_use]
+    pub const fn cache_hit_ppm(self) -> Option<u32> {
+        self.cache_hit_ppm
     }
 
     #[must_use]
@@ -893,6 +904,7 @@ fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
                 input: DesktopTokenValue::UNAVAILABLE,
                 cached: DesktopTokenValue::UNAVAILABLE,
                 output: DesktopTokenValue::UNAVAILABLE,
+                cache_hit_ppm: None,
                 cost: DesktopCostValue::UNAVAILABLE,
                 event_count: None,
                 freshness: None,
@@ -930,6 +942,10 @@ fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
             input: map_tokens(metrics.input(), metrics.event_count()),
             cached: map_tokens(metrics.cached(), metrics.event_count()),
             output: map_tokens(metrics.output(), metrics.event_count()),
+            cache_hit_ppm: cache_hit_ppm(
+                map_tokens(metrics.input(), metrics.event_count()),
+                map_tokens(metrics.cached(), metrics.event_count()),
+            ),
             cost: map_cost(payload.overview_cost()),
             event_count: Some(metrics.event_count()),
             freshness: Some(map_freshness(envelope.header().freshness())),
@@ -1405,6 +1421,19 @@ fn empty_activity() -> [DesktopActivityRow; DASHBOARD_ACTIVITY_ROWS] {
         key: DesktopActivityKey::ALL[index],
         count: 0,
     })
+}
+
+/// Cached tokens are a part of the input, not a sibling of it: the parser clamps them with
+/// `cached.min(input)` and the aggregate spells the complement as
+/// `input_tokens - cached_tokens AS uncached_input`. The denominator is therefore the input
+/// alone, and `input + cached` would double-count the cached half of it.
+fn cache_hit_ppm(input: DesktopTokenValue, cached: DesktopTokenValue) -> Option<u32> {
+    let input = input.known_sum()?;
+    let cached = cached.known_sum()?;
+    if input == 0 {
+        return None;
+    }
+    u32::try_from(u128::from(cached) * 1_000_000 / u128::from(input)).ok()
 }
 
 pub(crate) fn map_tokens(value: AggregateTokenValue, event_count: u64) -> DesktopTokenValue {

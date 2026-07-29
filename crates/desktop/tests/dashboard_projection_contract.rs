@@ -300,6 +300,18 @@ fn production_snapshot_maps_dynamic_values_without_private_identity_leakage() {
     assert!(header.input().known_sum().is_some_and(|value| value > 0));
     assert_ne!(header.input().known_sum(), header.tokens().known_sum());
 
+    // Cached tokens are a part of the input rather than a sibling of it: the parser clamps
+    // them with `cached.min(input)` and the aggregate spells the complement as
+    // `input_tokens - cached_tokens AS uncached_input`. So the hit rate divides by the
+    // input, and dividing by `input + cached` would be a fabricated denominator that no
+    // other assertion here would notice.
+    let input = header.input().known_sum().expect("known input");
+    let cached = header.cached().known_sum().expect("known cached");
+    assert_eq!(
+        header.cache_hit_ppm(),
+        Some(u32::try_from(u128::from(cached) * 1_000_000 / u128::from(input)).expect("ppm"))
+    );
+
     assert_eq!(dashboard.quota_rows().len(), 1);
     let quota = &dashboard.quota_rows()[0];
     assert_eq!(quota.label_key(), "quota.dynamic_weekly");
