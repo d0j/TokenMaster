@@ -279,3 +279,22 @@ carried had drifted.
 - The Win32 tray reconstructs a `&'static Inner` from `GWLP_USERDATA`. It is correct
   today only because `Drop` clears the pointer before `DestroyWindow` and no message
   handling runs above that point.
+
+## Attributing journal frames to the tables that cause them
+
+When a database grows a journal without growing itself, guessing which statement is responsible
+from reading code is slower and less reliable than reading the journal. Every write-ahead-log
+frame carries the page number it replaces; every page belongs to exactly one b-tree, and that
+map is recoverable by walking each `rootpage` in `sqlite_master` down through the interior pages
+in the main database file. Opening the database with `immutable=1` guarantees the reading cannot
+write, checkpoint or recover anything.
+
+`scratchpad/wal_owner.py` does this. On the ingestion blocker it reported 8032 of 9564 frames --
+31.4 MB of 39 -- against `usage_source` over only 237 distinct pages, with 8044 frames carrying
+their own commit: one transaction, one frame, per file. Two hypotheses read out of the code had
+already been wrong before this measurement was taken, and both were wrong in the same direction,
+naming a plausible statement rather than the one that ran.
+
+A frame count is also the honest unit for a guard. A test that observes 200 sources and counts
+journal frames fails at exactly 200 for a batch implemented as a loop of transactions, and the
+number it prints is the defect itself rather than a proxy for it.
