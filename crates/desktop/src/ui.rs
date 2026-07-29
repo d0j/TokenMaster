@@ -4270,11 +4270,6 @@ fn apply_activity(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
 }
 
 fn apply_models(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
-    let maximum = dashboard
-        .models()
-        .iter()
-        .filter_map(|row| row.tokens().known_sum())
-        .max();
     let rows = dashboard
         .models()
         .iter()
@@ -4283,7 +4278,13 @@ fn apply_models(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
             label: row.model().into(),
             tokens_availability: availability_code(row.tokens().availability()).into(),
             tokens_label: format_tokens(row.tokens()).into(),
-            tokens_ratio: ratio(row.tokens().known_sum(), maximum),
+            // The share arrives on the snapshot rather than being recomputed here. It was
+            // computed in both places for a while, which is one implementation too many of
+            // a number the user reads: the bar on screen and the field in the snapshot
+            // could disagree, and only one of them is contracted.
+            // Absent means a bar of no width rather than a full one: a share the
+            // projection refused to state must not be drawn as certainty.
+            tokens_ratio: row.share_ppm().map_or(0.0, ppm_ratio),
             cost_availability: availability_code(row.cost().availability()).into(),
             cost_label: format_cost(row.cost()).into(),
         })
