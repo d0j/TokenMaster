@@ -14,8 +14,9 @@ use tokenmaster_product::ProductReducer;
 const TRANSLATION_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/translations");
 static LOCALE_SWITCH_LOCK: Mutex<()> = Mutex::new(());
 
-const SHELL_MSGIDS: [&str; 38] = [
+const SHELL_MSGIDS: [&str; 39] = [
     "{0} all time",
+    "Alerts",
     "Views",
     "Refresh",
     "Refreshing…",
@@ -765,7 +766,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 518, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 519, "projection catalog exact inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -781,7 +782,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 518, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 519, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -813,7 +814,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 518, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 519, "projection catalog exact inventory");
 
     let data_health = include_str!("../ui/views/data-health-view.slint");
     for msgid in DATA_HEALTH_MSGIDS {
@@ -837,7 +838,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5a Data Health key set"
         );
-        assert_eq!(po_entry_count(&catalog), 518, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 519, "{locale} exact key count");
         for msgid in DATA_HEALTH_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -865,7 +866,7 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 518, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 519, "projection catalog exact inventory");
 
     let help_about = include_str!("../ui/views/help-about-view.slint");
     for msgid in HELP_ABOUT_MSGIDS {
@@ -889,7 +890,7 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5b Help/About key set"
         );
-        assert_eq!(po_entry_count(&catalog), 518, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 519, "{locale} exact key count");
         for msgid in HELP_ABOUT_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5b catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -917,7 +918,7 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 518, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 519, "projection catalog exact inventory");
 
     let activity = include_str!("../ui/views/activity-view.slint");
     let models = include_str!("../ui/views/models-view.slint");
@@ -939,7 +940,7 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 518, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 519, "{locale} exact key count");
         for msgid in ACTIVITY_MODELS_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b6 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -980,7 +981,7 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 518, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 519, "projection catalog exact inventory");
 
     let history = include_str!("../ui/views/history-view.slint");
     for msgid in HISTORY_MSGIDS {
@@ -1000,7 +1001,7 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 518, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 519, "{locale} exact key count");
         for msgid in HISTORY_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b7a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -1807,4 +1808,89 @@ fn placeholders(value: &str) -> Vec<&str> {
         cursor = end;
     }
     placeholders
+}
+
+/// Every `@tr` in the tree must have a catalogue entry, not only the other way round.
+///
+/// The assertions above walk the closed msgid arrays and require each entry to appear in
+/// the Slint sources. Nothing walked the sources and required each `@tr` to appear in a
+/// catalogue, so a label added to a view and forgotten in the catalogues passed every
+/// gate and shipped as English in every locale. One already had.
+///
+/// The sources are enumerated from disk rather than listed here on purpose: a list would
+/// have to be remembered, and forgetting is the failure this test exists to catch.
+#[test]
+fn every_translated_literal_in_the_tree_has_a_catalogue_entry() {
+    fn collect(directory: &Path, sources: &mut Vec<(String, String)>) {
+        let entries = std::fs::read_dir(directory).expect("read ui directory");
+        for entry in entries {
+            let entry = entry.expect("directory entry");
+            let path = entry.path();
+            if path.is_dir() {
+                collect(&path, sources);
+            } else if path.extension().is_some_and(|value| value == "slint") {
+                let text = std::fs::read_to_string(&path).expect("read slint source");
+                sources.push((path.display().to_string(), text));
+            }
+        }
+    }
+
+    let mut sources = Vec::new();
+    collect(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("ui"),
+        &mut sources,
+    );
+    assert!(
+        sources.len() > 10,
+        "expected the whole Slint tree, found {} files",
+        sources.len()
+    );
+
+    let mut translated = BTreeSet::new();
+    for (path, text) in &sources {
+        let mut cursor = 0;
+        while let Some(relative) = text[cursor..].find("@tr(\"") {
+            let start = cursor + relative + 5;
+            let Some(relative_end) = text[start..].find('"') else {
+                break;
+            };
+            let end = start + relative_end;
+            translated.insert((path.clone(), text[start..end].to_string()));
+            cursor = end;
+        }
+    }
+    assert!(
+        translated.len() > 100,
+        "expected many translated literals, found {}",
+        translated.len()
+    );
+
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("catalog");
+        // The catalogues are CRLF on disk, so a match anchored to a bare newline finds
+        // nothing and reports every literal as missing. That false alarm is worse than no
+        // test: 583 names in one message teach the reader to skip the message.
+        let catalog = catalog.replace("\r\n", "\n");
+        let missing = translated
+            .iter()
+            .filter(|(_, literal)| !catalog.contains(&format!("msgid \"{literal}\"\n")))
+            .map(|(path, literal)| {
+                let file = Path::new(path)
+                    .file_name()
+                    .map_or_else(|| path.clone(), |name| name.to_string_lossy().into_owned());
+                format!("{file}: {literal:?}")
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "{locale} catalogue is missing {} translated literal(s) used by the tree: {missing:?}",
+            missing.len()
+        );
+    }
 }
