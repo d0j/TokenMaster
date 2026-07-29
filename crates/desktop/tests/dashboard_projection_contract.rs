@@ -281,6 +281,25 @@ fn production_snapshot_maps_dynamic_values_without_private_identity_leakage() {
     assert_eq!(header.cost().priced_events(), Some(1));
     assert_eq!(header.event_count(), Some(1));
 
+    // The split exists on `UsageMetrics` and every other route projection maps it, while
+    // this one took `total()` alone -- so the reference mockup's `in … · out …` line and
+    // its `CACHE HIT` cell had nothing to render from. The inequality is the point: three
+    // fields all wired from `total()` would satisfy everything above it.
+    assert_eq!(
+        header.input().availability(),
+        DesktopValueAvailability::Known
+    );
+    assert_eq!(
+        header.cached().availability(),
+        DesktopValueAvailability::Known
+    );
+    assert_eq!(
+        header.output().availability(),
+        DesktopValueAvailability::Known
+    );
+    assert!(header.input().known_sum().is_some_and(|value| value > 0));
+    assert_ne!(header.input().known_sum(), header.tokens().known_sum());
+
     assert_eq!(dashboard.quota_rows().len(), 1);
     let quota = &dashboard.quota_rows()[0];
     assert_eq!(quota.label_key(), "quota.dynamic_weekly");

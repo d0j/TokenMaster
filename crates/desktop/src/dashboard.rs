@@ -295,6 +295,13 @@ pub enum DesktopQuality {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DesktopHeaderProjection {
     tokens: DesktopTokenValue,
+    /// The three parts of that total, carried because the reference mockup explains every
+    /// number with smaller facts beneath it -- `in … · out …` under the token figure and a
+    /// cache-hit cell of its own. They cost nothing to carry: the query layer already
+    /// computes them for the same range, and every other route projection maps them.
+    input: DesktopTokenValue,
+    cached: DesktopTokenValue,
+    output: DesktopTokenValue,
     cost: DesktopCostValue,
     event_count: Option<u64>,
     freshness: Option<DesktopFreshness>,
@@ -306,6 +313,21 @@ impl DesktopHeaderProjection {
     #[must_use]
     pub const fn tokens(self) -> DesktopTokenValue {
         self.tokens
+    }
+
+    #[must_use]
+    pub const fn input(self) -> DesktopTokenValue {
+        self.input
+    }
+
+    #[must_use]
+    pub const fn cached(self) -> DesktopTokenValue {
+        self.cached
+    }
+
+    #[must_use]
+    pub const fn output(self) -> DesktopTokenValue {
+        self.output
     }
 
     #[must_use]
@@ -868,6 +890,9 @@ fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
         return MappedAnalytics {
             header: DesktopHeaderProjection {
                 tokens: DesktopTokenValue::UNAVAILABLE,
+                input: DesktopTokenValue::UNAVAILABLE,
+                cached: DesktopTokenValue::UNAVAILABLE,
+                output: DesktopTokenValue::UNAVAILABLE,
                 cost: DesktopCostValue::UNAVAILABLE,
                 event_count: None,
                 freshness: None,
@@ -902,6 +927,9 @@ fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
     MappedAnalytics {
         header: DesktopHeaderProjection {
             tokens: map_tokens(metrics.total(), metrics.event_count()),
+            input: map_tokens(metrics.input(), metrics.event_count()),
+            cached: map_tokens(metrics.cached(), metrics.event_count()),
+            output: map_tokens(metrics.output(), metrics.event_count()),
             cost: map_cost(payload.overview_cost()),
             event_count: Some(metrics.event_count()),
             freshness: Some(map_freshness(envelope.header().freshness())),
