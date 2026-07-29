@@ -320,7 +320,26 @@ impl crate::LiveProviderAdapter for CodexAdapter {
                 }
                 matched = Some(descriptor);
             }
-            let descriptor = matched.ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+            let Some(descriptor) = matched else {
+                // A source is a directory, so an unmatched path means one of two things. Under a
+                // known source directory it is a file discovery has not seen yet -- new, moved or
+                // renamed -- and only a full reconciliation can place it. Under no source
+                // directory at all it cannot ever hold usage data, and failing the batch for it
+                // buys nothing: the watched root is the profile root, which the tools that own it
+                // rewrite constantly, so every such write was costing a walk over every source.
+                //
+                // "No descriptor" also answers a path whose file is gone, so the skip has to be
+                // conditional: a deleted session still lives under a source directory and still
+                // needs reconciling, or the archive keeps a source that no longer exists.
+                if snapshot
+                    .sources()
+                    .iter()
+                    .any(|source| path.starts_with(source.path()))
+                {
+                    return Err(PortError::new(PortErrorCode::StaleState));
+                }
+                continue;
+            };
             if descriptors.iter().any(|current: &SourceFileDescriptor| {
                 current.absolute_path() == descriptor.absolute_path()
             }) {

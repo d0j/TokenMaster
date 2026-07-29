@@ -579,6 +579,73 @@ fn targeted_unknown_source_requires_reconciliation_without_mutation() {
     );
 }
 
+/// A write that lands outside every source directory must not cost a full reconciliation.
+///
+/// The watched root is the profile root, not the sessions directory, so the products that own
+/// that root write into it constantly: of eight files changed under a real `~/.codex` in ten
+/// minutes, seven were outside `sessions` and `archived_sessions` and could never hold usage
+/// data -- foreign SQLite journals, a model cache, a process table. While any unmatched path
+/// failed the whole targeted batch, each of those writes forced a walk over all 4016 sources.
+///
+/// The distinction this rests on is that a source is a directory. A new file inside one is
+/// still unknown and must still reconcile, which
+/// `targeted_unknown_source_requires_reconciliation_without_mutation` holds; a path under no
+/// source directory at all cannot become a source, and is what this ignores.
+#[test]
+fn targeted_change_outside_every_source_directory_is_ignored() {
+    let root = TempDir::new().expect("source root");
+    let elsewhere = TempDir::new().expect("unwatched directory");
+    std::fs::write(root.path().join("known.jsonl"), usage_line(1)).expect("write source");
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    let mut adapter = adapter(root.path());
+    assert_bootstrapped(bootstrap_with_adapter(&mut adapter, &mut archive));
+    let foreign = elsewhere.path().join("logs_2.sqlite-wal");
+    std::fs::write(&foreign, b"not usage data").expect("write foreign file");
+    let before = archive.store().counts().expect("counts before");
+    let (_coordinator, permit) = permit();
+    let control = OperationControl::new(&permit, &FixedClock);
+
+    let result = refresh_targeted(&mut adapter, &mut archive, &control, &[foreign.as_path()])
+        .expect("targeted refresh");
+
+    assert!(
+        matches!(result, TargetedRefreshOutcome::Applied(_)),
+        "a write outside every source directory asked for a full reconciliation: {result:?}"
+    );
+    assert_eq!(archive.store().counts().expect("counts after"), before);
+}
+
+/// A source that disappears must still force a full reconciliation.
+///
+/// `inspect_source_path` answers "no descriptor" for two unrelated situations: a path that lies
+/// under no source directory, and a path that no longer exists on disk. Treating both as
+/// ignorable silently keeps a deleted session in the archive. This is the case that separates
+/// skipping a path that can never be usage data from skipping one that just stopped being it,
+/// and it is the reason the skip is conditional rather than blanket.
+#[test]
+fn targeted_deletion_inside_a_source_directory_still_reconciles() {
+    let root = TempDir::new().expect("source root");
+    let source = root.path().join("known.jsonl");
+    std::fs::write(&source, usage_line(1)).expect("write source");
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    let mut adapter = adapter(root.path());
+    assert_bootstrapped(bootstrap_with_adapter(&mut adapter, &mut archive));
+    std::fs::remove_file(&source).expect("delete the source");
+    let before = archive.store().counts().expect("counts before");
+    let (_coordinator, permit) = permit();
+    let control = OperationControl::new(&permit, &FixedClock);
+
+    let result = refresh_targeted(&mut adapter, &mut archive, &control, &[source.as_path()])
+        .expect("targeted refresh");
+
+    assert_eq!(
+        result,
+        TargetedRefreshOutcome::ReconcileRequired,
+        "a deleted source was skipped instead of reconciled"
+    );
+    assert_eq!(archive.store().counts().expect("counts after"), before);
+}
+
 #[test]
 fn targeted_truncation_requests_rebuild_without_changing_usage() {
     let root = TempDir::new().expect("source root");
