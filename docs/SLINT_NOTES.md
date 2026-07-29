@@ -98,7 +98,21 @@ the renderer stays software and the blank window is solved in our own code inste
 CPU bursts are identical under both renderers, which rules the renderer out as their
 source and points at the periodic reconciliation.
 
-**The idle CPU cost is ours, and the bisection is done.** An empty Slint window built with
+**The CPU cost was ingestion, not idling, and not Slint.** An empty Slint window built with
+this repository's exact features measures 0% of a core against the product's peak, which
+placed the cost in our tree; thread-name profiling then placed it in `tokenmaster-refresh`,
+at 76.3% of a core averaged over 92 seconds from a cold start, falling to nothing after
+about 43 seconds. Renderer, animation and the `accessibility` feature were each ruled out by
+measurement first.
+
+Two instrument defects cost more than the investigation did, and both looked exactly like
+product defects. `GetThreadDescription` needs `THREAD_QUERY_LIMITED_INFORMATION` (0x0800);
+asking for 0x0400 returns no name for any thread, which is what made the standard library
+look as if it never named them -- it does. And two live threads share the name
+`tokenmaster-refresh`, so a probe that takes the first match can sample the sleeping one and
+report zero while a core is busy.
+
+**The original bisection, kept because it is what narrowed the search.** An empty Slint window built with
 this repository's exact features -- skia renderer, winit backend, accessibility -- measured
 **0% of a core, 10 threads, 7.1 MB** while the product measured 81% and 24 threads. Slint and
 winit are therefore not the source. Two named upstream suspects were tested and both failed:
