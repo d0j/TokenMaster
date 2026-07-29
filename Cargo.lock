@@ -1997,6 +1997,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "generativity"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2c81fb5260e37854d09d5c87183309fd8c555b75289427884b25660bc87a85e"
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2358,6 +2364,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "i-slint-backend-qt"
+version = "1.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "610c7cfcd0c7412f88281e5b3e2f7b81e6451d38047da265d1eead6bf2359937"
+dependencies = [
+ "const-field-offset",
+ "i-slint-common",
+ "i-slint-core",
+ "i-slint-core-macros",
+ "vtable",
+]
+
+[[package]]
 name = "i-slint-backend-selector"
 version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2366,6 +2385,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "i-slint-backend-linuxkms",
+ "i-slint-backend-qt",
  "i-slint-backend-testing",
  "i-slint-backend-winit",
  "i-slint-common",
@@ -2540,6 +2560,18 @@ dependencies = [
  "quote",
  "serde_json",
  "syn",
+]
+
+[[package]]
+name = "i-slint-live-preview"
+version = "1.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab44adb3f5acbcdf9551aedec799605650438be17d60d1b4931b49ab24dfff5a"
+dependencies = [
+ "i-slint-compiler",
+ "i-slint-core",
+ "notify",
+ "slint-interpreter",
 ]
 
 [[package]]
@@ -5385,6 +5417,7 @@ dependencies = [
  "i-slint-common",
  "i-slint-core",
  "i-slint-core-macros",
+ "i-slint-live-preview",
  "i-slint-renderer-skia",
  "i-slint-renderer-software",
  "num-traits",
@@ -5407,6 +5440,29 @@ dependencies = [
  "i-slint-compiler",
  "spin_on",
  "toml_edit",
+]
+
+[[package]]
+name = "slint-interpreter"
+version = "1.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8257365c3bd2cdfd5cc80a3b8b0afc8b5c35e22cebb7a447d80ea805374f5e4c"
+dependencies = [
+ "derive_more",
+ "generativity",
+ "i-slint-backend-selector",
+ "i-slint-backend-winit",
+ "i-slint-common",
+ "i-slint-compiler",
+ "i-slint-core",
+ "i-slint-core-macros",
+ "itertools 0.14.0",
+ "lyon_path",
+ "once_cell",
+ "smol_str 0.3.6",
+ "unicode-segmentation",
+ "vtable",
+ "web-sys",
 ]
 
 [[package]]

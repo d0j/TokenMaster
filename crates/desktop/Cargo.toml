@@ -6,6 +6,26 @@ license.workspace = true
 rust-version.workspace = true
 build = "build.rs"
 
+[features]
+# Development only, and deliberately not in `default`. With it on, `.slint` files are
+# interpreted at run time instead of compiled in: a colour, size or layout edit shows up
+# without a rebuild. Measured on this tree, the generated Rust falls from 15,997,690 bytes
+# to 296,507 -- fifty-four times smaller -- with the same API surface, so an edit to
+# `tokens.slint` stops costing a thirteen-second rebuild.
+#
+# It must never reach a release build. The stub embeds the absolute path of `main.slint`
+# from the build machine, so such a binary only runs from this working tree, and renaming
+# a property or callback that Rust touches can terminate the app instead of failing to
+# compile.
+# Both halves are required. The Cargo feature alone changes nothing: `slint-build` reads
+# the `SLINT_LIVE_PREVIEW` environment variable at build time, and without it the codegen
+# is byte-for-byte the compiled one. Measured here: 15,623 KB of generated Rust without
+# the variable, 290 KB with it.
+#
+#   $env:SLINT_LIVE_PREVIEW = "1"
+#   cargo run -p tokenmaster-app --features tokenmaster-desktop/live-preview
+live-preview = ["slint/live-preview"]
+
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
