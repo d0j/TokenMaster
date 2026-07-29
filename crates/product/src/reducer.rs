@@ -2,7 +2,7 @@ use std::{fmt, sync::Arc};
 
 use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewSnapshot, GitEnvelope, GitOutputSnapshot,
-    LatestActivityPage, ProductDataStatusEnvelope, QueryEnvelope, QueryErrorCode,
+    LatestActivityPage, LifetimeUsage, ProductDataStatusEnvelope, QueryEnvelope, QueryErrorCode,
     QuotaCurrentSnapshot, QuotaEnvelope, UsageAnalytics, UsageSessionDetailResult,
     UsageSessionPage,
 };
@@ -246,6 +246,18 @@ impl ProductReducer {
         GitRuntimeSnapshot,
         ProductGitRuntimeHealth
     );
+    // The archive's own total, answered once rather than on every refresh: it changes only
+    // when the archive does, and the analytics path cannot express it -- `UsageRange::custom`
+    // rejects a span over 400 days, so a lifetime is not a long range. Always compatible,
+    // because it is bound to no scope, range or dataset that another section could contradict.
+    section_methods!(
+        publish_lifetime,
+        fail_lifetime,
+        lifetime,
+        LifetimeUsage,
+        |_: &ProductSnapshot, _: &LifetimeUsage| true
+    );
+
     section_methods!(
         publish_quota,
         fail_quota,

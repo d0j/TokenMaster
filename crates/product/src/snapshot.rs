@@ -1,6 +1,7 @@
 use std::num::NonZeroU64;
 
 use tokenmaster_query::{
+    LifetimeUsage,
     BenefitOverviewEnvelope, BenefitOverviewSnapshot, GitEnvelope, GitOutputSnapshot,
     LatestActivityPage, ProductDataStatusEnvelope, QueryEnvelope, QuotaCurrentSnapshot,
     QuotaEnvelope, UsageAnalytics, UsageSessionDetailResult, UsageSessionPage,
@@ -78,6 +79,8 @@ impl ProductSessionDetailSelection {
 pub struct ProductSnapshot {
     pub(crate) generation: ProductGeneration,
     pub(crate) data_status: ProductSection<ProductDataStatusEnvelope>,
+    /// The archive's own total, which does not move with the clock.
+    pub(crate) lifetime: ProductSection<LifetimeUsage>,
     pub(crate) analytics: ProductSection<QueryEnvelope<UsageAnalytics>>,
     pub(crate) history: ProductSection<QueryEnvelope<UsageAnalytics>>,
     pub(crate) quota: ProductSection<QuotaEnvelope<QuotaCurrentSnapshot>>,
@@ -96,6 +99,7 @@ impl ProductSnapshot {
         Self {
             generation: ProductGeneration::INITIAL,
             data_status: ProductSection::waiting(),
+            lifetime: ProductSection::waiting(),
             analytics: ProductSection::waiting(),
             history: ProductSection::waiting(),
             quota: ProductSection::waiting(),
@@ -118,6 +122,15 @@ impl ProductSnapshot {
     #[must_use]
     pub const fn data_status(&self) -> &ProductSection<ProductDataStatusEnvelope> {
         &self.data_status
+    }
+
+    /// Every event the archive holds, with no date bounds.
+    ///
+    /// Separate from `analytics`, which always answers about a range: `UsageRange::custom`
+    /// rejects a span over 400 days, so a lifetime cannot be asked for as a long range.
+    #[must_use]
+    pub const fn lifetime(&self) -> &ProductSection<LifetimeUsage> {
+        &self.lifetime
     }
 
     #[must_use]
