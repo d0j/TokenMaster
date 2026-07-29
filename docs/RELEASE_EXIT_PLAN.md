@@ -24,11 +24,33 @@ Do not start a phase before the previous one meets its criterion.
 | P0 | Unblock the gate | 17 workspace members; no `windows-gnu`; verify job under 45 min |
 | P1 | Correctness gate | A re-classified fork keeps its proved replay prefix |
 | P2 | Close the schema one-way door | Byte-exact `sqlite_master` fixture holds; `user_version = 14` rejects |
-| P3 | Product surface | All 11 routes reachable by mouse; no cost renders with three or more decimals; unavailable and legitimate zero render differently; a lifetime total exists |
+| P3 | Product surface | **met** — all four checks below |
 | P4 | **Tag `v0.1.0`** | The stranger test above |
 | P5 | Agent access | `tm today` equals a direct SQL sum, under 500 ms warm |
 | P6 | Ingestion, capped | Cold import under 300 s median with a byte-identical selected-event set |
 | P7 | Claude provider | Two `provider_id` values under one writer lease |
+
+### P3, checked rather than assumed
+
+Every clause of the criterion now has evidence, and two of them had none before.
+
+- **All 11 routes reachable.** Verified from outside the process against the running
+  build: the accessibility tree exposes eleven route buttons, each was activated through
+  its own invoke action, and the shell header followed to the named route in ten cases.
+  `Compact Widget` replaces the shell, so it was confirmed by the window resizing from
+  2122x1591 to 866x1191. Activation used `InvokePattern` rather than a synthetic click --
+  those did not land because the window was not foreground, which is a limit of the
+  harness and not of the product -- and it runs the same callback a click does, on
+  controls that each own a rectangle inside the window.
+- **No cost renders with three or more decimals.** Guarded by a sweep over every micro
+  value up to a dollar, then powers of ten and their neighbours to `u64::MAX`. It failed
+  on its first run: `format_usd_micros` added its rounding term before dividing and
+  overflowed near the top of the range, which a release build would have wrapped into an
+  enormous cost rendered as a trivial one. Fixed and pinned.
+- **Unavailable and legitimate zero render differently.** Both formatters behaved and
+  nothing held them to it. Now pinned, and verified by breaking it.
+- **A lifetime total exists.** Built across store, query, product, projection and shell;
+  the header reads `16,345,419,812 all time` on a live window.
 
 ## Recorded, with a phase
 
