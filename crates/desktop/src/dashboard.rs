@@ -984,8 +984,22 @@ fn map_plan_usage(
     // finished answer to a question that was never successfully asked, which is how a
     // `Ready` pill came to sit beside "Quota evidence unavailable" on a live window. The
     // runtime's own verdict is the only thing that can tell the two apart.
+    // A failed poll arrives by one of two routes and the card has to answer to both. The
+    // runtime may be unobservable, which is the observation error; or it may be perfectly
+    // observable and carrying the news that its last poll failed, which is the health's
+    // own failure code. Discovery failures -- an executable that cannot be found at all --
+    // take the second route, so reading only the first left a live window still showing a
+    // `Ready` pill with no reason beside "Quota evidence unavailable".
     if let Some(error) = snapshot.runtime().quota().observation_error() {
         degrade(&mut quota_state, error.stable_code());
+    }
+    if let Some(failure) = snapshot
+        .runtime()
+        .quota()
+        .health()
+        .and_then(|health| health.quota_failure())
+    {
+        degrade(&mut quota_state, failure.stable_code());
     }
     let quota_rows = snapshot
         .quota()
