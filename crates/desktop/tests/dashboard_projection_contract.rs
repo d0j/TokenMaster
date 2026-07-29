@@ -131,6 +131,10 @@ fn initial_dashboard_has_six_exact_bounded_waiting_sections() {
     assert_eq!(dashboard.activity().len(), 8);
     assert!(dashboard.activity().iter().all(|row| row.count() == 0));
     assert_eq!(dashboard.models().len(), 0);
+    // Nothing has been published, so the archive is complete through no instant at all.
+    // Paired with the assertion in the seeded test below, this refuses a field wired to a
+    // constant.
+    assert_eq!(state.projection().data_through_ms(), None);
 }
 
 #[test]
@@ -305,6 +309,16 @@ fn production_snapshot_maps_dynamic_values_without_private_identity_leakage() {
     // `input_tokens - cached_tokens AS uncached_input`. So the hit rate divides by the
     // input, and dividing by `input + cached` would be a fabricated denominator that no
     // other assertion here would notice.
+    // The instant the archive is complete through rides on the published status and the
+    // shell shows it; nothing in this crate read it before.
+    assert!(
+        state
+            .projection()
+            .data_through_ms()
+            .is_some_and(|value| value > 0),
+        "a published data status carries the instant the archive is complete through"
+    );
+
     let input = header.input().known_sum().expect("known input");
     let cached = header.cached().known_sum().expect("known cached");
     assert_eq!(

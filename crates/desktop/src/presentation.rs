@@ -236,6 +236,14 @@ pub struct DesktopProjection {
     notifications: DesktopNotificationsProjection,
     /// The archive's own total, which every route shows alike.
     lifetime_tokens: DesktopTokenValue,
+    /// The instant the archive is complete through, which the reference mockup shows in the
+    /// shell as `synced 14:33:54`.
+    ///
+    /// Beside `lifetime_tokens` for the same reason: it is one fact about the whole
+    /// archive rather than about a route, and every screen is looking at the same one.
+    /// The query layer has answered it on every envelope all along and no projection took
+    /// it, so `data_through_ms` did not appear anywhere in this crate.
+    data_through_ms: Option<i64>,
 }
 
 impl DesktopProjection {
@@ -246,6 +254,11 @@ impl DesktopProjection {
     #[must_use]
     pub const fn lifetime_tokens(&self) -> DesktopTokenValue {
         self.lifetime_tokens
+    }
+
+    #[must_use]
+    pub const fn data_through_ms(&self) -> Option<i64> {
+        self.data_through_ms
     }
 
     #[must_use]
@@ -278,6 +291,10 @@ impl DesktopProjection {
                 .map_or(DesktopTokenValue::UNAVAILABLE, |lifetime| {
                     crate::dashboard::map_tokens(lifetime.tokens(), lifetime.event_count())
                 }),
+            data_through_ms: snapshot
+                .data_status()
+                .payload()
+                .and_then(|status| status.payload().usage().data_through_ms()),
             dashboard: DesktopDashboardProjection::from_snapshot(snapshot),
             history: DesktopHistoryProjection::from_snapshot_with_range(
                 snapshot,
