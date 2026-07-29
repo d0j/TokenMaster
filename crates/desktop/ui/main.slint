@@ -89,6 +89,8 @@ export component MainWindow inherits Window {
     in property <[DashboardTrendPoint]> dashboard-trend-points;
     in property <string> dashboard-trend-token-geometry;
     in property <string> dashboard-trend-cost-geometry;
+    in property <string> dashboard-trend-token-area;
+    in property <string> dashboard-trend-cost-area;
     in property <string> dashboard-trend-token-axis;
     in property <string> dashboard-trend-cost-axis;
     in property <[DashboardSessionRow]> dashboard-session-rows;
@@ -473,6 +475,8 @@ export component MainWindow inherits Window {
                     trend: root.dashboard-trend-points;
                     trend-token-geometry: root.dashboard-trend-token-geometry;
                     trend-cost-geometry: root.dashboard-trend-cost-geometry;
+                    trend-token-area: root.dashboard-trend-token-area;
+                    trend-cost-area: root.dashboard-trend-cost-area;
                     trend-token-axis: root.dashboard-trend-token-axis;
                     trend-cost-axis: root.dashboard-trend-cost-axis;
                     sessions: root.dashboard-session-rows;

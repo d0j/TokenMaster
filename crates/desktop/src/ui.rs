@@ -4087,6 +4087,8 @@ fn apply_trend(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
         .collect::<Vec<_>>();
     window.set_dashboard_trend_token_geometry(dashboard_trend_path(&rows, true).into());
     window.set_dashboard_trend_cost_geometry(dashboard_trend_path(&rows, false).into());
+    window.set_dashboard_trend_token_area(dashboard_trend_area_path(&rows, true).into());
+    window.set_dashboard_trend_cost_area(dashboard_trend_area_path(&rows, false).into());
     window.set_dashboard_trend_token_axis(
         dashboard_trend_axis(&rows, true).unwrap_or_default().into(),
     );
@@ -4102,6 +4104,9 @@ fn apply_trend(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
         rows
     );
 }
+
+/// The y a ratio of zero maps to in the trend viewbox, and so the foot of any shaded area.
+const TREND_ZERO_LINE: f64 = 80.0;
 
 fn dashboard_trend_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
     if rows.len() < 2 {
@@ -4126,6 +4131,50 @@ fn dashboard_trend_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
         path.push_str(&format!("{command} {x:.2} {y:.2} "));
         segment_started = true;
     }
+    path
+}
+
+/// Builds the closed geometry that shades the space between a trend series and its zero line.
+///
+/// The line geometry starts a fresh subpath wherever a day is unavailable, and the fill has to
+/// break with it: one polygon per run of known days, each closed down to the zero line. Filling
+/// the line geometry instead would join its last point back to its first and shade a region that
+/// corresponds to nothing. A run of one day encloses no area and is skipped, which is also what
+/// the line does with it.
+fn dashboard_trend_area_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
+    if rows.len() < 2 {
+        return String::new();
+    }
+    let denominator = (rows.len() - 1) as f64;
+    let mut path = String::with_capacity(rows.len().saturating_mul(24));
+    let mut run: Vec<(f64, f64)> = Vec::new();
+    let mut flush = |run: &mut Vec<(f64, f64)>, path: &mut String| {
+        if run.len() >= 2 {
+            let (first_x, _) = run[0];
+            let (last_x, _) = run[run.len() - 1];
+            path.push_str(&format!("M {first_x:.2} {TREND_ZERO_LINE:.2} "));
+            for (x, y) in run.iter() {
+                path.push_str(&format!("L {x:.2} {y:.2} "));
+            }
+            path.push_str(&format!("L {last_x:.2} {TREND_ZERO_LINE:.2} Z "));
+        }
+        run.clear();
+    };
+    for (index, row) in rows.iter().enumerate() {
+        let (availability, ratio) = if tokens {
+            (&row.tokens_availability, row.tokens_ratio)
+        } else {
+            (&row.cost_availability, row.cost_ratio)
+        };
+        if availability.as_str() == "unavailable" {
+            flush(&mut run, &mut path);
+            continue;
+        }
+        let x = 28.0 + (index as f64 / denominator) * 944.0;
+        let y = 10.0 + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * 70.0;
+        run.push((x, y));
+    }
+    flush(&mut run, &mut path);
     path
 }
 
@@ -5174,5 +5223,61 @@ mod compact_window_tests {
             logical(slint::PhysicalSize::new(1_680, 1_080), 1.5),
             slint::LogicalSize::new(1_120.0, 720.0)
         );
+    }
+}
+
+#[cfg(test)]
+mod trend_area_tests {
+    use super::{DashboardTrendPoint, TREND_ZERO_LINE, dashboard_trend_area_path};
+
+    fn point(ratio: f32, available: bool) -> DashboardTrendPoint {
+        DashboardTrendPoint {
+            tokens_ratio: ratio,
+            tokens_availability: if available { "available" } else { "unavailable" }.into(),
+            ..Default::default()
+        }
+    }
+
+    /// A shaded area has to be closed to the zero line, not to whatever point came first.
+    #[test]
+    fn area_closes_every_run_down_to_the_zero_line() {
+        let rows = vec![point(0.2, true), point(0.8, true), point(0.5, true)];
+
+        let path = dashboard_trend_area_path(&rows, true);
+
+        let foot = format!("{TREND_ZERO_LINE:.2}");
+        assert_eq!(path.matches('M').count(), 1, "path: {path}");
+        assert_eq!(path.matches('Z').count(), 1, "path: {path}");
+        assert!(path.starts_with(&format!("M 28.00 {foot}")), "path: {path}");
+        assert!(path.ends_with(&format!("L 972.00 {foot} Z ")), "path: {path}");
+    }
+
+    /// A day without evidence breaks the shading, exactly as it breaks the line.
+    ///
+    /// Shading straight through a gap would draw a quantity nobody measured, and it is the
+    /// difference between filling the line geometry and building a fill of its own.
+    #[test]
+    fn a_gap_splits_the_area_into_separate_polygons() {
+        let rows = vec![
+            point(0.2, true),
+            point(0.8, true),
+            point(0.0, false),
+            point(0.4, true),
+            point(0.6, true),
+        ];
+
+        let path = dashboard_trend_area_path(&rows, true);
+
+        assert_eq!(path.matches('M').count(), 2, "path: {path}");
+        assert_eq!(path.matches('Z').count(), 2, "path: {path}");
+    }
+
+    /// One known day encloses no area, and the line draws nothing for it either.
+    #[test]
+    fn a_lone_known_day_shades_nothing() {
+        let rows = vec![point(0.0, false), point(0.5, true), point(0.0, false)];
+
+        assert_eq!(dashboard_trend_area_path(&rows, true), "");
+        assert_eq!(dashboard_trend_area_path(&[point(0.5, true)], true), "");
     }
 }
