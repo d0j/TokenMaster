@@ -29,18 +29,42 @@ placeholder destroys.
 Sessions table and Cost by Model card this file used to transcribe. Where the two disagree,
 the handoff wins.
 
+## What the drawing is for
+
+The owner's instruction with it: gather everything from WhereMyTokens and carry it across
+into our own variant, improving whatever adaptation allows. So the drawing is **the visual
+acceptance for `docs/FEATURE_PARITY.md`**, not a separate ambition -- and that ledger
+already tracks every card on it as a WMT lineage row, almost all of them `partial`:
+
+| Card in the handoff | Ledger row | What the row still says remains |
+|---|---|---|
+| Hero band | `WMT / header metrics` | all-time and cache-savings labels |
+| Plan Usage | `WMT / quota board` | history and detail |
+| Code Output | `WMT / code output` | project detail and ranges |
+| Live Sessions | `WMT / sessions` | grouping, stacking, active-state enrichment |
+| Trend | `WMT / trend` | breakdown filters and broader parity |
+| Activity | `WMT / activity` | broader heatmap parity |
+| Model Usage | `WMT / model usage` | user aliases, final interactive acceptance |
+
+Read the two together: the ledger says what is owed, the drawing says what paying it looks
+like.
+
+**A mockup is not a subtraction.** Its sidebar shows six items because six were drawn, not
+because the other five are unwanted -- the compact window is designed separately in
+`reference-v1`, and History and Notifications simply were not part of this screen. Nothing
+here asks for a route to be removed.
+
 ## The distance from here
 
 Measured against the code, not estimated.
 
 ### Structure
 
-- **The sidebar is six items plus two pinned**: Dashboard, Sessions, Projects, Activity,
-  Models, Data Health, then Settings and Help at the bottom. `ProductRoute::ALL` is eleven.
-  History, Notifications and Compact Widget have no place in the drawing -- the compact
-  window is designed separately as a future mode in `reference-v1`. **Whether those three
-  routes lose their sidebar entry, or the sidebar grows, is a product decision and not a
-  drawing decision.**
+- **The sidebar is drawn with six items plus two pinned**: Dashboard, Sessions, Projects,
+  Activity, Models, Data Health, then Settings and Help at the bottom. `ProductRoute::ALL`
+  is eleven. That is a difference in what was drawn, not a demand: the eleven stay, and the
+  drawn six define the styling -- 32px rows, a 3x16px accent bar 6px from the left edge on
+  the active one, and a trailing status glyph.
 - **The window is 1400x900 and nothing scrolls.** Four content rows: a 76px hero band, a
   272px row of three cards, the trend taking whatever is left, and a 224px row of two.
   Only the trend is elastic. The built Dashboard wraps its whole content in a `ScrollView`
