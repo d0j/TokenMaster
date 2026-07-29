@@ -1,9 +1,10 @@
 # Slint 1.17.1 operational notes
 
 What is not obvious from the documentation, verified against the unpacked 1.17.1
-sources and the upstream tracker. Configuration this applies to: winit backend,
-`renderer-software`, `accessibility`, `SLINT_BACKEND=winit-software`, Windows 11
-x86_64-pc-windows-msvc.
+sources and the upstream tracker. Configuration this applies to: winit backend, `renderer-skia` letting the backend be
+chosen at runtime, `accessibility`, Windows 11 x86_64-pc-windows-msvc. Where a note is
+about the software renderer it says so: that one was measured, rejected and is kept here
+because the reasoning still applies to anyone tempted back to it.
 
 ## Rendering
 
@@ -79,24 +80,13 @@ and the binary then imports `VCRUNTIME140.dll` and `MSVCP140.dll`.
 The idle CPU is within a point of itself on all three, which is the third independent
 result ruling the renderer out as its cause.
 
-**The software renderer was measured against femtovg, and it stays.** Switching
-`renderer-software` to `renderer-femtovg` is a two-line change, and it was tried in full:
-the blank window after a move disappeared completely — 29.1 mean luma where software gave
-48.4 — which is the proof that the defect belongs to softbuffer and not to Slint. The cost
-made it unusable. Sampled every ten seconds for eighty seconds on the release build,
-steady and not a startup transient:
-
-| | software | femtovg |
-|---|---|---|
-| private bytes | 41.6 MB | ~368 MB |
-| working set | 69 MB | ~245 MB |
-| threads | 18 | 27–33 |
-| idle CPU | bursts to ~86% | bursts to ~92% |
-
-Three and a half times the resident memory is the whole positioning of this product, so
-the renderer stays software and the blank window is solved in our own code instead. The
-CPU bursts are identical under both renderers, which rules the renderer out as their
-source and points at the periodic reconciliation.
+**femtovg was measured too, and lost to both.** The blank window after a move disappeared
+under it -- 29.1 mean luma where software gave 48.4 -- which is what proved the defect
+belongs to softbuffer rather than to Slint. But sampled every ten seconds for eighty
+seconds it held about 368 MB of private bytes and 245 MB resident against software's 41.6
+and 69, and it started in 16.7 s against 8. Skia beats it on every one of those. Forcing
+Skia onto OpenGL specifically is a separate trap: 518 MB private and 61 threads against 56
+MB and 24 when the backend is chosen at runtime, so do not name the API.
 
 **The CPU cost was ingestion, not idling, and not Slint.** An empty Slint window built with
 this repository's exact features measures 0% of a core against the product's peak, which

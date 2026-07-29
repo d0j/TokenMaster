@@ -72,13 +72,15 @@ real fallback and it has no hot reload at all.
 and a `tokens.slint` edit stops costing a thirteen-second rebuild. It is a non-default
 feature and must never reach a release build.
 
-**The idle CPU cost is ours.** An empty Slint window with this repository's exact features
-measures 0% of a core, 10 threads and 7.1 MB, against 81% and 24 threads for the product.
-Ruled out by measurement, not by argument: all three renderers, the tree's only
-`animation-tick()`, and the `accessibility` feature. What remains is the fifteen threads the
-product starts and the empty window does not -- the reminder, quota, git and live runtimes,
-the watcher and the scheduler. Hunt there, and give the threads names first: Windows returns
-none today, so the burning thread cannot identify itself.
+**The cold-start cost is answered.** It was never idling and never Slint: an empty Slint
+window with this repository's exact features costs 0% of a core, and thread-name profiling
+puts the work in `tokenmaster-refresh` -- about 184% of a core for the first 43 seconds,
+then 197 consecutive samples at zero. Renderer, animation and `accessibility` were each
+ruled out by measurement before that. The remaining question is narrow: whether every
+launch redoes the scan or only the first.
+
+Threads already carry names; the standard library sets them. A probe that reports otherwise
+is asking `GetThreadDescription` for the wrong access right.
 
 ## Abort rules
 
