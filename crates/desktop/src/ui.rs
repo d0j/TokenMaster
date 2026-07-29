@@ -4420,7 +4420,10 @@ fn format_usd_micros(value: u64) -> String {
     if value == 0 {
         return "$0.00".to_owned();
     }
-    let cents = (value + 5_000) / 10_000;
+    // Saturating, because the rounding term overflows within 5,000 micros of the top of the
+    // range. A debug build panics there; a release build wraps and renders an enormous cost
+    // as a trivial one, which is the fabrication this formatter exists to refuse.
+    let cents = value.saturating_add(5_000) / 10_000;
     if cents == 0 {
         // A real cost below half a cent. Rendering it as `$0.00` would claim the work
         // was free, which is the same fabrication the token pipeline refuses to make.
@@ -5171,6 +5174,41 @@ mod cost_format_tests {
     #[test]
     fn a_legitimate_zero_stays_distinct_from_a_rounded_one() {
         assert_eq!(format_usd_micros(0), "$0.00");
+    }
+
+    /// No cost anywhere renders with three or more decimals. This is a release criterion,
+    /// and until now only the examples were pinned, never the rule they stand for.
+    ///
+    /// Swept rather than sampled: every micro value from zero to a dollar, then powers of
+    /// ten and their neighbours out past a million dollars, because a rounding bug shows at
+    /// a carry and a formatting bug shows at a magnitude.
+    #[test]
+    fn no_cost_renders_with_three_or_more_decimals() {
+        let mut values: Vec<u64> = (0..=1_000_000).collect();
+        for exponent in 0..13 {
+            let magnitude = 10_u64.pow(exponent);
+            values.extend([
+                magnitude.saturating_sub(1),
+                magnitude,
+                magnitude.saturating_add(1),
+            ]);
+        }
+        values.push(u64::MAX);
+        for micros in values {
+            let rendered = format_usd_micros(micros);
+            if let Some((_, fraction)) = rendered.split_once('.') {
+                assert!(
+                    fraction.len() <= 2,
+                    "{micros} micros rendered as {rendered}, with {} decimals",
+                    fraction.len()
+                );
+            }
+            assert_eq!(
+                rendered.matches('.').count() <= 1,
+                true,
+                "{micros} micros rendered as {rendered}"
+            );
+        }
     }
 
     #[test]
