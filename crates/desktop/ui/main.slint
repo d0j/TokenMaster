@@ -438,6 +438,16 @@ export component MainWindow inherits Window {
                     padding: UiTokens.space;
                     spacing: 5px;
 
+                    // The reference mockup labels the column. Without it the list floats
+                    // against the top border with nothing saying what it is.
+                    Text {
+                        text: @tr("Views").to-uppercase();
+                        color: UiTokens.text-secondary;
+                        font-family: UiTokens.mono;
+                        font-size: UiTokens.text-caption;
+                        letter-spacing: UiTokens.tracking-label;
+                        accessible-role: none;
+                    }
                     for route in root.route-rows: RouteNavItem {
                         label: route.label;
                         state: route.state;
