@@ -375,6 +375,13 @@ pub struct DesktopQuotaRow {
     semantics: &'static str,
     used_ppm: Option<u32>,
     remaining_ppm: Option<u32>,
+    /// How much of the window has passed, against how much of it has been spent.
+    ///
+    /// A different quantity from `used_ppm` and drawn separately for that reason: six
+    /// percent spent of a window that is forty-one percent gone is comfortable, and the
+    /// reverse is burning. `None` unless the window declares a length and a reset, because
+    /// there is nowhere to place "now" without both.
+    elapsed_ppm: Option<u32>,
     unit_key: Option<Arc<str>>,
     used_units: Option<u64>,
     remaining_units: Option<u64>,
@@ -411,6 +418,10 @@ impl DesktopQuotaRow {
     #[must_use]
     pub const fn remaining_ppm(&self) -> Option<u32> {
         self.remaining_ppm
+    }
+    #[must_use]
+    pub const fn elapsed_ppm(&self) -> Option<u32> {
+        self.elapsed_ppm
     }
     #[must_use]
     pub fn unit_key(&self) -> Option<&str> {
@@ -1059,13 +1070,16 @@ fn map_plan_usage(
         .quota()
         .payload()
         .map_or_else(Vec::new, |envelope| {
+            // Every row on this card is placed against the instant the answer was taken,
+            // so two numbers on one screen cannot disagree about when they are.
+            let as_of_ms = envelope.header().generated_at_ms();
             let rows = envelope
                 .payload()
                 .windows()
                 .iter()
                 .take(MAX_DASHBOARD_QUOTA_ROWS)
                 .enumerate()
-                .map(|(index, result)| map_quota_row(index, result.snapshot()))
+                .map(|(index, result)| map_quota_row(index, result.snapshot(), as_of_ms))
                 .collect::<Vec<_>>();
             if envelope.payload().windows().len() > MAX_DASHBOARD_QUOTA_ROWS {
                 degrade(&mut quota_state, "quota_truncated");
@@ -1319,6 +1333,7 @@ fn map_models(breakdowns: &[tokenmaster_query::UsageBreakdown]) -> (Arc<[Desktop
 fn map_quota_row(
     index: usize,
     snapshot: Option<&tokenmaster_query::QuotaWindowValue>,
+    as_of_ms: i64,
 ) -> DesktopQuotaRow {
     let Some(snapshot) = snapshot else {
         return DesktopQuotaRow {
@@ -1328,6 +1343,7 @@ fn map_quota_row(
             semantics: "unknown",
             used_ppm: None,
             remaining_ppm: None,
+            elapsed_ppm: None,
             unit_key: None,
             used_units: None,
             remaining_units: None,
@@ -1360,6 +1376,11 @@ fn map_quota_row(
         remaining_ppm: sample
             .remaining_ratio()
             .map(|value| value.parts_per_million()),
+        elapsed_ppm: elapsed_ppm(
+            as_of_ms,
+            sample.advertised_resets_at_ms(),
+            snapshot.definition().nominal_duration_seconds(),
+        ),
         unit_key: units.map(|value| Arc::from(value.unit_id())),
         used_units: units.and_then(|value| value.used()),
         remaining_units: units.and_then(|value| value.remaining()),
@@ -1448,6 +1469,32 @@ fn empty_activity() -> [DesktopActivityRow; DASHBOARD_ACTIVITY_ROWS] {
         key: DesktopActivityKey::ALL[index],
         count: 0,
     })
+}
+
+/// How far through its window the answer was taken, in parts per million.
+///
+/// The window's start is its reset less its declared length, and "now" is the instant the
+/// query ran, which every envelope carries. Reading a wall clock here instead would let two
+/// numbers on one screen disagree about when they are; taking the archive's completeness
+/// instant would answer a different question entirely -- how far the reader has got, not how
+/// far the window has.
+///
+/// Clamped to the window it describes. A sample older than its own reset is a stale sample,
+/// which the freshness field already says, and "103% elapsed" says nothing a reader can use.
+fn elapsed_ppm(
+    as_of_ms: i64,
+    resets_at_ms: Option<i64>,
+    duration_seconds: Option<u64>,
+) -> Option<u32> {
+    let resets_at_ms = resets_at_ms?;
+    let duration_ms = i64::try_from(duration_seconds?.checked_mul(1_000)?).ok()?;
+    if duration_ms <= 0 {
+        return None;
+    }
+    let started_at_ms = resets_at_ms.checked_sub(duration_ms)?;
+    let elapsed_ms = as_of_ms.checked_sub(started_at_ms)?.clamp(0, duration_ms);
+    u32::try_from(u128::try_from(elapsed_ms).ok()? * 1_000_000 / u128::try_from(duration_ms).ok()?)
+        .ok()
 }
 
 /// A ranking bar's width, as this row against the leading one, in parts per million.

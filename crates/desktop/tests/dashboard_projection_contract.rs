@@ -18,8 +18,8 @@ use tokenmaster_query::{
 };
 
 use support::dashboard_fixture::{
-    BENEFIT_EXPIRY_AT_MS, FixedClock, RESET_AT_MS, add_distinct_usage_rows, add_second_git_project,
-    range, seed,
+    BENEFIT_EXPIRY_AT_MS, FixedClock, RESET_AT_MS, WALL_TIME_MS, add_distinct_usage_rows,
+    add_second_git_project, range, seed,
 };
 
 fn attempt(value: u64) -> ProductAttemptGeneration {
@@ -329,6 +329,21 @@ fn production_snapshot_maps_dynamic_values_without_private_identity_leakage() {
     assert_eq!(dashboard.quota_rows().len(), 1);
     let quota = &dashboard.quota_rows()[0];
     assert_eq!(quota.label_key(), "quota.dynamic_weekly");
+    // How much of the window has been consumed and how much of it has passed are different
+    // quantities, and the handoff draws both -- the fill, and a separate tick. Spending 6%
+    // of a window that is 41% gone means comfortable; the reverse means burning. Derived
+    // here from the fixture's own constants rather than a copied figure: the window is
+    // seven days and resets in one hour, so almost all of it has passed while 70% is spent.
+    const WINDOW_MS: i64 = 7 * 24 * 60 * 60 * 1_000;
+    let elapsed = u32::try_from(
+        u128::try_from(WALL_TIME_MS - (RESET_AT_MS - WINDOW_MS)).expect("inside the window")
+            * 1_000_000
+            / u128::try_from(WINDOW_MS).expect("window"),
+    )
+    .expect("ppm");
+    assert_eq!(quota.elapsed_ppm(), Some(elapsed));
+    assert_ne!(quota.elapsed_ppm(), quota.used_ppm());
+
     assert_eq!(quota.used_ppm(), Some(700_000));
     assert_eq!(quota.remaining_ppm(), Some(300_000));
     assert_eq!(quota.used_units(), Some(700));
