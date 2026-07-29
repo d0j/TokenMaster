@@ -4148,7 +4148,7 @@ fn dashboard_trend_area_path(rows: &[DashboardTrendPoint], tokens: bool) -> Stri
     let denominator = (rows.len() - 1) as f64;
     let mut path = String::with_capacity(rows.len().saturating_mul(24));
     let mut run: Vec<(f64, f64)> = Vec::new();
-    let mut flush = |run: &mut Vec<(f64, f64)>, path: &mut String| {
+    let flush = |run: &mut Vec<(f64, f64)>, path: &mut String| {
         if run.len() >= 2 {
             let (first_x, _) = run[0];
             let (last_x, _) = run[run.len() - 1];
