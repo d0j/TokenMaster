@@ -247,6 +247,62 @@ fn aggregate_rebuild_is_visible_only_on_routes_that_depend_on_aggregates() {
     );
 }
 
+/// A refresh publishes its status first and its usage answers second, under one attempt
+/// number. Blanking a section for a changed dataset must not consume that number, or the
+/// answer computed in the very same refresh is discarded as a duplicate and the card stays
+/// empty until the next pass -- which, during a first import, changes the dataset again.
+///
+/// Measured before this bound existed: a fresh extraction of the shipped package showed
+/// 187,163,328 tokens after sixty seconds and two dashes at two and three minutes, while the
+/// archive grew past eleven billion.
+#[test]
+fn a_section_blanked_by_a_status_still_accepts_that_refresh_own_answer() {
+    let directory = TempDir::new().expect("temporary directory");
+    let empty_path = directory.path().join("empty.sqlite3");
+    drop(UsageStore::open(&empty_path).expect("create empty archive"));
+    let mut empty_service = QueryService::open(&empty_path, FixedClock).expect("empty service");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(
+            attempt(1),
+            empty_service.product_data_status().expect("empty status"),
+        )
+        .expect("publish empty status");
+    reducer
+        .publish_activity(attempt(1), activity(1, DatasetIdentity::Empty))
+        .expect("publish first activity");
+    assert_eq!(
+        reducer.snapshot().activity().kind(),
+        ProductSectionKind::Ready
+    );
+
+    let legacy_path = directory.path().join("legacy-same-attempt.sqlite3");
+    Connection::open(&legacy_path)
+        .expect("create legacy archive")
+        .execute_batch(include_str!("../../store/tests/fixtures/usage_v1.sql"))
+        .expect("create legacy schema");
+    drop(UsageStore::open(&legacy_path).expect("migrate legacy fixture"));
+    let mut legacy_service = QueryService::open(&legacy_path, FixedClock).expect("legacy service");
+    let _ = legacy_service.product_data_status().expect("generation one");
+    let legacy_status = legacy_service.product_data_status().expect("legacy status");
+
+    // one refresh: the status lands, then the answer computed in the same refresh
+    reducer
+        .publish_data_status(attempt(2), legacy_status)
+        .expect("publish changed identity");
+    assert_eq!(
+        reducer
+            .publish_activity(attempt(2), activity(2, DatasetIdentity::LegacySnapshotV1))
+            .expect("publish activity for the new dataset"),
+        ProductPublishOutcome::Accepted,
+        "the refresh own answer was discarded after its status blanked the section"
+    );
+    assert_eq!(
+        reducer.snapshot().activity().kind(),
+        ProductSectionKind::Ready
+    );
+}
+
 #[test]
 fn incompatible_async_results_are_rejected_and_new_status_invalidates_old_payloads() {
     let directory = TempDir::new().expect("temporary directory");

@@ -524,8 +524,12 @@ fn invalidate_if<T>(
     if !incompatible(payload) {
         return;
     }
-    let attempt = section
-        .attempt_generation()
-        .map_or(status_attempt, |current| current.max(status_attempt));
+    // The section keeps its own attempt number rather than taking the status's. A refresh
+    // publishes its status first and its usage answers second under one number, so raising it
+    // here makes `classify` coalesce the answer computed in that very refresh: the card blanks
+    // and stays blank until a later pass, which during a first import has changed the dataset
+    // again. An answer computed against the superseded dataset is still refused -- by the
+    // compatibility predicate on publish, which is where that belongs, not by the counter.
+    let attempt = section.attempt_generation().unwrap_or(status_attempt);
     *section = ProductSection::unavailable(attempt, QueryErrorCode::StaleSnapshot);
 }
