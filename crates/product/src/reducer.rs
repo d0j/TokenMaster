@@ -490,14 +490,14 @@ fn invalidate_incompatible_sections(
     invalidate_usage(&mut snapshot.history, status_attempt, usage_identity);
     invalidate_usage(&mut snapshot.activity, status_attempt, usage_identity);
     invalidate_usage(&mut snapshot.sessions, status_attempt, usage_identity);
-    invalidate_usage(&mut snapshot.session_detail, status_attempt, usage_identity);
-    invalidate_if(&mut snapshot.quota, status_attempt, |value| {
+    invalidate_selection(&mut snapshot.session_detail, status_attempt, usage_identity);
+    invalidate_if(&mut snapshot.quota, status_attempt, Retention::Keep, |value| {
         value.header().quota_revision() != quota_revision
     });
-    invalidate_if(&mut snapshot.benefit, status_attempt, |value| {
+    invalidate_if(&mut snapshot.benefit, status_attempt, Retention::Keep, |value| {
         value.header().benefit_revision() != benefit_revision
     });
-    invalidate_if(&mut snapshot.git, status_attempt, |value| {
+    invalidate_if(&mut snapshot.git, status_attempt, Retention::Keep, |value| {
         value.header().publication_revision() != git_revision
     });
 }
@@ -507,14 +507,34 @@ fn invalidate_usage<T>(
     status_attempt: ProductAttemptGeneration,
     expected: tokenmaster_query::DatasetIdentity,
 ) {
-    invalidate_if(section, status_attempt, |value| {
+    invalidate_if(section, status_attempt, Retention::Keep, |value| {
         value.header().dataset_identity() != expected
     });
+}
+
+/// A section whose payload describes the whole dataset keeps it when superseded; one whose
+/// payload belongs to a particular selection must not, or a stale answer is attributed to the
+/// row now chosen.
+fn invalidate_selection<T>(
+    section: &mut ProductSection<QueryEnvelope<T>>,
+    status_attempt: ProductAttemptGeneration,
+    expected: tokenmaster_query::DatasetIdentity,
+) {
+    invalidate_if(section, status_attempt, Retention::Discard, |value| {
+        value.header().dataset_identity() != expected
+    });
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Retention {
+    Keep,
+    Discard,
 }
 
 fn invalidate_if<T>(
     section: &mut ProductSection<T>,
     status_attempt: ProductAttemptGeneration,
+    retention: Retention,
     incompatible: impl FnOnce(&T) -> bool,
 ) {
     let Some(payload) = section.payload() else {
@@ -526,5 +546,16 @@ fn invalidate_if<T>(
     let attempt = section
         .attempt_generation()
         .map_or(status_attempt, |current| current.max(status_attempt));
-    *section = ProductSection::unavailable(attempt, QueryErrorCode::StaleSnapshot);
+    // Retaining, like the failure path beside it. A superseded section must stop claiming to
+    // be current, but discarding what it last knew blanks the interface for the whole of a
+    // first import: the dataset identity changes on every pass, so the section is invalidated
+    // faster than it is republished. Measured on a fresh extraction of the shipped package --
+    // the Today card read 187,163,328 tokens after sixty seconds and two dashes at two and
+    // three minutes, while the archive kept growing past eleven billion.
+    *section = match retention {
+        Retention::Keep => {
+            ProductSection::unavailable_retaining(attempt, QueryErrorCode::StaleSnapshot, section)
+        }
+        Retention::Discard => ProductSection::unavailable(attempt, QueryErrorCode::StaleSnapshot),
+    };
 }

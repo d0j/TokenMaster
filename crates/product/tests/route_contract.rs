@@ -301,6 +301,15 @@ fn incompatible_async_results_are_rejected_and_new_status_invalidates_old_payloa
         changed.activity().failure().expect("stale failure").code(),
         tokenmaster_query::QueryErrorCode::StaleSnapshot
     );
+    // A superseded section stops claiming to be current, but it keeps what it last knew, the
+    // same way a failed query does. Discarding it blanks the interface for the whole of a
+    // first import, because the dataset identity changes on every pass: measured on a fresh
+    // extraction of the shipped package, the Today card showed 187,163,328 tokens after sixty
+    // seconds and both dashes at two and three minutes, while the archive kept growing.
+    assert!(
+        changed.activity().retains_payload(),
+        "a superseded section discarded evidence it had already shown"
+    );
 }
 
 #[test]
