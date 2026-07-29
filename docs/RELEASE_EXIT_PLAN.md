@@ -59,6 +59,33 @@ Every clause of the criterion now has evidence, and two of them had none before.
 - **A lifetime total exists.** Built across store, query, product, projection and shell;
   the header reads `16,345,419,812 all time` on a live window.
 
+### P4, measured against the shipped package
+
+Run against `dist/TokenMaster-0.1.0-windows-x64-unsigned.zip` built at the commit it
+reports, extracted where nothing was built, with `scripts/stranger-acceptance.ps1`.
+
+- **The package is the commit.** Its receipt commit equals `HEAD`, and
+  `validate-product-package.ps1` passes. Rebuild before tagging or the receipt stops
+  matching.
+- **A stranger sees their own history.** `Tokens 267,309,589` and `Events 1,870 events`,
+  identical at 60, 120 and 180 seconds -- filled and never falling back to dashes.
+- **The lifetime total is live.** `29,335,964` at launch, then 4.5, 11.7 and 11.97 billion
+  as the import runs.
+- **An observed empty day reads as a zero, not as missing.** `Tokens 0` at launch, beside
+  `Events 0 events`.
+- **The quota board states its evidence honestly.** `Degraded: quota_discovery` at all four
+  marks, where it previously showed a green `Ready` with no reason beside
+  `Quota evidence unavailable`.
+- **Runtime libraries come from the package**, all three, with nothing borrowed from
+  System32.
+
+**The script can now fail on the clause it exists to guard, and could not before.** It read
+the header and the Today card and never looked at the state pill, so every earlier run
+reported a pass while the card claimed a finished answer. It now refuses exactly one
+combination -- `Ready` beside a board saying it has no evidence -- and that decision was
+exercised with both states actually observed here, the pre-fix `Ready` and the post-fix
+`Degraded: quota_discovery`, plus the filled-board case a machine with Codex would produce.
+
 ## Recorded, with a phase
 
 Defects found while working on something else. Each is deferred deliberately, not

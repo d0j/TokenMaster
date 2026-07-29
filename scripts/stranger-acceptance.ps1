@@ -74,6 +74,36 @@ $automation = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
 $textCondition = New-Object System.Windows.Automation.PropertyCondition(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Text)
+$groupCondition = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Group)
+
+# The criterion says the quota board states its evidence honestly, so the state pill is
+# read rather than the empty-board text. Without this the script reported a pass while
+# the card showed a green Ready with no reason beside "Quota evidence unavailable" --
+# a check that cannot fail on the thing it exists to guard.
+# The one combination the criterion forbids. A filled board reporting Ready is a pass, and
+# so is an empty board that says why -- what must never appear is a finished answer to a
+# question that was never successfully asked. Kept as a pure decision over two strings so
+# it can be exercised with both outcomes without a build.
+function Test-QuotaDishonesty {
+    param([string]$State, [string]$Board)
+    return ($State -match '^Ready($|:)') -and ($Board -like '*evidence unavailable*')
+}
+
+function Get-PlanUsageState {
+    $card = $null
+    foreach ($e in $automation.FindAll([System.Windows.Automation.TreeScope]::Descendants, $groupCondition)) {
+        if ($e.Current.Name -eq 'Plan Usage') { $card = $e; break }
+    }
+    if (-not $card) { return '(Plan Usage card not found)' }
+    foreach ($e in $card.FindAll([System.Windows.Automation.TreeScope]::Descendants, $textCondition)) {
+        if ($e.Current.Name -match '^(Ready|Degraded|Waiting|Unavailable)($|:)') {
+            return $e.Current.Name
+        }
+    }
+    return '(no state pill)'
+}
 $header = ""
 foreach ($e in $automation.FindAll([System.Windows.Automation.TreeScope]::Descendants, $textCondition)) {
     if ($e.Current.Name -like "Local usage intelligence*") { $header = $e.Current.Name; break }
@@ -84,6 +114,7 @@ foreach ($e in $automation.FindAll([System.Windows.Automation.TreeScope]::Descen
     if ($e.Current.Name -match '^(Cost|Tokens|Events) ') { $today += $e.Current.Name }
 }
 "today: {0}" -f ($today -join "  |  ")
+"plan usage: {0}" -f (Get-PlanUsageState)
 
 # a stranger waits while the first import runs; watch what the numbers become
 foreach ($wait in 60, 120, 180) {
@@ -98,8 +129,14 @@ foreach ($wait in 60, 120, 180) {
             $cells += $e.Current.Name
         }
     }
+    $planState = Get-PlanUsageState
     "after {0}s :: {1}" -f $wait, $header
     "            {0}" -f ($cells -join "  |  ")
+    "            plan usage: {0}" -f $planState
+    if (Test-QuotaDishonesty -State $planState -Board ($cells -join ' ')) {
+        Get-Process -Name TokenMaster -ErrorAction SilentlyContinue | Stop-Process -Force
+        throw "quota board reports $planState while stating it has no evidence"
+    }
 }
 
 Get-Process -Name TokenMaster -ErrorAction SilentlyContinue | Stop-Process -Force
