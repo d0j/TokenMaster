@@ -46,7 +46,6 @@ survives edits and is greppable.
 | P3 | The Today card reports `Cost $0.00` beside `Tokens —` while the evidence chip reads `Fresh · Authoritative` and the event count reads `0 events`. Both cells come from one `header`, and both formatters render a missing value as `—`, so the disagreement is in the domain: for the same empty day cost claims a legitimate zero and tokens claim no evidence. One of them is wrong, and the product's whole claim is that these three states stay distinct. Observed on a running build, not inferred. | `fn format_cost` and `fn format_tokens` are honest; start at `dashboard.header()` |
 | post-tag | Test helpers wait on a background runtime by spinning on `thread::yield_now` rather than sleeping between polls, which starves the thread being waited on when the machine has fewer cores than the test binary has parallel cases. With every hang bound now at thirty seconds this no longer decides pass or fail, so it is an efficiency item and not a correctness one. `backup_ui_latency_contract` keeps its spin deliberately: it measures elapsed time, and sleep granularity would enter the measurement. | `grep -rn yield_now crates/*/tests` |
 | **P3 blocker, half closed** | The window renders nothing where the buffer was cleared: softbuffer reports a stale buffer age on Win32 and Slint's compensating `occluded()` hook is unreachable there, because winit emits no `Occluded` on Windows. Mechanism, measurements and the upstream comment are in `docs/SLINT_NOTES.md`. `fn force_full_repaint` closes the restore path — 27.7 mean luma after, against 48.4 for a move. **A window the user drags is still affected and cannot be fixed from here**: Slint surfaces no move event. Report upstream; until then the drag case stands. | `fn force_full_repaint`; upstream `i-slint-backend-winit/renderer/sw.rs` |
-| **P3 blocker** | **The refresh cycle repeats every ten seconds and produces nothing.** Read out of `usage_scan` on the live archive: consecutive scans see 4016 sources, read 4016 files, and report `bytes_read = 0` and `events_observed = 0`. Each scan lasts about 1.3 seconds; the gap between one finishing and the next starting is about 10 seconds, and that gap is where a core goes -- the two replay passes `run_tail_passes` makes over every source, which `usage_scan` does not record. So the cost is not reading the 11 GB of session files, as the zero byte count proves; it is walking 4016 sources twice per cycle to find work that the database says is already finished -- one replay revision, 4016 rows, every one `state = 'complete'`. Measured after the journal fix: 126.5 processor seconds over 120 seconds, database flat at 816.86 MB. Neither poll interval explains the cadence (15 minutes healthy, 1 minute degraded), so the trigger is a hint or a forced reconcile, not the timer. | `fn run_tail_passes` in `crates/runtime/src/incremental.rs`; `fn force_reconcile` in `crates/runtime/src/scheduler.rs` **The hints themselves are legitimate and the fix is not to suppress them:** Codex runs while TokenMaster does, and `~/.codex` holds 13,712 files of which several were written within the last minute of the measurement -- `chat_processes.json`, `models_cache.json`, `logs_2.sqlite-wal`. Only 4016 of those files are usage sources. Targeting already exists and is wired -- `select_targeted_paths` feeds `refresh_targeted` whenever urgency is `Hint` without a forced reconcile -- and the gate inside it is not what fails: the archive reads `incremental_state = complete`, revision 0, zero sources short of complete, 616,079 replay observations, generation 6753. So the batch must be arriving as `Reconcile` rather than as paths. `ChangedPathBuffer::record` downgrades the whole batch to `Reconcile` on an empty path list, on any path that is not absolute or fails the namespace or length check, or past `MAX_CHANGED_PATHS = 256` distinct paths -- and a filesystem event carrying no paths is ordinary. **Which of those branches fires is not yet measured, and guessing the branch is exactly the mistake already made twice on this blocker.** Measure first. | `fn record` and `fn take` in `crates/runtime/src/watcher.rs`; `fn select_targeted_paths` in `crates/runtime/src/live.rs` |
 | P3 | One retained scan, id 1762, ran 2894 seconds and ended `failed` having seen 572 of 4016 sources, between neighbours that each completed in about 4 seconds. Whatever stalled it is not visible in the row itself. Recorded because the evidence is in a 32-row history window and will age out. | `usage_scan` retains `SCAN_HISTORY_PER_SCOPE` rows |
 | P3 | A white band renders below the content at the bottom of the window, outside every card, seen on a capture of the release build at 2122x1591. It is not the bottom tab bar, which draws above it. Either an unpainted region of the surface or a layout leaving slack under the last row; distinguish by resizing and watching whether the band scales. | capture `views.png`; start at the root `VerticalLayout` in `main.slint` |
 | post-tag | `high-contrast` and `reduced-motion` are declared and consumed by the tree but never set from Rust, so both affordances are inert. Confirmed: zero `set_high_contrast` / `set_reduced_motion` call sites. | `main.slint`, `in property <bool> high-contrast` and `reduced-motion` |
@@ -74,15 +73,29 @@ real fallback and it has no hot reload at all.
 and a `tokens.slint` edit stops costing a thirteen-second rebuild. It is a non-default
 feature and must never reach a release build.
 
-**The cold-start cost is answered.** It was never idling and never Slint: an empty Slint
-window with this repository's exact features costs 0% of a core, and thread-name profiling
-puts the work in `tokenmaster-refresh` -- about 184% of a core for the first 43 seconds,
-then 197 consecutive samples at zero. Renderer, animation and `accessibility` were each
-ruled out by measurement before that. The remaining question is narrow: whether every
-launch redoes the scan or only the first.
+**The idle cost is closed, and it was never rendering.** Two defects held a core, and both
+were found by measuring writes rather than by reading code -- three hypotheses taken from the
+source were wrong first, one of them twice.
 
-Threads already carry names; the standard library sets them. A probe that reports otherwise
-is asking `GetThreadDescription` for the wrong access right.
+The first was a transaction boundary. Presence is recorded for every source a scan sees,
+changed or not, and each source carried its own transaction: 8032 of 9564 journal frames landed
+on `usage_source` across 237 distinct pages, one commit per file. Batching them cost 16.0 MB per
+pass down to 1.31 MB.
+
+The second was the shape of a hint. The watched root is the profile root, not the sessions
+directory, and the tools that own that root write into it constantly -- of eight files changed
+under a real `~/.codex` in ten minutes, seven were outside both source directories. Any such path
+failed the whole targeted batch, which became a full walk of all 4016 sources. Skipping paths
+that can never be usage data -- while still reconciling a path whose file merely disappeared --
+removed the walk.
+
+Measured end to end on the live 816 MB archive, same script both times: journal over 120 seconds
+fell from 165 MB to 4.91 MB, processor time from 151.8-171.1 seconds per 180 to 27.4 per 120, and
+the process now reaches zero processor use about forty seconds after launch instead of holding a
+core indefinitely.
+
+Threads already carry names; the standard library sets them. A probe that reports otherwise is
+asking `GetThreadDescription` for the wrong access right.
 
 ## Abort rules
 
