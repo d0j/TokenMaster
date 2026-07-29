@@ -19,6 +19,8 @@ use tokenmaster_product::{
     ProductRuntimeGeneration, ProductRuntimeObservationError, ProductSectionKind,
 };
 use tokenmaster_query::{
+    AggregateTokenValue,
+    LifetimeUsage,
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryEnvelope, QueryError, QueryService, QuotaCurrentSnapshot,
@@ -90,6 +92,10 @@ impl UnavailableSource {
 impl DesktopQuerySource for UnavailableSource {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         self.record("status");
+        Err(query_failure())
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
         Err(query_failure())
     }
 
@@ -816,6 +822,10 @@ impl DesktopQuerySource for BlockingUnavailableSource {
         Err(query_failure())
     }
 
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Err(query_failure())
+    }
+
     delegate_unavailable_methods!();
 }
 
@@ -826,6 +836,10 @@ struct AnalyticsFaultSource {
 impl DesktopQuerySource for AnalyticsFaultSource {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         self.inner.product_data_status()
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Ok(LifetimeUsage::new(0, AggregateTokenValue::Unavailable))
     }
 
     fn usage_analytics(

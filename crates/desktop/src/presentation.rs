@@ -5,6 +5,7 @@ use tokenmaster_product::{
     ProductSessionDetailSelection, ProductSessionDetailSelectionGeneration, ProductSnapshot,
 };
 
+use crate::dashboard::DesktopTokenValue;
 use crate::{
     DesktopActivityProjection, DesktopDashboardProjection, DesktopDashboardSectionState,
     DesktopHistoryProjection, DesktopHistoryRangeGeneration, DesktopHistoryRangeIntent,
@@ -233,10 +234,22 @@ pub struct DesktopProjection {
     sessions: DesktopSessionsProjection,
     activity: DesktopActivityProjection,
     notifications: DesktopNotificationsProjection,
+    /// The archive's own total, which every route shows alike.
+    lifetime_tokens: DesktopTokenValue,
 }
 
 impl DesktopProjection {
     #[must_use]
+
+    /// Every event the archive holds, with no date bounds.
+    ///
+    /// Lives on the projection rather than on one route's: it is the same number on every
+    /// screen, and the shell shows it beside the route name.
+    #[must_use]
+    pub const fn lifetime_tokens(&self) -> DesktopTokenValue {
+        self.lifetime_tokens
+    }
+
     pub fn from_snapshot(snapshot: &ProductSnapshot, selected: DesktopRouteKey) -> Self {
         Self::from_snapshot_with_selection(
             snapshot,
@@ -260,6 +273,10 @@ impl DesktopProjection {
             routes: std::array::from_fn(|index| {
                 DesktopRouteProjection::from_status(snapshot.route(ProductRoute::ALL[index]))
             }),
+            lifetime_tokens: snapshot.lifetime().payload().map_or(
+                DesktopTokenValue::UNAVAILABLE,
+                |lifetime| crate::dashboard::map_tokens(lifetime.tokens(), lifetime.event_count()),
+            ),
             dashboard: DesktopDashboardProjection::from_snapshot(snapshot),
             history: DesktopHistoryProjection::from_snapshot_with_range(
                 snapshot,

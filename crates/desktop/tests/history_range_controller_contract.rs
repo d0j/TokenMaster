@@ -25,6 +25,8 @@ use tokenmaster_product::{
 };
 use tokenmaster_query::QueryService;
 use tokenmaster_query::{
+    AggregateTokenValue,
+    LifetimeUsage,
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest,
     ProductDataStatusEnvelope, QueryEnvelope, QueryError, QuotaCurrentSnapshot, QuotaEnvelope,
@@ -82,6 +84,10 @@ struct UnavailableSource;
 impl DesktopQuerySource for UnavailableSource {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         Err(query_failure())
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Ok(LifetimeUsage::new(0, AggregateTokenValue::Unavailable))
     }
     fn usage_analytics(
         &mut self,
@@ -178,6 +184,10 @@ struct BlockingDetailSource {
 impl DesktopQuerySource for BlockingDetailSource {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         self.inner.product_data_status()
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Ok(LifetimeUsage::new(0, AggregateTokenValue::Unavailable))
     }
 
     fn usage_analytics(
@@ -287,6 +297,10 @@ impl DesktopQuerySource for BlockingRefreshSource {
         self.inner.product_data_status()
     }
 
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Ok(LifetimeUsage::new(0, AggregateTokenValue::Unavailable))
+    }
+
     fn usage_analytics(
         &mut self,
         request: UsageAnalyticsRequest,
@@ -344,6 +358,10 @@ struct BlockingNavigationSource {
 impl DesktopQuerySource for BlockingNavigationSource {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         self.inner.product_data_status()
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Ok(LifetimeUsage::new(0, AggregateTokenValue::Unavailable))
     }
 
     fn usage_analytics(
@@ -410,6 +428,10 @@ struct RecordingHistorySource {
 impl DesktopQuerySource for RecordingHistorySource {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         self.inner.product_data_status()
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Ok(LifetimeUsage::new(0, AggregateTokenValue::Unavailable))
     }
 
     fn usage_analytics(

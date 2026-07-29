@@ -2159,6 +2159,7 @@ fn wire_session_page_intents(
 
 pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
     window.set_refresh_in_flight(false);
+    window.set_shell_lifetime_tokens(format_tokens(projection.lifetime_tokens()).into());
     apply_route_projection(window, projection);
     apply_dashboard_projection(window, projection.dashboard());
     apply_history_snapshot_projection(window, projection.history());

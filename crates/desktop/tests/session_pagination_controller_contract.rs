@@ -21,6 +21,8 @@ use tokenmaster_product::{
     ProductSessionDetailSelectionGeneration,
 };
 use tokenmaster_query::{
+    AggregateTokenValue,
+    LifetimeUsage,
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryService,
@@ -83,6 +85,10 @@ struct RecordingSource {
 impl DesktopQuerySource for RecordingSource {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         self.inner.product_data_status()
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        Ok(LifetimeUsage::new(0, AggregateTokenValue::Unavailable))
     }
 
     fn usage_analytics(

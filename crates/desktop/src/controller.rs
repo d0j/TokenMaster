@@ -21,6 +21,7 @@ use tokenmaster_product::{
     ProductSessionDetailSelectionGeneration, ProductSnapshot, ProductUsageRuntimeHealth,
 };
 use tokenmaster_query::{
+    LifetimeUsage,
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryService,
@@ -106,6 +107,9 @@ impl DesktopQueryPlan {
 pub trait DesktopQuerySource: Send + 'static {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError>;
 
+    /// Totals every event the archive holds, with no date bounds.
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError>;
+
     fn usage_analytics(
         &mut self,
         request: UsageAnalyticsRequest,
@@ -145,6 +149,10 @@ where
 {
     fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
         QueryService::product_data_status(self)
+    }
+
+    fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+        QueryService::lifetime_totals(self)
     }
 
     fn usage_analytics(
@@ -1738,6 +1746,14 @@ fn execute_refresh<S: DesktopQuerySource>(
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
+
+    let result = match source.lifetime_totals() {
+        Ok(value) => reducer.publish_lifetime(attempt, value),
+        Err(error) => reducer.fail_lifetime(attempt, error.code()),
+    };
+    if result.is_err() {
+        return RefreshOutcome::Failed;
+    }
     if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
@@ -2934,6 +2950,10 @@ mod tests {
             Err(invalid_query())
         }
 
+        fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+            Err(invalid_query())
+        }
+
         fn usage_analytics(
             &mut self,
             _request: UsageAnalyticsRequest,
@@ -2991,6 +3011,10 @@ mod tests {
                     .budget_ms()
                     .saturating_add(1),
             );
+            Err(invalid_query())
+        }
+
+        fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
             Err(invalid_query())
         }
 
@@ -3060,6 +3084,10 @@ mod tests {
             Err(invalid_query())
         }
 
+        fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
+            Err(invalid_query())
+        }
+
         fn usage_analytics(
             &mut self,
             _request: UsageAnalyticsRequest,
@@ -3110,6 +3138,10 @@ mod tests {
 
     impl DesktopQuerySource for ActiveRangeDeadlineSource {
         fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn lifetime_totals(&mut self) -> Result<LifetimeUsage, QueryError> {
             Err(invalid_query())
         }
 

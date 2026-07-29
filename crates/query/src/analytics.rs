@@ -323,6 +323,14 @@ pub struct LifetimeUsage {
 
 impl LifetimeUsage {
     #[must_use]
+    pub const fn new(event_count: u64, tokens: AggregateTokenValue) -> Self {
+        Self {
+            event_count,
+            tokens,
+        }
+    }
+
+    #[must_use]
     pub const fn event_count(self) -> u64 {
         self.event_count
     }

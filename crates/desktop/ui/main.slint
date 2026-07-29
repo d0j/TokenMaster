@@ -78,6 +78,9 @@ export component MainWindow inherits Window {
     in property <[RouteRow]> route-rows;
     in property <string> active-route-key;
     in property <string> active-route-label;
+    // The archive's own total. Shown beside the route name because it is the same number
+    // on every screen, and the product's whole claim is that this number is knowable.
+    in property <string> shell-lifetime-tokens;
     in property <string> active-route-state;
     in property <string> active-route-reasons;
     in property <string> product-generation;
@@ -394,7 +397,8 @@ export component MainWindow inherits Window {
                     vertical-alignment: center;
                 }
                 Text {
-                    text: @tr("Local usage intelligence") + " · " + root.active-route-label;
+                    text: @tr("Local usage intelligence") + " · " + root.active-route-label
+                        + (root.shell-lifetime-tokens == "" ? "" : " · " + @tr("{0} all time", root.shell-lifetime-tokens));
                     color: UiTokens.text-secondary;
                     font-size: UiTokens.text-caption;
                     vertical-alignment: center;
