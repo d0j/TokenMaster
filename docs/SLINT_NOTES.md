@@ -289,12 +289,10 @@ map is recoverable by walking each `rootpage` in `sqlite_master` down through th
 in the main database file. Opening the database with `immutable=1` guarantees the reading cannot
 write, checkpoint or recover anything.
 
-The instrument was a throwaway script and is not kept; the method above is, because the
-method is what took the attempts. Roughly forty lines: read the frame headers for page
-numbers, open the database with `immutable=1`, and walk each `rootpage` from `sqlite_master`
-down through the interior pages to name every leaf.
+The instrument itself was forty lines and is not kept; the method above is, because the
+method is what cost the attempts.
 
-On the ingestion blocker it On the ingestion blocker it reported 8032 of 9564 frames --
+On the ingestion blocker it reported 8032 of 9564 frames --
 31.4 MB of 39 -- against `usage_source` over only 237 distinct pages, with 8044 frames carrying
 their own commit: one transaction, one frame, per file. Two hypotheses read out of the code had
 already been wrong before this measurement was taken, and both were wrong in the same direction,
