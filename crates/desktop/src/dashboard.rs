@@ -712,6 +712,12 @@ pub struct DesktopModelRow {
     model: Arc<str>,
     tokens: DesktopTokenValue,
     cost: DesktopCostValue,
+    /// This model's tokens as a fraction of the leading model's, in parts per million.
+    ///
+    /// The handoff draws the ranking bar this way rather than as a share of the total, so
+    /// the leader is full width and every other bar is read against it. `None` where either
+    /// side is unknown, because a bar drawn from a guess is worse than no bar.
+    share_ppm: Option<u32>,
 }
 
 impl DesktopModelRow {
@@ -726,6 +732,10 @@ impl DesktopModelRow {
     #[must_use]
     pub const fn tokens(&self) -> DesktopTokenValue {
         self.tokens
+    }
+    #[must_use]
+    pub const fn share_ppm(&self) -> Option<u32> {
+        self.share_ppm
     }
     #[must_use]
     pub const fn cost(&self) -> DesktopCostValue {
@@ -1272,6 +1282,7 @@ fn map_models(breakdowns: &[tokenmaster_query::UsageBreakdown]) -> (Arc<[Desktop
                 model: Arc::from(model.as_str()),
                 tokens: map_tokens(item.metrics().total(), item.metrics().event_count()),
                 cost: map_cost(item.cost()),
+                share_ppm: None,
             }),
             UsageBreakdownIdentity::Project(_)
             | UsageBreakdownIdentity::UnassociatedProject
@@ -1282,6 +1293,22 @@ fn map_models(breakdowns: &[tokenmaster_query::UsageBreakdown]) -> (Arc<[Desktop
         .enumerate()
         .map(|(index, mut row)| {
             row.ordinal = ordinal(index);
+            row
+        })
+        .collect::<Vec<_>>();
+    // Taken as the maximum rather than the first row, because the bar means "against the
+    // leader" and would quietly become "against whatever happens to be on top" if the
+    // ordering ever changed. Rows whose tokens are unknown neither set the leader nor get
+    // a bar.
+    let leader = rows
+        .iter()
+        .filter_map(|row| row.tokens.known_sum())
+        .max()
+        .unwrap_or(0);
+    let rows = rows
+        .into_iter()
+        .map(|mut row| {
+            row.share_ppm = share_ppm(row.tokens.known_sum(), leader);
             row
         })
         .collect::<Vec<_>>();
@@ -1421,6 +1448,15 @@ fn empty_activity() -> [DesktopActivityRow; DASHBOARD_ACTIVITY_ROWS] {
         key: DesktopActivityKey::ALL[index],
         count: 0,
     })
+}
+
+/// A ranking bar's width, as this row against the leading one, in parts per million.
+fn share_ppm(value: Option<u64>, leader: u64) -> Option<u32> {
+    let value = value?;
+    if leader == 0 {
+        return None;
+    }
+    u32::try_from(u128::from(value) * 1_000_000 / u128::from(leader)).ok()
 }
 
 /// Cached tokens are a part of the input, not a sibling of it: the parser clamps them with

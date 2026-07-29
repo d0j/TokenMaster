@@ -528,6 +528,23 @@ fn model_and_session_caps_are_local_and_retain_only_twelve_rows() {
 
     assert_eq!(dashboard.models().len(), 12);
     assert!(dashboard.models_truncated());
+
+    // The handoff draws each model's bar as its share of the top model, so the leader is
+    // full width by construction and nothing else can be. A share wired from anything but
+    // the leading row would not satisfy both halves of this.
+    assert_eq!(dashboard.models()[0].share_ppm(), Some(1_000_000));
+    assert!(
+        dashboard.models()[1..]
+            .iter()
+            .all(|row| row.share_ppm().is_some_and(|share| share <= 1_000_000)),
+        "no model can exceed the leader"
+    );
+    assert!(
+        dashboard.models()[1..]
+            .iter()
+            .any(|row| row.share_ppm().is_some_and(|share| share < 1_000_000)),
+        "twelve distinct models cannot all tie with the leader"
+    );
     assert_eq!(
         dashboard
             .section(DesktopDashboardSectionKey::Models)
