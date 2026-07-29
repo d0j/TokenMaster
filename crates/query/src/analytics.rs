@@ -296,7 +296,15 @@ impl AggregateTokenValue {
         if known_count > event_count || (known_count == 0 && known_sum != 0) {
             return Err(QueryError::new(QueryErrorCode::CorruptArchive));
         }
-        if known_count == 0 {
+        // An observed day that held no events is a known zero, not a missing answer: with
+        // nothing to have carried token evidence, nothing is absent. This has to be asked
+        // before `known_count == 0`, which cannot tell that case apart from a day whose
+        // events all lack token evidence -- and that one is genuinely unavailable. A
+        // section with no answer yet never reaches here; it is `Waiting` and reports
+        // nothing, so answering zero here cannot be mistaken for an answer during import.
+        if event_count == 0 {
+            Ok(Self::Known(0))
+        } else if known_count == 0 {
             Ok(Self::Unavailable)
         } else if known_count == event_count {
             Ok(Self::Known(known_sum))
@@ -1345,4 +1353,37 @@ pub(crate) fn map_breakdown(
         items: Arc::from(items),
         truncated: value.truncated(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AggregateTokenValue, QueryError, StoreTokenAggregate};
+
+    /// A day that was observed and held nothing is a known zero; a day whose events carry
+    /// no token evidence is not.
+    ///
+    /// Both arrive here with `known_count == 0`, and only `event_count` tells them apart,
+    /// which is why the order of the two checks decides the answer. Pinned at this
+    /// boundary rather than through a projection, because the projection can only reach
+    /// the first case and the pair is the whole point: a section that has no answer yet
+    /// never reaches this function at all -- it is `Waiting`, and reports `None`.
+    #[test]
+    fn an_observed_empty_day_is_a_known_zero_and_missing_evidence_is_not() -> Result<(), QueryError>
+    {
+        let nothing_known = StoreTokenAggregate::default();
+
+        assert_eq!(
+            AggregateTokenValue::from_store(nothing_known, 0)?,
+            AggregateTokenValue::Known(0),
+            "nothing happened, so nothing is missing"
+        );
+
+        assert_eq!(
+            AggregateTokenValue::from_store(nothing_known, 3)?,
+            AggregateTokenValue::Unavailable,
+            "three events exist and none carries token evidence, so the total is unknown"
+        );
+
+        Ok(())
+    }
 }

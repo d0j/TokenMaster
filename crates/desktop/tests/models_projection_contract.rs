@@ -167,7 +167,7 @@ fn ready_models_maps_complete_recent_token_mix_and_cost_evidence() {
 }
 
 #[test]
-fn ready_empty_models_is_explicit_without_fabricating_token_evidence() {
+fn ready_empty_models_report_one_coherent_zero_across_events_tokens_and_cost() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("models-empty.sqlite3");
     seed(&path);
@@ -187,12 +187,19 @@ fn ready_empty_models_is_explicit_without_fabricating_token_evidence() {
 
     assert_eq!(models.state(), DesktopDashboardSectionState::Ready);
     assert_eq!(models.rows().len(), 0);
+    // The section is `Ready`, so this is a complete answer rather than an import in
+    // progress, and all three values describe the same observed day. They used to
+    // disagree: events and cost called the zero known while tokens called it missing,
+    // which put `Tokens —` beside `Cost $0.00` on one card. Nothing is missing when
+    // nothing happened. A day whose events carry no token evidence is still
+    // `Unavailable`, and a section with no answer yet is still `Waiting` reporting
+    // `None` -- both are pinned elsewhere, and neither reaches this state.
     assert_eq!(models.event_count(), Some(0));
     assert_eq!(
         models.total_tokens().availability(),
-        DesktopValueAvailability::Unavailable
+        DesktopValueAvailability::Known
     );
-    assert_eq!(models.total_tokens().known_sum(), None);
+    assert_eq!(models.total_tokens().known_sum(), Some(0));
     assert_eq!(
         models.cost().availability(),
         DesktopValueAvailability::LegitimateZero
