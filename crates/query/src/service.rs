@@ -120,6 +120,15 @@ impl<C: QueryClock> QueryService<C> {
         Ok(envelope)
     }
 
+    /// Totals every event the archive holds, with no date bounds.
+    ///
+    /// Carries no generation and no wall time because it answers a question that does not
+    /// move with the clock: the archive's own total, which changes only when the archive does.
+    pub fn lifetime_totals(&mut self) -> Result<crate::LifetimeUsage, QueryError> {
+        let totals = self.store.lifetime_totals().map_err(map_store_error)?;
+        crate::LifetimeUsage::from_store(totals)
+    }
+
     pub fn quota_windows(
         &mut self,
         request: QuotaCurrentRequest,

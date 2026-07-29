@@ -102,7 +102,7 @@ pub use types::{
     SOURCE_CHUNK_BYTES, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
     ScanSetSnapshot, ScanSnapshot, SourceKey, SourceKind, SourceRegistration,
     SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
-    StoredUsageEvent, StoredVerification, UsageStoreCounts,
+    StoredUsageEvent, StoredVerification, UsageLifetimeTotals, UsageStoreCounts,
 };
 
 use migration::migrate_schema;

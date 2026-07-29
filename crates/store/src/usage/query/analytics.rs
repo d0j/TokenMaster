@@ -8,7 +8,8 @@ use super::{
     UsageReadStore, load_aggregate_metrics, load_query_publication, load_raw_publication,
     load_ready_aggregate_generation, map_sql, raw_metrics_at, valid_ascii_id, valid_model,
 };
-use crate::usage::types::ScanScope;
+use crate::usage::query::UsageTokenAggregate;
+use crate::usage::types::{ScanScope, UsageLifetimeTotals};
 use crate::{StoreError, StoreErrorCode};
 
 pub const MAX_USAGE_SERIES_POINTS: usize = 400;
@@ -424,6 +425,47 @@ impl UsageAnalyticsCapture {
 }
 
 impl UsageReadStore {
+    /// Totals every event the archive holds, with no date bounds.
+    ///
+    /// Read from `usage_time_rollup` rather than `usage_event`, which the analytics path is
+    /// contractually forbidden to touch. Pinning one `bucket_width` is what keeps the sum
+    /// honest: minute and hour buckets each cover every event, so summing both doubles the
+    /// answer, and on this archive that is 32.6 billion tokens instead of 16.3.
+    pub fn lifetime_totals(&self) -> Result<UsageLifetimeTotals, StoreError> {
+        let row = self.connection.query_row(
+            "SELECT coalesce(sum(event_count), 0),
+                    coalesce(sum(total_known_count), 0),
+                    coalesce(sum(total_known_sum), 0)
+             FROM usage_time_rollup
+             WHERE aggregate_generation =
+                     (SELECT coalesce(max(aggregate_generation), 0) FROM usage_time_rollup)
+               AND dataset_kind = 'current'
+               AND bucket_width = 'hour'
+               AND dimension_kind = 'all'",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )?;
+        let event_count = u64::try_from(row.0)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        let known_count = u64::try_from(row.1)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        let known_sum = u64::try_from(row.2)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        if known_count > event_count {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        Ok(UsageLifetimeTotals {
+            event_count,
+            total: UsageTokenAggregate::from_parts(known_count, known_sum),
+        })
+    }
+
     pub fn capture_usage_analytics(
         &mut self,
         query: UsageAnalyticsQuery,
@@ -1048,5 +1090,64 @@ mod tests {
         let next = store.capture_usage_analytics(empty_query()?)?;
         assert_eq!(next.overview().event_count(), 0);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod lifetime_tests {
+    use crate::{UsageReadStore, UsageStore};
+
+    const ROLLUP_COLUMNS: &str = "aggregate_generation, dataset_kind, bucket_width,         bucket_start_seconds, provider_id, profile_id, dimension_kind, dimension_value,         event_count, input_known_count, input_known_sum, cached_known_count,         cached_known_sum, output_known_count, output_known_sum, reasoning_known_count,         reasoning_known_sum, total_known_count, total_known_sum, fallback_model_count,         long_context_yes_count, long_context_no_count, long_context_unavailable_count,         activity_read, activity_edit_write, activity_search, activity_git,         activity_build_test, activity_web, activity_subagents, activity_terminal";
+
+    fn seeded(rollups: &[(&str, i64, i64, i64)]) -> (tempfile::TempDir, UsageReadStore) {
+        let directory = tempfile::TempDir::new().expect("temporary directory");
+        let path = directory.path().join("usage.sqlite3");
+        {
+            let store = UsageStore::open(&path).expect("migrate");
+            for (width, events, known, sum) in rollups {
+                store
+                    .connection
+                    .execute(
+                        &format!(
+                            "INSERT INTO usage_time_rollup({ROLLUP_COLUMNS})
+                             VALUES (0, 'current', ?1, 3600, 'codex', 'default', 'all', '',
+                                     ?2, ?3, ?4, 0, 0, 0, 0, 0, 0, ?3, ?4,
+                                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
+                        ),
+                        rusqlite::params![width, events, known, sum],
+                    )
+                    .expect("insert rollup");
+            }
+        }
+        let read = UsageReadStore::open(&path).expect("open read store");
+        (directory, read)
+    }
+
+    /// Every bucket width covers every event, so a lifetime total may read only one of them.
+    ///
+    /// Summing minute and hour buckets together doubles the answer silently -- on a real
+    /// archive that is 32.6 billion tokens reported instead of 16.3 -- and nothing else in
+    /// the row would look wrong. This is the bound that refuses it.
+    #[test]
+    fn a_lifetime_total_counts_each_event_once_across_bucket_widths() {
+        let (_directory, store) = seeded(&[("hour", 3, 3, 100), ("minute", 3, 3, 100)]);
+
+        let totals = store.lifetime_totals().expect("lifetime totals");
+
+        assert_eq!(totals.event_count(), 3);
+        assert_eq!(totals.total().known_count(), 3);
+        assert_eq!(totals.total().known_sum(), 100);
+    }
+
+    /// An empty archive answers zero rather than failing.
+    #[test]
+    fn an_empty_archive_totals_zero() {
+        let (_directory, store) = seeded(&[]);
+
+        let totals = store.lifetime_totals().expect("lifetime totals");
+
+        assert_eq!(totals.event_count(), 0);
+        assert_eq!(totals.total().known_count(), 0);
+        assert_eq!(totals.total().known_sum(), 0);
     }
 }

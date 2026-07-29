@@ -80,6 +80,6 @@ pub use usage::{
     UsageSeriesPointCapture, UsageSessionBreakdownPriceBasisQuery, UsageSessionCursor,
     UsageSessionDetail, UsageSessionDetailCapture, UsageSessionDetailQuery, UsageSessionKey,
     UsageSessionPageCapture, UsageSessionPageQuery, UsageSessionPriceBasisBatchQuery,
-    UsageSessionPriceBasisQuery, UsageSessionSummary, UsageStore, UsageStoreCounts,
+    UsageSessionPriceBasisQuery, UsageSessionSummary, UsageLifetimeTotals, UsageStore, UsageStoreCounts,
     UsageTokenAggregate,
 };

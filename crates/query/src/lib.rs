@@ -23,7 +23,7 @@ pub use activity::{
     PageSize,
 };
 pub use analytics::{
-    AggregateTokenValue, MAX_QUERY_SERIES_POINTS, ResolvedUsageRange, UsageActivity,
+    AggregateTokenValue, LifetimeUsage, MAX_QUERY_SERIES_POINTS, ResolvedUsageRange, UsageActivity,
     UsageAnalytics, UsageAnalyticsRequest, UsageBreakdown, UsageBreakdownIdentity,
     UsageBreakdownItem, UsageBreakdownKind, UsageMetrics, UsageRange, UsageRhythm, UsageRhythmHour,
     UsageRhythmSelection, UsageRhythmWeekday, UsageSeriesPoint, UsageSeriesSelection, UsageWeekday,

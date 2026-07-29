@@ -287,7 +287,10 @@ impl AggregateTokenValue {
         }
     }
 
-    fn from_store(value: StoreTokenAggregate, event_count: u64) -> Result<Self, QueryError> {
+    pub(crate) fn from_store(
+        value: StoreTokenAggregate,
+        event_count: u64,
+    ) -> Result<Self, QueryError> {
         let known_count = value.known_count();
         let known_sum = value.known_sum();
         if known_count > event_count || (known_count == 0 && known_sum != 0) {
@@ -304,6 +307,38 @@ impl AggregateTokenValue {
                 event_count,
             })
         }
+    }
+}
+
+/// Every event the archive holds, with no date bounds.
+///
+/// Separate from `UsageAnalyticsRequest` on purpose: that path answers questions about a
+/// range, and `UsageRange::custom` rejects a span over 400 days, so a lifetime cannot be
+/// asked for as a very long range.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LifetimeUsage {
+    event_count: u64,
+    tokens: AggregateTokenValue,
+}
+
+impl LifetimeUsage {
+    #[must_use]
+    pub const fn event_count(self) -> u64 {
+        self.event_count
+    }
+
+    #[must_use]
+    pub const fn tokens(self) -> AggregateTokenValue {
+        self.tokens
+    }
+
+    pub(crate) fn from_store(
+        totals: tokenmaster_store::UsageLifetimeTotals,
+    ) -> Result<Self, QueryError> {
+        Ok(Self {
+            event_count: totals.event_count(),
+            tokens: AggregateTokenValue::from_store(totals.total(), totals.event_count())?,
+        })
     }
 }
 
