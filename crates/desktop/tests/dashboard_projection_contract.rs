@@ -7,7 +7,10 @@ use tokenmaster_desktop::{
     DesktopActivityKey, DesktopDashboardSectionKey, DesktopDashboardSectionState, DesktopFreshness,
     DesktopQuality, DesktopRouteKey, DesktopState, DesktopValueAvailability,
 };
-use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
+use tokenmaster_product::{
+    ProductAttemptGeneration, ProductReducer, ProductRuntimeGeneration,
+    ProductRuntimeObservationError,
+};
 use tokenmaster_query::{
     BenefitOverviewRequest, CalendarDate, GitOutputRequest, PageSize, QueryErrorCode, QueryService,
     UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
@@ -21,6 +24,75 @@ use support::dashboard_fixture::{
 
 fn attempt(value: u64) -> ProductAttemptGeneration {
     ProductAttemptGeneration::new(value).expect("nonzero attempt")
+}
+
+fn runtime_generation(value: u64) -> ProductRuntimeGeneration {
+    ProductRuntimeGeneration::new(value).expect("nonzero runtime generation")
+}
+
+/// A quota answer the runtime never managed to fetch is not a finished answer.
+///
+/// Quota does not come from the archive; the runtime spawns Codex and asks it. The
+/// archive query succeeds either way -- it simply finds no windows -- so the section
+/// read `Ready` with no reason codes while the poll was failing, and the card showed
+/// `Ready` beside `Quota evidence unavailable`. That is the interface claiming a complete
+/// answer to a question that was never successfully asked. Observed on a live window
+/// against a machine where discovery finds no executable at all.
+#[test]
+fn a_failed_quota_poll_stops_the_card_reporting_a_finished_answer() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("dashboard.sqlite3");
+    seed(&path);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let quota = service.quota_overview().expect("quota overview");
+    // Plan Usage combines quota with benefits, so both have to be answered before the
+    // card can be Ready at all -- which is the state the live window was actually in.
+    let benefits = service
+        .benefit_overview(BenefitOverviewRequest::new())
+        .expect("benefit overview");
+
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_quota(attempt(1), quota)
+        .expect("publish quota");
+    reducer
+        .publish_benefit(attempt(1), benefits)
+        .expect("publish benefits");
+
+    let ready = reducer.snapshot();
+    let ready_plan = plan_usage_section(&ready);
+    assert_eq!(ready_plan.0, DesktopDashboardSectionState::Ready);
+
+    reducer
+        .fail_quota_runtime_observation(
+            runtime_generation(1),
+            ProductRuntimeObservationError::ProviderUnavailable,
+        )
+        .expect("quota runtime observation failure");
+
+    let failed = reducer.snapshot();
+    let (state, reasons) = plan_usage_section(&failed);
+    assert_ne!(state, DesktopDashboardSectionState::Ready);
+    assert!(
+        reasons.contains(&"provider_unavailable"),
+        "the card must name why, received {reasons:?}"
+    );
+}
+
+fn plan_usage_section(
+    snapshot: &tokenmaster_product::ProductSnapshot,
+) -> (DesktopDashboardSectionState, Vec<&'static str>) {
+    let state = DesktopState::new(snapshot, DesktopRouteKey::Dashboard);
+    let dashboard = state.projection().dashboard();
+    let section = dashboard
+        .sections()
+        .iter()
+        .find(|section| section.key() == DesktopDashboardSectionKey::PlanUsage)
+        .expect("plan usage section");
+    (
+        section.state(),
+        section.reason_codes().iter().collect::<Vec<_>>(),
+    )
 }
 
 #[test]

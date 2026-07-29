@@ -978,6 +978,15 @@ fn map_plan_usage(
     DesktopDashboardSectionProjection,
 ) {
     let mut quota_state = base_section(snapshot.quota());
+    // Quota is the one figure on this screen that does not come from the archive: the
+    // runtime spawns Codex and asks it. The archive query succeeds whether or not that
+    // ever happened -- it simply finds no windows -- so on its own this section reports a
+    // finished answer to a question that was never successfully asked, which is how a
+    // `Ready` pill came to sit beside "Quota evidence unavailable" on a live window. The
+    // runtime's own verdict is the only thing that can tell the two apart.
+    if let Some(error) = snapshot.runtime().quota().observation_error() {
+        degrade(&mut quota_state, error.stable_code());
+    }
     let quota_rows = snapshot
         .quota()
         .payload()
