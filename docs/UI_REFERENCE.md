@@ -169,15 +169,43 @@ Not yet, and purely presentational -- no new data needed:
 
 - the `day` / `week` toggle in Code Output
 
-Not yet, and blocked on data the projection does not currently carry:
+**Already carried to the shell, and this file said otherwise.** Checked against the code
+rather than assumed, after an earlier revision of this list called them missing:
 
-`-12% vs avg` · `in / out` split · `194 sessions` · `peak 68/min` · `elapsed 41%` ·
-`resets Sat · 152h 52m` · `$ / 100 LINES` · `net +2747` · `IN / OUT` ratio · `BURN / DAY` ·
-`sources 98/104` · `db size 412 MB` · `synced 14:33:54` · `CACHE HIT` · `saved` ·
-`RESETS LEFT` · the Sessions window/token/cost/model table on the Dashboard ·
-`Cost by Model` shares and their per-model call, in/out and cache captions ·
-`daemon running` · `queue` · `indexing`
+- `$ / 100 LINES` -- `DesktopCodeOutputProjection::cost_per_100_added_lines_micros`, bound
+  to `dashboard-code-efficiency` and on screen today
+- `net +2747` -- `DesktopCodeOutputProjection::net_lines`, bound to `dashboard-code-net`;
+  only its position changes under this revision
+- `sources n/m` and `indexing n/m` -- `DesktopDashboardProjection::import_progress`, but
+  only while an import runs: `load_import_progress` returns nothing once publication
+  quality stops being `Partial`, so a steady-state total is still missing
+- the Sessions table's `WINDOW`, `TOKENS` and `COST` columns -- `DesktopSessionRow` already
+  carries both timestamps, the token value and the cost, and `apply_sessions` already
+  formats the clock range. **`MODEL` is the one column genuinely absent**, and it is absent
+  all the way down to the store's session summary
 
-That second list is the more valuable half. Each entry is a fact the product either already
-computes and discards, or could compute cheaply -- and each one is why the mockup reads as
-an instrument and the current build reads as a placeholder.
+**Computed upstream and thrown away, each at one nameable place.** This is the valuable
+half, because none of it needs new data -- only carrying:
+
+- the `in / out` split and the cached total -- `UsageMetrics` carries `input`, `cached`,
+  `output` and `reasoning`, and every other route projection maps them faithfully;
+  `map_analytics` takes `total()` alone. The `CACHE HIT` percentage is one division of two
+  values already present.
+- `elapsed 41%` -- both derivations exist on `QuotaWindowValue`, its epoch's first and last
+  observation and the definition's nominal duration, and `map_quota_row` touches neither
+- `synced 14:33:54` -- `QueryHeader::data_through_ms` rides on every envelope and
+  `data_through_ms` appears nowhere in the desktop crate
+- the per-model in/out/cache captions -- `map_models` keeps `total()` and the cost while the
+  Models route keeps the full split from the identical breakdown item
+- `resets Sat · 152h 52m` -- the instant is already projected; only a reference "now" is
+  missing, and the envelope header carries one
+
+**Genuinely absent, and needing real work:** `-12% vs avg` · `saved $293` (the counterfactual
+never leaves the pricing crate, though the cached and uncached bases are both in
+`TokenPriceBasis`) · `194 sessions` · `peak 68/min` (minute buckets are already materialised
+in `usage_time_rollup`; nothing takes their maximum) · `db size 412 MB` · `IN / OUT` ratio ·
+`BURN / DAY` · `daemon running` · `queue`
+
+The lesson this list now carries is its own history: three of its entries were on screen
+while it claimed they were impossible. A missing-data list is only useful if it is checked
+against the code, because it tells the next reader not to look.
