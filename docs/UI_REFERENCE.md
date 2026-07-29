@@ -79,10 +79,13 @@ Measured against the code, not estimated.
   context percentage with tokens remaining, and tool-call chips. `DesktopSessionRow` carries
   an ordinal, two timestamps, tokens and cost -- nothing else, and no model.
 - **Activity heatmap, 7 days by 24 hours.** The Dashboard's activity is
-  `DASHBOARD_ACTIVITY_ROWS = 8` rows of something else. **The grid the design asks for
-  already exists one layer down**: `USAGE_RHYTHM_HOURS = 24` and
-  `USAGE_RHYTHM_WEEKDAYS = 7` are computed in the store's analytics and reach no Dashboard
-  projection.
+  `DASHBOARD_ACTIVITY_ROWS = 8` rows of something else. An earlier revision of this file
+  claimed the grid already existed one layer down and **that was wrong**: the rhythm
+  feature answers `UsageRhythm { hours: [24], weekdays: [7] }`, which is two marginals and
+  thirty-one buckets, not a cross-product of a hundred and sixty-eight. Knowing the busiest
+  hour and the busiest weekday does not tell you Tuesday at 03:00. The history request does
+  already ask for rhythm over thirty days, so the query and its bounds exist -- what does
+  not exist is an hour-of-weekday bucket, and adding one is store work.
 - **The SCALE slider**, continuous over 1 to 90 days, which re-scopes the trend summary,
   its axis and its series. The built trend has a fixed window.
 - **The token mix bar** in Plan Usage -- cache, in and out as one segmented bar with a
@@ -93,14 +96,16 @@ Measured against the code, not estimated.
 
 Already carried to the projection, after this cycle's work: today's cost, the token total
 and its input, cached and output parts, the cache-hit rate, the event count, the instant
-the archive is complete through, cost per hundred added lines, net changed lines, and the
-lifetime total.
+the archive is complete through, cost per hundred added lines, net changed lines, the
+lifetime total, each model's share of the leading model, and how far through its window
+each quota row was read.
 
-Computed upstream and still dropped: the per-model input, cached and output split, both
-derivations of the quota window's elapsed fraction, and the 24x7 rhythm above.
+Computed upstream and still dropped: the per-model input, cached and output split.
 
 Genuinely absent: cost saved by caching, the session count for a period, peak calls per
-minute, the archive's size on disk, live session context and tool-call counts, and the
+minute, the archive's size on disk, an hour-of-weekday bucket for the heatmap, the vendor
+beside a model name -- `ModelKey` is a plain ASCII value with no provider on it -- live
+session context and tool-call counts, and the
 per-repository commit and line statistics the Live Sessions card shows.
 
 ### Known gaps the designer flagged
