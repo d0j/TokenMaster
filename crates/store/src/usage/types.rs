@@ -7,6 +7,7 @@ use tokenmaster_accounting::{
 use tokenmaster_domain::SessionRelationDraft;
 
 use crate::{StoreError, StoreErrorCode};
+use super::query::UsageTokenAggregate;
 
 pub const MAX_RESUME_BYTES: usize = 32 * 1024;
 pub const MAX_USAGE_EVENT_PAGE_SIZE: usize = 256;
@@ -929,6 +930,30 @@ impl GenerationSnapshot {
     #[must_use]
     pub const fn checkpoint(&self) -> &StoredCheckpoint {
         &self.checkpoint
+    }
+}
+
+/// Every event the archive holds, with no date bounds.
+///
+/// The analytics path cannot express this: each range goes through `UsageRange`, whose
+/// `custom` constructor rejects a span over 400 days, so a lifetime is not a long range.
+/// The known count travels beside the sum for the same reason it does per range -- it is
+/// what separates a complete total from a partial one.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct UsageLifetimeTotals {
+    pub(super) event_count: u64,
+    pub(super) total: UsageTokenAggregate,
+}
+
+impl UsageLifetimeTotals {
+    #[must_use]
+    pub const fn event_count(self) -> u64 {
+        self.event_count
+    }
+
+    #[must_use]
+    pub const fn total(self) -> UsageTokenAggregate {
+        self.total
     }
 }
 

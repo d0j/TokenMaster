@@ -261,6 +261,13 @@ pub struct UsageTokenAggregate {
 }
 
 impl UsageTokenAggregate {
+    pub(super) const fn from_parts(known_count: u64, known_sum: u64) -> Self {
+        Self {
+            known_count,
+            known_sum,
+        }
+    }
+
     #[must_use]
     pub const fn known_count(self) -> u64 {
         self.known_count

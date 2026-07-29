@@ -237,6 +237,47 @@ impl UsageStore {
         })
     }
 
+    /// Totals every event the archive holds, with no date bounds.
+    ///
+    /// Read from `usage_time_rollup` rather than `usage_event`, which the analytics path is
+    /// contractually forbidden to touch. Pinning one `bucket_width` is what keeps the sum
+    /// honest: minute and hour buckets each cover every event, so summing both doubles the
+    /// answer, and on this archive that is 32.6 billion tokens instead of 16.3.
+    pub fn lifetime_totals(&self) -> Result<UsageLifetimeTotals, StoreError> {
+        let row = self.connection.query_row(
+            "SELECT coalesce(sum(event_count), 0),
+                    coalesce(sum(total_known_count), 0),
+                    coalesce(sum(total_known_sum), 0)
+             FROM usage_time_rollup
+             WHERE aggregate_generation =
+                     (SELECT coalesce(max(aggregate_generation), 0) FROM usage_time_rollup)
+               AND dataset_kind = 'current'
+               AND bucket_width = 'hour'
+               AND dimension_kind = 'all'",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )?;
+        let event_count = u64::try_from(row.0)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        let known_count = u64::try_from(row.1)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        let known_sum = u64::try_from(row.2)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        if known_count > event_count {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        Ok(UsageLifetimeTotals {
+            event_count,
+            total: super::query::UsageTokenAggregate::from_parts(known_count, known_sum),
+        })
+    }
+
     pub fn counts(&self) -> Result<UsageStoreCounts, StoreError> {
         let counts = self.connection.query_row(
             "SELECT
@@ -657,5 +698,53 @@ mod tests {
             "cursor page must seek through the time index"
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod lifetime_tests {
+    use crate::UsageStore;
+
+    fn rollup(store: &UsageStore, width: &str, events: i64, known: i64, sum: i64) {
+        store
+            .connection
+            .execute(
+                "INSERT INTO usage_time_rollup(aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds, provider_id, profile_id, dimension_kind, dimension_value, event_count, input_known_count, input_known_sum, cached_known_count, cached_known_sum, output_known_count, output_known_sum, reasoning_known_count, reasoning_known_sum, total_known_count, total_known_sum, fallback_model_count, long_context_yes_count, long_context_no_count, long_context_unavailable_count, activity_read, activity_edit_write, activity_search, activity_git, activity_build_test, activity_web, activity_subagents, activity_terminal)
+                 VALUES (0, 'current', ?1, 3600, 'codex', 'default', 'all', '',
+                         ?2, ?3, ?4, 0, 0, 0, 0, 0, 0, ?3, ?4,
+                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)",
+                rusqlite::params![width, events, known, sum],
+            )
+            .expect("insert rollup");
+    }
+
+    /// Every bucket width covers every event, so a lifetime total may read only one of them.
+    ///
+    /// Summing minute and hour buckets together doubles the answer silently -- on a real
+    /// archive that is 32.6 billion tokens reported instead of 16.3 -- and nothing else in
+    /// the row would look wrong. This is the bound that refuses it.
+    #[test]
+    fn a_lifetime_total_counts_each_event_once_across_bucket_widths() {
+        let store = UsageStore::in_memory().expect("store");
+        rollup(&store, "hour", 3, 3, 100);
+        rollup(&store, "minute", 3, 3, 100);
+
+        let totals = store.lifetime_totals().expect("lifetime totals");
+
+        assert_eq!(totals.event_count(), 3);
+        assert_eq!(totals.total().known_count(), 3);
+        assert_eq!(totals.total().known_sum(), 100);
+    }
+
+    /// An empty archive has a known total of zero, not an absent one.
+    #[test]
+    fn an_empty_archive_totals_zero() {
+        let store = UsageStore::in_memory().expect("store");
+
+        let totals = store.lifetime_totals().expect("lifetime totals");
+
+        assert_eq!(totals.event_count(), 0);
+        assert_eq!(totals.total().known_count(), 0);
+        assert_eq!(totals.total().known_sum(), 0);
     }
 }
