@@ -38,6 +38,12 @@ Describe 'P3-E interactive receipt validator' {
             $executable = Join-Path $root 'tokenmaster.exe'
             Copy-Item -LiteralPath $executable -Destination (Join-Path $stage 'TokenMaster.exe')
             [IO.File]::WriteAllBytes((Join-Path $stage 'tokenmaster.portable'), [byte[]]@())
+            # The dynamic CRT ships beside the executable, so a stage without it is not a
+            # package this validator may accept. See product-package.Tests.ps1, which holds
+            # the second copy of this staging code.
+            foreach ($runtime in @('VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'MSVCP140.dll')) {
+                [IO.File]::WriteAllBytes((Join-Path $stage $runtime), [byte[]](77, 90))
+            }
             foreach ($name in @('README.md', 'README_RU.md', 'LICENSE')) {
                 Set-Content -LiteralPath (Join-Path $stage $name) -Value $name -NoNewline
             }

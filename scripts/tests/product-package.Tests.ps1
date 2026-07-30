@@ -63,6 +63,13 @@ Describe "TokenMaster product package contracts" {
         New-Item -ItemType Directory -Path $Stage -Force | Out-Null
         [IO.File]::WriteAllBytes((Join-Path $Stage "TokenMaster.exe"), [byte[]](1, 2, 3))
         [IO.File]::WriteAllBytes((Join-Path $Stage "tokenmaster.portable"), [byte[]]@())
+        # Skia forced the dynamic CRT, so package-product.ps1 copies these three beside the
+        # executable. They are written here as literal names rather than read from the
+        # validator's own list, because a fixture generated from the list under test can
+        # never disagree with it, and disagreement is the whole point of a closed set.
+        foreach ($Runtime in @("VCRUNTIME140.dll", "VCRUNTIME140_1.dll", "MSVCP140.dll")) {
+            [IO.File]::WriteAllBytes((Join-Path $Stage $Runtime), [byte[]](77, 90))
+        }
         foreach ($Name in @("README.md", "README_RU.md", "LICENSE")) {
             Set-Content -LiteralPath (Join-Path $Stage $Name) -Value $Name -NoNewline
         }

@@ -221,7 +221,7 @@ try {
             $false
         )
         try {
-            if ($packageArchive.Entries.Count -ne 9) {
+            if ($packageArchive.Entries.Count -ne @(Get-ProductPackageExpectedFile).Count) {
                 throw 'TM-P3E-PROVENANCE'
             }
             $packageRootName = $null

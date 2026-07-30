@@ -94,6 +94,33 @@ function Write-ProductChecksums {
     )
 }
 
+function Get-ProductPackageExpectedFile {
+    # The closed content list of an unsigned portable package, sorted the way
+    # Get-ProductStageRelativeFiles sorts, so the two can be compared position by position.
+    #
+    # Every consumer reads the list from here. It used to be written twice -- once as this
+    # list and once as a bare entry count in validate-p3e-interactive.ps1 -- and when Skia
+    # forced the dynamic CRT beside the executable, the list learned about the three new
+    # files and the count did not. The validator then rejected every real package it was
+    # given, which is the failure mode a duplicated constant always eventually produces.
+    $Files = @(
+        "BUILDINFO.json",
+        "LICENSE",
+        "README.md",
+        "README_RU.md",
+        "SBOM.cdx.json",
+        "SHA256SUMS.txt",
+        "THIRD_PARTY_NOTICES.txt",
+        "MSVCP140.dll",
+        "TokenMaster.exe",
+        "VCRUNTIME140.dll",
+        "VCRUNTIME140_1.dll",
+        "tokenmaster.portable"
+    )
+    [Array]::Sort($Files, [StringComparer]::Ordinal)
+    return $Files
+}
+
 function Assert-ProductPackageStage {
     [CmdletBinding()]
     param(
@@ -112,21 +139,7 @@ function Assert-ProductPackageStage {
         }
     }
 
-    $ExpectedFiles = @(
-        "BUILDINFO.json",
-        "LICENSE",
-        "README.md",
-        "README_RU.md",
-        "SBOM.cdx.json",
-        "SHA256SUMS.txt",
-        "THIRD_PARTY_NOTICES.txt",
-        "MSVCP140.dll",
-        "TokenMaster.exe",
-        "VCRUNTIME140.dll",
-        "VCRUNTIME140_1.dll",
-        "tokenmaster.portable"
-    )
-    [Array]::Sort($ExpectedFiles, [StringComparer]::Ordinal)
+    $ExpectedFiles = @(Get-ProductPackageExpectedFile)
     $ActualFiles = @(Get-ProductStageRelativeFiles -StagePath $ResolvedStage)
     if ($ActualFiles.Count -ne $ExpectedFiles.Count) {
         throw "product package content list is not closed"
