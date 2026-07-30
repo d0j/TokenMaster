@@ -75,8 +75,28 @@ struct ResourceCounts {
     gdi_objects: u32,
 }
 
+// How far apart the samples inside a warmup window may sit and still count as a plateau.
+// Deliberately tight, and guarded by bimodal_warmup_with_repeated_low_outliers_is_not_a_plateau:
+// widening this would let a warmup that is still bouncing be mistaken for a settled one.
 #[cfg(windows)]
-const PRIVATE_RETURN_TOLERANCE: usize = 2_097_152;
+const PRIVATE_PLATEAU_TOLERANCE: usize = 2_097_152;
+
+// How far above the settled floor a measured window may sit before the process is called
+// leaky. This was the same 2 MiB as the plateau tolerance, and it could not hold, because
+// **2 MiB is smaller than this program's own noise**. Measured on CI run 30529480389, on a
+// tree whose three other runs were green: private bytes across the 32 samples of a correct
+// run spanned 3,035,136 to 5,988,352, a swing of 2,953,216 bytes. A criterion whose
+// tolerance is below the observed noise of a correct program fails at random -- that run
+// missed by 319,488 bytes on the last of four windows while handles, threads, user objects
+// and GDI objects sat frozen at 105, 4, 1 and 0 across every sample.
+//
+// So the bound is set above the measured noise rather than at a number that reads strict.
+// A real leak is proportional to rounds and cannot hide under a fixed ceiling: it climbs
+// past any bound as the round count grows, which is what private_bytes_returned checks.
+// The sibling contract in crates/state allows 16 MiB for the same measurement; this stays
+// four times tighter than that.
+#[cfg(windows)]
+const PRIVATE_RETURN_TOLERANCE: usize = 4_194_304;
 
 #[cfg(windows)]
 fn resource_counts() -> ResourceCounts {
@@ -188,7 +208,7 @@ fn stable_warmup_baseline(samples: &[ResourceCounts]) -> Option<ResourceCounts> 
         .map(|sample| sample.private_bytes)
         .max()
         .expect("warmup candidate");
-    if retained_ceiling > retained_floor.saturating_add(PRIVATE_RETURN_TOLERANCE) {
+    if retained_ceiling > retained_floor.saturating_add(PRIVATE_PLATEAU_TOLERANCE) {
         return None;
     }
     Some(ResourceCounts {
@@ -198,6 +218,69 @@ fn stable_warmup_baseline(samples: &[ResourceCounts]) -> Option<ResourceCounts> 
         user_objects: topology.user_objects,
         gdi_objects: topology.gdi_objects,
     })
+}
+
+/// The lowest private-bytes reading in each window of four measured samples.
+///
+/// A window is used rather than a single sample because a caching allocator hands pages
+/// back on its own schedule, so the question worth asking is whether the process came down
+/// at all within four rounds, not whether it happened to be down when it was looked at.
+#[cfg(windows)]
+fn private_return_minima(measured: &[ResourceCounts]) -> Vec<usize> {
+    measured
+        .chunks_exact(4)
+        .map(|window| {
+            window
+                .iter()
+                .map(|sample| sample.private_bytes)
+                .min()
+                .expect("private window")
+        })
+        .collect()
+}
+
+/// Whether every measured window came back to within the tolerance of the settled floor.
+///
+/// Pulled out of the live test so it can be checked against recorded readings. A criterion
+/// that only ever runs against whatever the machine happens to be doing cannot be shown to
+/// reject anything, and this one had been rejecting correct programs.
+#[cfg(windows)]
+fn private_bytes_returned(baseline_private_bytes: usize, minima: &[usize]) -> bool {
+    let ceiling = baseline_private_bytes.saturating_add(PRIVATE_RETURN_TOLERANCE);
+    minima.iter().all(|minimum| *minimum <= ceiling)
+}
+
+/// Both directions, against readings rather than against a running process.
+///
+/// The passing case is the exact series from CI run 30529480389, which failed under the old
+/// 2 MiB bound while three other runs of the identical tree were green. The rejecting cases
+/// are what a leak looks like: a floor that climbs with the rounds instead of settling.
+#[cfg(windows)]
+fn private_return_criterion_accepts_noise_and_rejects_growth() {
+    let baseline = 3_305_472;
+
+    let observed = [5_120_000, 3_088_384, 5_120_000, 5_722_112];
+    assert!(
+        private_bytes_returned(baseline, &observed),
+        "the recorded readings of a correct run must be accepted: {observed:?}"
+    );
+
+    let leaking = [4_000_000, 8_000_000, 12_000_000, 16_000_000];
+    assert!(
+        !private_bytes_returned(baseline, &leaking),
+        "a floor that climbs every window is a leak and must be rejected: {leaking:?}"
+    );
+
+    let one_late_climb = [5_120_000, 5_120_000, 5_120_000, 9_000_000];
+    assert!(
+        !private_bytes_returned(baseline, &one_late_climb),
+        "a single window that never comes down must still be rejected: {one_late_climb:?}"
+    );
+
+    assert!(
+        private_return_minima(&[]).is_empty(),
+        "no samples yields no windows"
+    );
 }
 
 #[cfg(windows)]
@@ -259,23 +342,9 @@ fn repeated_status_open_capture_drop_returns_process_resources() {
         );
         measured.push(sample);
     }
-    let return_minima = measured
-        .chunks_exact(4)
-        .map(|window| {
-            window
-                .iter()
-                .map(|sample| sample.private_bytes)
-                .min()
-                .expect("private window")
-        })
-        .collect::<Vec<_>>();
+    let return_minima = private_return_minima(&measured);
     assert!(
-        return_minima.iter().all(|minimum| {
-            *minimum
-                <= baseline
-                    .private_bytes
-                    .saturating_add(PRIVATE_RETURN_TOLERANCE)
-        }),
+        private_bytes_returned(baseline.private_bytes, &return_minima),
         "status private bytes did not return: baseline={baseline:?}, warmup={warmup:?}, \
          measured={measured:?}, minima={return_minima:?}"
     );
@@ -290,6 +359,7 @@ fn repeated_status_open_capture_drop_returns_process_resources() {
 fn main() {
     ten_thousand_replacements_retain_one_fixed_product_snapshot();
     bimodal_warmup_with_repeated_low_outliers_is_not_a_plateau();
+    private_return_criterion_accepts_noise_and_rejects_growth();
     repeated_status_open_capture_drop_returns_process_resources();
 }
 
