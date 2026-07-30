@@ -89,6 +89,28 @@ combination -- `Ready` beside a board saying it has no evidence -- and that deci
 exercised with both states actually observed here, the pre-fix `Ready` and the post-fix
 `Degraded: quota_discovery`, plus the filled-board case a machine with Codex would produce.
 
+## Open, and waiting on the owner
+
+Written here rather than left in a conversation, because a conversation is not a place a
+decision survives.
+
+- **Merging the work branch into `main`.** `cx/tokenmaster-product-architecture` is 670
+  commits ahead and `main` is its direct ancestor, so this is a fast-forward and nothing
+  can be lost to a conflict. It was deliberately not done alongside the tag: a tag names a
+  commit, while moving the default branch changes what every reader of the repository sees
+  and is harder to undo. The `v0.1.0` tag points five commits behind the branch head, so
+  the merge also brings the post-tag work -- the rhythm grid, the cost fix, the Activity
+  translations. **Two choices are the owner's**: fast-forward, which keeps the history
+  linear, against `--no-ff`, which records an explicit point where the branch landed; and
+  whether `main` is pushed immediately or shown locally first, since a local fast-forward
+  is one command to undo and a pushed one is not.
+- **The Russian wording of four strings** chosen without a reviewer: `Оповещения` for
+  Alerts, and `Правка / запись`, `Сборка / тесты`, `Субагенты` for three Activity
+  categories. Each is one line in two catalogues.
+- **What a Live Sessions row should carry.** The card is the one part of the handoff that
+  is schema and ingestion work rather than projection work, so the field list has to be
+  settled before any of it is built.
+
 ## Recorded, with a phase
 
 Defects found while working on something else. Each is deferred deliberately, not
