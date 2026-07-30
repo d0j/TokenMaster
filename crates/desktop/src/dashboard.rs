@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokenmaster_domain::{BenefitKind, BenefitState, GitOutputQuality, TokenCount};
+use tokenmaster_domain::{BenefitKind, BenefitState, GitOutputQuality, ProjectAlias, TokenCount};
 use tokenmaster_product::{ProductSection, ProductSectionKind, ProductSnapshot};
 use tokenmaster_query::{
     AggregateTokenValue, BenefitReminderCoverage, CostAvailability, CostComposition, CostMode,
@@ -1151,6 +1151,9 @@ fn map_code_output(
     let mut added = 0_u64;
     let mut removed = 0_u64;
     let mut efficiency_usage = 0_u64;
+    // Which project aliases have already contributed their cost. Bounded by the same cap
+    // as the repository walk, so this cannot grow past what that loop admits.
+    let mut counted_projects: Vec<Option<&str>> = Vec::new();
     let mut efficiency_lines = 0_u64;
     let mut efficiency_complete = !repositories.is_empty();
     let mut complete = !envelope.payload().has_more_repositories();
@@ -1178,16 +1181,30 @@ fn map_code_output(
         quality = worst_git_quality(quality, repository.quality());
         match repository.efficiency() {
             GitEfficiency::Available(value) => {
-                let Some(next_usage) = efficiency_usage.checked_add(value.usage_cost().get())
-                else {
-                    return code_overflow(section);
-                };
+                // The cost on a repository belongs to its *project*: `map_repository` fills
+                // it from the project's cost result, so every repository sharing an alias
+                // carries the identical figure. Adding them multiplied a number the user
+                // reads -- twice over for two repositories, and the Projects route showed
+                // the un-multiplied one from the same archive. Lines are per repository and
+                // do sum; the cost is counted once per alias, which is what
+                // `ProjectEfficiencyAccumulator` has always done one screen over.
+                let alias = repository.project_alias().map(ProjectAlias::as_str);
+                if !counted_projects.contains(&alias) {
+                    if counted_projects.len() >= MAX_DASHBOARD_REPOSITORIES {
+                        return code_overflow(section);
+                    }
+                    counted_projects.push(alias);
+                    let Some(next_usage) = efficiency_usage.checked_add(value.usage_cost().get())
+                    else {
+                        return code_overflow(section);
+                    };
+                    efficiency_usage = next_usage;
+                }
                 let Some(next_lines) =
                     efficiency_lines.checked_add(value.product_code_added_lines())
                 else {
                     return code_overflow(section);
                 };
-                efficiency_usage = next_usage;
                 efficiency_lines = next_lines;
             }
             GitEfficiency::Unavailable(_) => efficiency_complete = false,

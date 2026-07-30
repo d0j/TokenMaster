@@ -19,7 +19,7 @@ use tokenmaster_query::{
 
 use support::dashboard_fixture::{
     BENEFIT_EXPIRY_AT_MS, FixedClock, RESET_AT_MS, WALL_TIME_MS, add_distinct_usage_rows,
-    add_second_git_project, range, seed,
+    add_same_project_git_repository, add_second_git_project, range, seed,
 };
 
 fn attempt(value: u64) -> ProductAttemptGeneration {
@@ -135,6 +135,65 @@ fn initial_dashboard_has_six_exact_bounded_waiting_sections() {
     // Paired with the assertion in the seeded test below, this refuses a field wired to a
     // constant.
     assert_eq!(state.projection().data_through_ms(), None);
+}
+
+/// Two repositories of one project are two sets of lines and one cost, on every screen.
+///
+/// The usage cost on a repository is the *project's*: `map_repository` fills it from the
+/// project's cost result, so every repository sharing an alias carries the identical
+/// value. Adding them together multiplies a number the user reads. The Projects route has
+/// always known this -- `same_project_repositories_sum_code_but_count_project_cost_once`
+/// pins 3,333 there and its accumulator refuses to sum costs at all -- while the Dashboard
+/// summed them, and every Dashboard fixture used a single repository so nothing noticed.
+///
+/// The assertion is deliberately the other screen's number rather than a fresh constant.
+/// One archive cannot owe two answers, and a figure written twice can be corrected once.
+#[test]
+fn code_output_counts_a_project_cost_once_across_its_repositories() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("dashboard-same-project.sqlite3");
+    seed(&path);
+    add_same_project_git_repository(&path);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let git = service
+        .git_output(
+            GitOutputRequest::new(range(), WeekStart::Monday, Vec::new(), 32).expect("Git request"),
+        )
+        .expect("Git output");
+    // The Projects route needs the project breakdown as well; the Dashboard's Code Output
+    // needs only Git. Both are published so one snapshot answers both screens.
+    let recent = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                range(),
+                UsageTimeZone::iana("UTC").expect("UTC"),
+                WeekStart::Monday,
+                UsageSeriesSelection::Daily,
+                Vec::new(),
+                vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
+            )
+            .expect("analytics request"),
+        )
+        .expect("recent analytics");
+    let mut reducer = ProductReducer::new();
+    reducer.publish_git(attempt(1), git).expect("publish Git");
+    reducer
+        .publish_history(attempt(1), recent)
+        .expect("publish recent analytics");
+
+    let snapshot = reducer.snapshot();
+    let dashboard = DesktopState::new(&snapshot, DesktopRouteKey::Dashboard);
+    let code = dashboard.projection().dashboard().code_output();
+    let projects = DesktopState::new(&snapshot, DesktopRouteKey::Projects);
+    let project_row = &projects.projection().projects().rows()[0];
+
+    assert_eq!(project_row.repository_count(), 2);
+    assert_eq!(Some(code.added_lines()), project_row.added_lines());
+    assert_eq!(
+        code.cost_per_100_added_lines_micros(),
+        project_row.cost_per_100_added_lines_micros(),
+        "one archive, one cost per hundred lines, whichever screen asks"
+    );
 }
 
 #[test]
