@@ -84,11 +84,23 @@ try {
     if (-not (Test-Path -LiteralPath $VsWhere -PathType Leaf)) {
         throw "Visual Studio locator is unavailable"
     }
-    $VsInstall = (& $VsWhere -latest -products Microsoft.VisualStudio.Product.BuildTools `
-        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
+    # Any Visual Studio edition qualifies, provided it carries the x64 MSVC toolset -- that
+    # requirement is what the -requires clause states, and it is the whole of what this build
+    # needs. Restricting -products to Build Tools additionally demanded a particular edition,
+    # which excluded GitHub's windows-2025 image: it ships Enterprise, vswhere answered
+    # nothing there, and the release workflow has failed on this line at every tag since.
+    #
+    # Read the result before calling a method on it. When vswhere finds nothing it writes
+    # nothing, so `.Trim()` on the invocation threw a null-reference first and the check
+    # below could never report its own message -- the only symptom was an InvalidOperation
+    # naming this line.
+    $VsInstall = & $VsWhere -latest -products '*' `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath |
+        Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($VsInstall)) {
-        throw "complete MSVC Build Tools installation is unavailable"
+        throw "complete MSVC toolset installation is unavailable"
     }
+    $VsInstall = $VsInstall.Trim()
     $DevShell = Join-Path $VsInstall "Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
     Import-Module $DevShell -Force
     Enter-VsDevShell -VsInstallPath $VsInstall -SkipAutomaticLocation `

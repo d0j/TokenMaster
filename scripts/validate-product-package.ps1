@@ -42,11 +42,11 @@ try {
             $false
         )
         try {
-            # Nine content files plus the three Visual C++ runtime libraries the
-            # binary imports since the move to Skia, which cannot link a static CRT.
-            # The names are checked below against the staged list; this count is the
-            # cheap guard that nothing extra rode along.
-            if ($Archive.Entries.Count -ne 12) {
+            # The cheap guard that nothing extra rode along, before the names are checked
+            # below against the staged list. The number comes from the content list itself
+            # rather than being written out here: this line used to say nine, and the
+            # arithmetic that justified it used to be spelled out in this comment.
+            if ($Archive.Entries.Count -ne @(Get-ProductPackageExpectedFile).Count) {
                 throw "product ZIP content list is not closed"
             }
             $Names = [Collections.Generic.List[string]]::new()
