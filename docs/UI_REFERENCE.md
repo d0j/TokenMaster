@@ -79,13 +79,14 @@ Measured against the code, not estimated.
   context percentage with tokens remaining, and tool-call chips. `DesktopSessionRow` carries
   an ordinal, two timestamps, tokens and cost -- nothing else, and no model.
 - **Activity heatmap, 7 days by 24 hours.** The Dashboard's activity is
-  `DASHBOARD_ACTIVITY_ROWS = 8` rows of something else. An earlier revision of this file
-  claimed the grid already existed one layer down and **that was wrong**: the rhythm
-  feature answers `UsageRhythm { hours: [24], weekdays: [7] }`, which is two marginals and
-  thirty-one buckets, not a cross-product of a hundred and sixty-eight. Knowing the busiest
-  hour and the busiest weekday does not tell you Tuesday at 03:00. The history request does
-  already ask for rhythm over thirty days, so the query and its bounds exist -- what does
-  not exist is an hour-of-weekday bucket, and adding one is store work.
+  `DASHBOARD_ACTIVITY_ROWS = 8` rows of something else. The grid itself now exists: `UsageRhythm`
+  answers `cells` alongside its two marginals, 168 buckets row-major over
+  `weekday * 24 + hour`, loaded by the store under the same invariant the marginals obey.
+  Two earlier revisions of this file were wrong about it in opposite directions -- first
+  that the grid already existed because two constants did, then that adding one was store
+  work rather than one join expression. What remains is the projection and the drawing:
+  no Slint component in the tree renders a two-dimensional field of cells, and the
+  six-step intensity ramp needs colours the palette does not carry.
 - **The SCALE slider**, continuous over 1 to 90 days, which re-scopes the trend summary,
   its axis and its series. The built trend has a fixed window.
 - **The token mix bar** in Plan Usage -- cache, in and out as one segmented bar with a
@@ -103,7 +104,7 @@ each quota row was read.
 Computed upstream and still dropped: the per-model input, cached and output split.
 
 Genuinely absent: cost saved by caching, the session count for a period, peak calls per
-minute, the archive's size on disk, an hour-of-weekday bucket for the heatmap, the vendor
+minute, the archive's size on disk, the vendor
 beside a model name -- `ModelKey` is a plain ASCII value with no provider on it -- live
 session context and tool-call counts, and the
 per-repository commit and line statistics the Live Sessions card shows.

@@ -22,10 +22,11 @@ mod status;
 
 pub use analytics::{
     MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_RHYTHM_OCCURRENCES,
-    MAX_USAGE_RHYTHM_SEGMENTS, MAX_USAGE_SERIES_POINTS, USAGE_RHYTHM_HOURS, USAGE_RHYTHM_WEEKDAYS,
-    UsageAggregateRange, UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown,
-    UsageBreakdownIdentity, UsageBreakdownItem, UsageBreakdownKind, UsageRhythmCapture,
-    UsageRhythmQuery, UsageRhythmSegment, UsageSeriesPoint, UsageSeriesPointCapture,
+    MAX_USAGE_RHYTHM_SEGMENTS, MAX_USAGE_SERIES_POINTS, USAGE_RHYTHM_CELLS, USAGE_RHYTHM_HOURS,
+    USAGE_RHYTHM_WEEKDAYS, UsageAggregateRange, UsageAnalyticsCapture, UsageAnalyticsQuery,
+    UsageBreakdown, UsageBreakdownIdentity, UsageBreakdownItem, UsageBreakdownKind,
+    UsageRhythmCapture, UsageRhythmQuery, UsageRhythmSegment, UsageSeriesPoint,
+    UsageSeriesPointCapture,
 };
 pub use benefit::{
     BenefitChangeCursor, BenefitChangePageCapture, BenefitChangePageQuery, BenefitChangeRecord,

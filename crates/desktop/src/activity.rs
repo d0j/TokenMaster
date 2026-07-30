@@ -13,8 +13,6 @@ use crate::{
 };
 
 pub const MAX_ACTIVITY_ROWS: usize = 12;
-pub const ACTIVITY_RHYTHM_HOURS: usize = 24;
-pub const ACTIVITY_RHYTHM_WEEKDAYS: usize = 7;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopActivityRhythmHourRow {

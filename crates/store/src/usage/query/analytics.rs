@@ -19,6 +19,9 @@ pub const MAX_USAGE_RHYTHM_OCCURRENCES: usize = 768;
 pub const MAX_USAGE_RHYTHM_SEGMENTS: usize = 2_304;
 pub const USAGE_RHYTHM_HOURS: usize = 24;
 pub const USAGE_RHYTHM_WEEKDAYS: usize = 7;
+/// One bucket per weekday and hour, which the two marginals above cannot reconstruct:
+/// the busiest hour beside the busiest weekday says nothing about Tuesday at 03:00.
+pub const USAGE_RHYTHM_CELLS: usize = USAGE_RHYTHM_HOURS * USAGE_RHYTHM_WEEKDAYS;
 
 const BREAKDOWN_METRICS_SQL: &str = "coalesce(sum(event_count), 0),
        coalesce(sum(input_known_count), 0), coalesce(sum(input_known_sum), 0),
@@ -296,12 +299,19 @@ impl UsageRhythmQuery {
 pub struct UsageRhythmCapture {
     hours: Box<[UsageAggregateMetrics]>,
     weekdays: Box<[UsageAggregateMetrics]>,
+    cells: Box<[UsageAggregateMetrics]>,
 }
 
 impl UsageRhythmCapture {
     #[must_use]
     pub const fn hours(&self) -> &[UsageAggregateMetrics] {
         &self.hours
+    }
+
+    /// Row-major: cell `weekday * 24 + hour`, so one drawn row is a contiguous slice.
+    #[must_use]
+    pub const fn cells(&self) -> &[UsageAggregateMetrics] {
+        &self.cells
     }
 
     #[must_use]
@@ -594,6 +604,7 @@ fn load_rhythm(
             hours: vec![UsageAggregateMetrics::default(); USAGE_RHYTHM_HOURS].into_boxed_slice(),
             weekdays: vec![UsageAggregateMetrics::default(); USAGE_RHYTHM_WEEKDAYS]
                 .into_boxed_slice(),
+            cells: vec![UsageAggregateMetrics::default(); USAGE_RHYTHM_CELLS].into_boxed_slice(),
         });
     };
     let parameters = rhythm_parameters(active_generation, dataset_kind, query, scopes)?;
@@ -601,17 +612,27 @@ fn load_rhythm(
         connection,
         query,
         &parameters,
-        "hour_index",
+        "rhythm_segment.hour_index",
         USAGE_RHYTHM_HOURS,
     )?;
     let weekdays = load_rhythm_dimension(
         connection,
         query,
         &parameters,
-        "weekday_index",
+        "rhythm_segment.weekday_index",
         USAGE_RHYTHM_WEEKDAYS,
     )?;
-    for buckets in [&hours, &weekdays] {
+    // Row-major, so a drawn row of the heatmap is a contiguous slice of this.
+    let cells = load_rhythm_dimension(
+        connection,
+        query,
+        &parameters,
+        "(rhythm_segment.weekday_index * 24 + rhythm_segment.hour_index)",
+        USAGE_RHYTHM_CELLS,
+    )?;
+    // The grid joins the same invariant as the marginals rather than being trusted: three
+    // views of one archive that do not sum alike are three answers, and at most one is right.
+    for buckets in [&hours, &weekdays, &cells] {
         let mut total = UsageAggregateMetrics::default();
         for bucket in buckets {
             total.checked_add(bucket)?;
@@ -623,6 +644,7 @@ fn load_rhythm(
     Ok(UsageRhythmCapture {
         hours: hours.into_boxed_slice(),
         weekdays: weekdays.into_boxed_slice(),
+        cells: cells.into_boxed_slice(),
     })
 }
 
@@ -630,10 +652,10 @@ fn load_rhythm_dimension(
     connection: &Connection,
     query: &UsageRhythmQuery,
     parameters: &[Value],
-    dimension: &'static str,
+    dimension: &str,
     expected: usize,
 ) -> Result<Vec<UsageAggregateMetrics>, StoreError> {
-    let sql = rhythm_sql(query.segments.len(), dimension);
+    let sql = rhythm_sql(query.segments.len(), dimension, expected);
     let mut statement = map_sql(connection.prepare(&sql))?;
     let rows = map_sql(
         statement.query_map(params_from_iter(parameters.iter()), |row| {
@@ -689,7 +711,14 @@ fn rhythm_parameters(
     Ok(parameters)
 }
 
-fn rhythm_sql(segment_count: usize, dimension: &'static str) -> String {
+/// `dimension` is a full expression over `rhythm_segment`, not a column name, so the
+/// joint bucket can be written as an arithmetic combination of the two indices.
+///
+/// `expected` is passed rather than derived from the expression's text. It used to be
+/// recomputed here by comparing that text against `"hour_index"`, which made the key
+/// series and the loader's bound two separate statements of one number: disagree, and the
+/// query yields a row count the caller then rejects as corrupt.
+fn rhythm_sql(segment_count: usize, dimension: &str, expected: usize) -> String {
     let mut next = 3usize;
     let values = (0..segment_count)
         .map(|_| {
@@ -716,18 +745,13 @@ fn rhythm_sql(segment_count: usize, dimension: &'static str) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let expected = if dimension == "hour_index" {
-        USAGE_RHYTHM_HOURS
-    } else {
-        USAGE_RHYTHM_WEEKDAYS
-    };
     format!(
         "WITH RECURSIVE
          rhythm_segment(hour_index, weekday_index, bucket_width, start_seconds, end_seconds) AS (VALUES {values}),
          rhythm_key(value) AS (SELECT 0 UNION ALL SELECT value + 1 FROM rhythm_key WHERE value + 1 < {expected})
          SELECT rhythm_key.value, {BREAKDOWN_METRICS_SQL}
          FROM rhythm_key
-         LEFT JOIN rhythm_segment ON rhythm_segment.{dimension} = rhythm_key.value
+         LEFT JOIN rhythm_segment ON {dimension} = rhythm_key.value
          LEFT JOIN usage_time_rollup AS item
            ON item.aggregate_generation = ?1 AND item.dataset_kind = ?2
           AND item.bucket_width = rhythm_segment.bucket_width
@@ -1032,8 +1056,19 @@ mod tests {
 
     #[test]
     fn rhythm_queries_are_bounded_rollup_only_and_offset_free() {
-        for dimension in ["hour_index", "weekday_index"] {
-            let normalized = rhythm_sql(MAX_USAGE_RHYTHM_SEGMENTS, dimension).to_ascii_lowercase();
+        // The grid is the same class of query as the two marginals and answers to the same
+        // bounds, so it is checked here rather than trusted for being new.
+        for (dimension, expected) in [
+            ("rhythm_segment.hour_index", USAGE_RHYTHM_HOURS),
+            ("rhythm_segment.weekday_index", USAGE_RHYTHM_WEEKDAYS),
+            (
+                "(rhythm_segment.weekday_index * 24 + rhythm_segment.hour_index)",
+                USAGE_RHYTHM_CELLS,
+            ),
+        ] {
+            let normalized =
+                rhythm_sql(MAX_USAGE_RHYTHM_SEGMENTS, dimension, expected).to_ascii_lowercase();
+            assert!(normalized.contains(&format!("< {expected})")));
             assert!(normalized.contains("usage_time_rollup"));
             assert!(!normalized.contains("usage_event"));
             assert!(!normalized.contains("usage_legacy_event"));

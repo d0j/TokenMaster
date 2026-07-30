@@ -6,8 +6,8 @@ use tokenmaster_pricing::{
     ServiceTier, TokenPriceBasis, UsdMicros, select_cost,
 };
 use tokenmaster_store::{
-    MAX_USAGE_RHYTHM_OCCURRENCES, MAX_USAGE_RHYTHM_SEGMENTS, ScanScope, USAGE_RHYTHM_HOURS,
-    USAGE_RHYTHM_WEEKDAYS, UsageAggregateActivity as StoreActivity,
+    MAX_USAGE_RHYTHM_OCCURRENCES, MAX_USAGE_RHYTHM_SEGMENTS, ScanScope, USAGE_RHYTHM_CELLS,
+    USAGE_RHYTHM_HOURS, USAGE_RHYTHM_WEEKDAYS, UsageAggregateActivity as StoreActivity,
     UsageAggregateMetrics as StoreMetrics, UsageAnalyticsCapture as StoreCapture,
     UsageAnalyticsQuery as StoreQuery, UsageBreakdown as StoreBreakdown,
     UsageBreakdownIdentity as StoreBreakdownIdentity, UsageBreakdownKind as StoreBreakdownKind,
@@ -636,6 +636,20 @@ impl UsageWeekday {
         Self::Sunday,
     ];
 
+    /// Position in the drawn grid, Monday first, matching `ALL` and the store's row order.
+    #[must_use]
+    pub const fn ordinal(self) -> u8 {
+        match self {
+            Self::Monday => 0,
+            Self::Tuesday => 1,
+            Self::Wednesday => 2,
+            Self::Thursday => 3,
+            Self::Friday => 4,
+            Self::Saturday => 5,
+            Self::Sunday => 6,
+        }
+    }
+
     #[must_use]
     pub const fn stable_code(self) -> &'static str {
         match self {
@@ -704,10 +718,38 @@ impl UsageRhythmWeekday {
     }
 }
 
+/// One weekday-and-hour bucket of the rhythm grid.
+///
+/// Separate from the two marginals because it answers a question neither can: the busiest
+/// hour beside the busiest weekday does not say Tuesday at 03:00, and multiplying them out
+/// would invent a distribution the archive never reported.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageRhythmCell {
+    weekday: UsageWeekday,
+    hour: u8,
+    metrics: UsageMetrics,
+}
+
+impl UsageRhythmCell {
+    #[must_use]
+    pub const fn weekday(&self) -> UsageWeekday {
+        self.weekday
+    }
+    #[must_use]
+    pub const fn hour(&self) -> u8 {
+        self.hour
+    }
+    #[must_use]
+    pub const fn metrics(&self) -> &UsageMetrics {
+        &self.metrics
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UsageRhythm {
     hours: Arc<[UsageRhythmHour]>,
     weekdays: Arc<[UsageRhythmWeekday]>,
+    cells: Arc<[UsageRhythmCell]>,
 }
 
 impl UsageRhythm {
@@ -718,6 +760,11 @@ impl UsageRhythm {
     #[must_use]
     pub const fn weekdays(&self) -> &Arc<[UsageRhythmWeekday]> {
         &self.weekdays
+    }
+    /// Row-major over `weekday * 24 + hour`, so one drawn row is a contiguous slice.
+    #[must_use]
+    pub const fn cells(&self) -> &Arc<[UsageRhythmCell]> {
+        &self.cells
     }
 }
 
@@ -1148,6 +1195,7 @@ fn map_rhythm(
 ) -> Result<UsageRhythm, QueryError> {
     if capture.hours().len() != USAGE_RHYTHM_HOURS
         || capture.weekdays().len() != USAGE_RHYTHM_WEEKDAYS
+        || capture.cells().len() != USAGE_RHYTHM_CELLS
     {
         return Err(QueryError::new(QueryErrorCode::CorruptArchive));
     }
@@ -1177,9 +1225,25 @@ fn map_rhythm(
             })
         })
         .collect::<Result<Vec<_>, QueryError>>()?;
+    // Row-major over `weekday * 24 + hour`, matching how the store ordered them, so the
+    // index alone carries both coordinates and a drawn row is a contiguous slice.
+    let cells = capture
+        .cells()
+        .iter()
+        .enumerate()
+        .map(|(index, metrics)| {
+            Ok(UsageRhythmCell {
+                weekday: UsageWeekday::ALL[index / USAGE_RHYTHM_HOURS],
+                hour: u8::try_from(index % USAGE_RHYTHM_HOURS)
+                    .map_err(|_| QueryError::new(QueryErrorCode::Internal))?,
+                metrics: UsageMetrics::from_store(metrics)?,
+            })
+        })
+        .collect::<Result<Vec<_>, QueryError>>()?;
     Ok(UsageRhythm {
         hours: Arc::from(hours),
         weekdays: Arc::from(weekdays),
+        cells: Arc::from(cells),
     })
 }
 

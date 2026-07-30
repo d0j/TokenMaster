@@ -146,6 +146,34 @@ fn empty_utc_rhythm_has_canonical_bounded_rows_and_exposure() {
             .sum::<u64>(),
         24 * 60
     );
+
+    // The two marginals cannot answer the heatmap the design draws. Knowing the busiest
+    // hour and the busiest weekday says nothing about Tuesday at 03:00, and a grid built
+    // by multiplying them out would be an invention. This is the joint bucket: one cell
+    // per weekday and hour, ordered so that a row of the drawing is a contiguous slice.
+    assert_eq!(rhythm.cells().len(), 24 * 7);
+    for (index, cell) in rhythm.cells().iter().enumerate() {
+        assert_eq!(usize::from(cell.hour()), index % 24, "hour at {index}");
+        assert_eq!(
+            usize::from(cell.weekday().ordinal()),
+            index / 24,
+            "weekday at {index}"
+        );
+    }
+    // A grid whose cells did not cover the same ground as the marginals would be a third,
+    // disagreeing answer about one archive.
+    assert_eq!(
+        rhythm
+            .cells()
+            .iter()
+            .map(|cell| cell.metrics().event_count())
+            .sum::<u64>(),
+        rhythm
+            .hours()
+            .iter()
+            .map(|bucket| bucket.metrics().event_count())
+            .sum::<u64>()
+    );
 }
 
 #[test]
@@ -233,6 +261,53 @@ fn materialized_event_is_folded_from_rollups_into_both_dimensions() {
             .map(|bucket| bucket.metrics().event_count())
             .sum::<u64>(),
         1
+    );
+}
+
+/// One event must land in one cell, and in the cell the marginals point at.
+///
+/// The obvious check -- that cell `i` reports hour `i % 24` and weekday `i / 24` -- cannot
+/// fail, because the query layer derives those labels from the index rather than reading
+/// them. It was written that way here first, and a deliberately transposed store
+/// expression passed it. What discriminates is where the event actually lands: the busy
+/// hour and the busy weekday are answered independently by the two marginals, and the only
+/// cell holding anything must be their intersection. Transpose the grid and the event
+/// moves to a cell those two do not point at.
+#[test]
+fn one_event_lands_in_the_cell_the_marginals_point_at() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("rhythm-cell.sqlite3");
+    seed_current_event(&path, 1_710_054_000);
+    let mut service =
+        QueryService::open(&path, FixedClock(1_710_158_400_000)).expect("query service");
+
+    let envelope = service
+        .usage_analytics(rhythm_request(3, "UTC"))
+        .expect("rhythm analytics");
+    let rhythm = envelope.payload().rhythm().expect("requested rhythm");
+
+    let busy_hour = rhythm
+        .hours()
+        .iter()
+        .find(|bucket| bucket.metrics().event_count() > 0)
+        .expect("one hour holds the event");
+    let busy_weekday = rhythm
+        .weekdays()
+        .iter()
+        .find(|bucket| bucket.metrics().event_count() > 0)
+        .expect("one weekday holds the event");
+
+    let occupied = rhythm
+        .cells()
+        .iter()
+        .filter(|cell| cell.metrics().event_count() > 0)
+        .collect::<Vec<_>>();
+    assert_eq!(occupied.len(), 1, "one event cannot occupy two cells");
+    assert_eq!(occupied[0].hour(), busy_hour.hour());
+    assert_eq!(occupied[0].weekday(), busy_weekday.weekday());
+    assert_eq!(
+        occupied[0].metrics().event_count(),
+        busy_hour.metrics().event_count()
     );
 }
 
