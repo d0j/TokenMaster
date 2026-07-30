@@ -94,16 +94,24 @@ exercised with both states actually observed here, the pre-fix `Ready` and the p
 Written here rather than left in a conversation, because a conversation is not a place a
 decision survives.
 
-- **Merging the work branch into `main`.** `main` is a direct ancestor of
-  `cx/tokenmaster-product-architecture`, so this is a fast-forward and nothing can be lost
-  to a conflict. It was deliberately not done alongside the tag: a tag names a commit,
-  while moving the default branch changes what every reader of the repository sees and is
-  harder to undo. The `v0.1.0` tag points behind the branch head, so the merge also brings
-  the post-tag work -- the rhythm grid, the cost fix, the Activity translations, and the
-  three gate repairs below. **Two choices are the owner's**: fast-forward, which keeps the
-  history linear, against `--no-ff`, which records an explicit point where the branch
-  landed; and whether `main` is pushed immediately or shown locally first, since a local
-  fast-forward is one command to undo and a pushed one is not.
+- **Merging the work branch into `main`, which cannot be done the way this entry first
+  described.** `main` is a direct ancestor of `cx/tokenmaster-product-architecture`, so the
+  merge is a fast-forward and nothing can be lost to a conflict -- but the fast-forward
+  cannot be pushed. `main` is protected, and the rules were read only after a push was
+  refused: `allow_force_pushes` false and `enforce_admins` true, so no one can push it
+  directly; `required_linear_history` true and `allow_merge_commit` false, so a merge
+  commit is refused as well. A pull request is required, and needs no reviewer
+  (`required_approving_review_count` is zero) but must carry a green `verify` check with
+  `strict` set, meaning the branch must also be current with `main`. **The repository
+  enables exactly one merge method: squash.** So the choice this entry used to offer --
+  fast-forward against `--no-ff` -- does not exist, and the real one is worse: a squash
+  puts all of this work on `main` as a single commit, discarding several hundred commit
+  messages that carry the measurements behind each change, while the branch and the
+  `v0.1.0` tag keep them. The alternatives both touch settings and so are the owner's:
+  temporarily lift protection and push the fast-forward, which is the only route that
+  leaves `main` byte-identical to what CI verified and to what the tag names; or enable
+  rebase merging, which keeps the messages but rewrites every commit, so `main`'s history
+  would no longer share objects with the tag.
 - **Whether to dispatch the release workflow once, to prove it can build.** It has never
   succeeded, so the fix to its Visual Studio locator is verified only as far as one
   developer machine reaches. A `workflow_dispatch` is refused on any branch but the default
