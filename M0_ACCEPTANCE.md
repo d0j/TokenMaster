@@ -1,7 +1,7 @@
 # TokenMaster M0 acceptance
 
 > **Superseded.** The receipts below were produced by `tokenmaster-m0`, a probe
-> binary deleted in 2dd1f09. It used a different renderer and contained none of the
+> binary deleted when the MSVC target shipped. It used a different renderer and contained none of the
 > product's ingestion, query or snapshot code, so its measurements never described
 > the shipped executable. Kept for history. Release gates are in
 > `docs/RELEASE_EXIT_PLAN.md`; a soak, if one is run, must target the packaged
