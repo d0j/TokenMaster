@@ -145,7 +145,7 @@ and locale selection alter presentation state only, so switching remains immedia
 does not reparse sources or rebuild the archive.
 
 The production UI lives in `tokenmaster-desktop`. `tokenmaster-m0` was a separate
-probe package, deleted in 2dd1f09; `M0_ACCEPTANCE.md` keeps its receipts as history and
+probe package, deleted when the MSVC target shipped; `M0_ACCEPTANCE.md` keeps its receipts as history and
 says so at the top. P3-A maps one current
 `ProductSnapshot` into exactly 11 fixed route rows, one selected route, and at most 11
 stable reason codes per row. A complete candidate projection replaces the prior model
