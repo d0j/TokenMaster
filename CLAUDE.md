@@ -137,7 +137,13 @@ required: no approving review needed, a green `verify` and every review conversa
 
 So a merge here is also a delete: squash lands one commit and the head branch is removed
 automatically. Before merging a branch whose individual commits carry the measurements that
-justified them, tag its head under `history/` and push the tag. A ruleset makes that namespace
-undeletable with no bypass actor, which is the only reason the history survives:
-`history/product-architecture` holds the 675 commits that built this product, and `main` has
-none of them.
+justified them, tag its head under `history/`. **Create the tag before the merge and push it
+after**: a tag push is a `push` event, so pushing it first starts a fresh run of the required
+check on a commit that had already passed, and the merge waits another hour for an answer it
+already had. The local tag is what protects the commits in the meantime, and it is enough —
+GitHub keeps the branch objects on the pull request's own refs until then.
+
+A ruleset makes `history/` undeletable with no bypass actor, which is the only reason any of
+this survives: the head branch is deleted automatically the instant a merge lands, twice
+observed, and `history/product-architecture` holds the 675 commits that built this product
+while `main` has none of them.
