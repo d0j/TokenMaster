@@ -1,9 +1,11 @@
 use rusqlite::Connection;
 use tempfile::TempDir;
+use tokenmaster_accounting::{CanonicalUsageEvent, Canonicalizer};
 use tokenmaster_domain::{
-    ActivityCounts, CanonicalUsageEvent, CanonicalUsageEventParts, EventFingerprint,
-    LongContextState, MetadataValue, ModelKey, ProjectAlias, TokenCount, TokenUsage,
-    UsageProfileId, UsageSessionId, UsageSourceId, UtcTimestamp,
+    ActivityCounts, LongContextState, MetadataValue, ModelKey, ObservationDraft,
+    ObservationDraftParts, ObservationVerification, ProjectAlias, ReportedCostUsdMicros,
+    TokenCount, TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId,
+    UtcTimestamp,
 };
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, SourceKey, SourceKind, SourceRegistration,
@@ -70,35 +72,51 @@ fn registration(source_key: u8) -> SourceRegistration {
 }
 
 fn event(fingerprint: u8, source_offset: u64) -> CanonicalUsageEvent {
-    CanonicalUsageEvent::new(
-        CanonicalUsageEventParts {
-            profile_id: UsageProfileId::new("default").expect("profile"),
-            session_id: UsageSessionId::new("session-fixture").expect("session"),
-            source_id: UsageSourceId::new("fixture").expect("source"),
-            source_offset,
-            timestamp: UtcTimestamp::new(
-                1_720_598_400 + i64::from(fingerprint),
-                u32::from(fingerprint),
-            )
-            .expect("timestamp"),
-            model: ModelKey::new("gpt-test").expect("model"),
-            raw_model: Some(MetadataValue::new("gpt-test").expect("raw model")),
-            usage: TokenUsage::new(
-                TokenCount::Available(10),
-                TokenCount::Unavailable,
-                TokenCount::Available(2),
-                TokenCount::Unavailable,
-                TokenCount::Available(12),
-            ),
-            fallback_model: false,
-            long_context: LongContextState::No,
-            service_tier: Some(MetadataValue::new("priority").expect("tier")),
-            project: Some(ProjectAlias::new("tokenmaster").expect("project")),
-            originator: Some(MetadataValue::new("codex_cli").expect("originator")),
-            activity: ActivityCounts::default(),
-        },
-        EventFingerprint::new([fingerprint; 32]),
-    )
+    event_for_provider("codex", fingerprint, source_offset)
+}
+
+fn event_for_provider(
+    provider_id: &str,
+    fingerprint: u8,
+    source_offset: u64,
+) -> CanonicalUsageEvent {
+    let draft = ObservationDraft::new(ObservationDraftParts {
+        provider_id: UsageProviderId::new(provider_id).expect("provider"),
+        profile_id: UsageProfileId::new("default").expect("profile"),
+        session_id: UsageSessionId::new("session-fixture").expect("session"),
+        parent_session_id: None,
+        session_ordinal: u64::from(fingerprint),
+        lineage_conflict: false,
+        source_id: UsageSourceId::new("fixture").expect("source"),
+        source_offset,
+        source_verification: ObservationVerification::Incremental,
+        timestamp: UtcTimestamp::new(
+            1_720_598_400 + i64::from(fingerprint),
+            u32::from(fingerprint),
+        )
+        .expect("timestamp"),
+        model: ModelKey::new("gpt-test").expect("model"),
+        raw_model: Some(MetadataValue::new("gpt-test").expect("raw model")),
+        delta_usage: TokenUsage::new(
+            TokenCount::Available(10),
+            TokenCount::Unavailable,
+            TokenCount::Available(2),
+            TokenCount::Unavailable,
+            TokenCount::Available(12),
+        ),
+        cumulative_usage: None,
+        fallback_model: false,
+        long_context: LongContextState::No,
+        service_tier: Some(MetadataValue::new("priority").expect("tier")),
+        reported_cost: Some(ReportedCostUsdMicros::new(12_345)),
+        project: Some(ProjectAlias::new("tokenmaster").expect("project")),
+        originator: Some(MetadataValue::new("codex_cli").expect("originator")),
+        activity: ActivityCounts::default(),
+    })
+    .expect("valid observation draft");
+    Canonicalizer::new()
+        .canonicalize(&draft)
+        .expect("valid canonical event")
 }
 
 fn append_batch(
@@ -125,7 +143,6 @@ fn append_batch(
         ]
         .into_boxed_slice(),
         next_checkpoint: checkpoint(source_key, next_offset),
-        last_seen_scan_id: None,
         diagnostic_count_delta: 0,
     })
     .expect("valid append batch")
@@ -155,10 +172,64 @@ fn discard_batch(
         ]
         .into_boxed_slice(),
         next_checkpoint: discard_checkpoint(source_key, 100, next_scan_offset),
-        last_seen_scan_id: None,
         diagnostic_count_delta: 1,
     })
     .expect("valid discard batch")
+}
+
+#[test]
+fn append_rejects_canonical_events_from_a_different_provider() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(6))
+        .expect("register Codex source");
+    let before = store.counts().expect("counts before rejected append");
+    let batch = append_batch(6, 0, 100, vec![event_for_provider("other", 1, 10)], None);
+
+    let error = store
+        .apply_append_batch(&batch)
+        .expect_err("provider mismatch must fail closed");
+    assert_eq!(error.code(), StoreErrorCode::InvalidValue);
+    assert_eq!(
+        store.counts().expect("counts after rejected append"),
+        before
+    );
+}
+
+#[test]
+fn append_cannot_clear_complete_scan_missing_authority() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("append-missing-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(4))
+        .expect("register source");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("mark source missing");
+    connection
+        .execute(
+            "UPDATE usage_source SET missing = 1 WHERE file_key = ?1",
+            [[4_u8; 32].as_slice()],
+        )
+        .expect("mark missing");
+    drop(connection);
+
+    let mut store = UsageStore::open(&path).expect("reopen missing source");
+    store
+        .apply_append_batch(&append_batch(4, 0, 100, vec![event(8, 10)], None))
+        .expect("ordinary append remains valid");
+    drop(store);
+
+    let missing: i64 = Connection::open(&path)
+        .expect("inspect missing state")
+        .query_row(
+            "SELECT missing FROM usage_source WHERE file_key = ?1",
+            [[4_u8; 32].as_slice()],
+            |row| row.get(0),
+        )
+        .expect("missing state");
+    assert_eq!(missing, 1, "only a complete scan may restore presence");
 }
 
 #[test]
@@ -226,6 +297,7 @@ fn duplicate_fingerprint_keeps_two_observations_and_one_deterministic_canonical_
         .path()
         .join("canonical-selection-private.sqlite3");
     let mut store = UsageStore::open(&path).expect("usage store");
+    let fingerprint = *event(3, 10).fingerprint().as_bytes();
     store
         .register_source(&registration(9))
         .expect("register larger source key first");
@@ -245,14 +317,18 @@ fn duplicate_fingerprint_keeps_two_observations_and_one_deterministic_canonical_
     drop(store);
 
     let connection = Connection::open(path).expect("inspect deterministic selection");
-    let selected_file_key: Vec<u8> = connection
+    let selected: (Vec<u8>, Option<i64>, Option<i64>) = connection
         .query_row(
-            "SELECT selected_file_key FROM usage_event WHERE fingerprint = ?1",
-            [[3_u8; 32].as_slice()],
-            |row| row.get(0),
+            "SELECT selected_file_key, reported_cost_usd_micros,
+                    (SELECT reported_cost_usd_micros FROM usage_observation
+                     WHERE fingerprint = usage_event.fingerprint
+                     ORDER BY file_key LIMIT 1)
+             FROM usage_event WHERE fingerprint = ?1",
+            [fingerprint.as_slice()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .expect("canonical source key");
-    assert_eq!(selected_file_key, [1_u8; 32]);
+    assert_eq!(selected, (vec![1_u8; 32], Some(12_345), Some(12_345)));
 }
 
 #[test]

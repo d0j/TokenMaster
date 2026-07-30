@@ -4,12 +4,57 @@
 use std::fmt;
 use std::fs::File;
 
+mod archive_recovery;
+mod backup_directory;
+mod current_session;
+mod current_user_startup;
+mod durable_file;
+mod file_dialog;
+mod lease;
+mod local_directory;
+mod power;
+
 #[cfg(unix)]
 mod unix;
 #[cfg(not(any(unix, windows)))]
 mod unsupported;
 #[cfg(windows)]
 mod windows;
+
+pub use archive_recovery::{
+    ArchiveFileObservation, ArchiveRecoveryError, ArchiveRecoveryScope, ArchiveSetExpectation,
+    ArchiveSetObservation, MAX_QUARANTINE_SETS, MAX_RECOVERY_STAGING_ARTIFACTS, RecoveryMainMode,
+    RecoveryOperation, RecoveryOperationId, RecoveryStagedArchive,
+};
+pub use backup_directory::{
+    BackupDirectory, BackupDirectoryEntry, BackupDirectoryError, BackupDirectoryGeneration,
+    BackupDirectorySnapshot, BackupStagedFile, MAX_BACKUP_DIRECTORY_FILES,
+};
+pub use current_session::{
+    CurrentSessionActivationAdmission, CurrentSessionActivationSink, CurrentSessionClaim,
+    CurrentSessionError, CurrentSessionIntegration, CurrentSessionIntegrationSnapshot,
+    CurrentSessionPrimary, CurrentSessionSecondaryReceipt, CurrentSessionThreadHealth,
+    GlobalHotkeyHealth,
+};
+pub use current_user_startup::{
+    CurrentUserStartup, CurrentUserStartupAction, CurrentUserStartupError,
+    CurrentUserStartupSnapshot, CurrentUserStartupStatus,
+};
+pub use durable_file::{
+    DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReader, DurableFileReceipt,
+    DurableFileTarget, DurableStagedFile, MAX_DURABLE_FILE_BYTES, MAX_DURABLE_WRITE_CHUNK_BYTES,
+};
+pub use file_dialog::{
+    ControlledFileDialog, FileDialogError, FileDialogErrorCode, FileDialogFileType,
+    FileDialogResult, FileDialogSelector, NativeFileDialog, SelectedInputFile, SelectedOutputFile,
+};
+pub use lease::{
+    ExclusiveFileLease, ExclusiveFileLeaseError, ExclusiveFileLeaseGuard, WRITER_LEASE_SUFFIX,
+};
+pub use local_directory::{LocalDirectoryError, ValidatedLocalDirectory};
+pub use power::{
+    PowerLifecycleEvent, PowerMonitorError, PowerMonitorSnapshot, SuspendResumeMonitor,
+};
 
 /// Stable, path-private identity for the physical file referenced by an open handle.
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -19,6 +64,12 @@ impl PhysicalFileIdentity {
     /// Queries the operating system identity of `file` and hashes its opaque fields.
     pub fn from_file(file: &File) -> Result<Self, PhysicalIdentityError> {
         platform_identity(file)
+    }
+
+    /// Reconstructs an opaque identity from its controlled persistent representation.
+    #[must_use]
+    pub const fn from_persisted_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
     }
 
     /// Returns the opaque identity bytes for equality checks and persistence.

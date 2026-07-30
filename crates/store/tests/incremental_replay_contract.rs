@@ -1,0 +1,975 @@
+use tokenmaster_accounting::{CanonicalUsageEvent, Canonicalizer};
+use tokenmaster_domain::{
+    ActivityCounts, LongContextState, ModelKey, ObservationDraft, ObservationDraftParts,
+    ObservationVerification, SessionRelationDraft, SessionRelationDraftParts, TokenCount,
+    TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
+};
+use tokenmaster_store::{
+    AppendBatch, AppendBatchParts, ArchiveGeneration, ArchivePublicationQuality,
+    CurrentReplayAppendBatch, CurrentReplayAppendBatchParts, CurrentReplaySourceExpectation,
+    CurrentScanPublication, CurrentScanPublicationParts, ReplayAppendBatch, ReplayAppendBatchParts,
+    ScanCounters, ScanOutcome, ScanScope, ScanSetManifest, SourceKey, SourceKind,
+    SourceRegistration, SourceRegistrationParts, StoreErrorCode, StoredCheckpoint,
+    StoredCheckpointParts, StoredSourceChunk, StoredVerification, UsageStore,
+};
+
+const SEED: u8 = 23;
+
+fn checkpoint_for(seed: u8, offset: u64, verification: StoredVerification) -> StoredCheckpoint {
+    StoredCheckpoint::new(StoredCheckpointParts {
+        parser_schema_version: 1,
+        physical_identity: Some([seed; 32]),
+        logical_identity: [seed + 1; 32],
+        committed_offset: offset,
+        scan_offset: offset,
+        observed_file_length: offset,
+        modified_time_ns: Some(offset as i64),
+        anchor_start: 0,
+        anchor_len: u16::try_from(offset).expect("fixture anchor"),
+        anchor_sha256: [seed + 2; 32],
+        resume: Box::default(),
+        discarding_oversized_line: false,
+        incomplete_tail: false,
+        verification,
+    })
+    .expect("checkpoint")
+}
+
+fn registration(seed: u8) -> SourceRegistration {
+    SourceRegistration::new(SourceRegistrationParts {
+        source_key: SourceKey::from_bytes([seed; 32]),
+        provider_id: "codex".into(),
+        profile_id: "default".into(),
+        source_id: format!("fixture-{seed}").into_boxed_str(),
+        source_kind: SourceKind::Active,
+        logical_identity: [seed + 1; 32],
+        physical_identity: Some([seed; 32]),
+        initial_checkpoint: checkpoint_for(seed, 0, StoredVerification::Incremental),
+    })
+    .expect("source registration")
+}
+
+fn event(session: &str, source_offset: u64) -> CanonicalUsageEvent {
+    event_in_session(session, 0, source_offset)
+}
+
+fn event_in_session(
+    session: &str,
+    session_ordinal: u64,
+    source_offset: u64,
+) -> CanonicalUsageEvent {
+    let usage = TokenUsage::new(
+        TokenCount::Available(10),
+        TokenCount::Unavailable,
+        TokenCount::Available(2),
+        TokenCount::Unavailable,
+        TokenCount::Available(12),
+    );
+    let draft = ObservationDraft::new(ObservationDraftParts {
+        provider_id: UsageProviderId::new("codex").unwrap(),
+        profile_id: UsageProfileId::new("default").unwrap(),
+        session_id: UsageSessionId::new(session).unwrap(),
+        parent_session_id: None,
+        session_ordinal,
+        lineage_conflict: false,
+        source_id: UsageSourceId::new("fixture-23").unwrap(),
+        source_offset,
+        source_verification: ObservationVerification::FullPrefix,
+        timestamp: UtcTimestamp::new(1_720_598_400 + source_offset as i64, 0).unwrap(),
+        model: ModelKey::new("gpt-test").unwrap(),
+        raw_model: None,
+        delta_usage: usage,
+        cumulative_usage: Some(usage),
+        fallback_model: false,
+        long_context: LongContextState::No,
+        service_tier: None,
+        reported_cost: None,
+        project: None,
+        originator: None,
+        activity: ActivityCounts::default(),
+    })
+    .unwrap();
+    Canonicalizer::new().canonicalize(&draft).unwrap()
+}
+
+fn append(
+    expected_offset: u64,
+    next_offset: u64,
+    events: Vec<CanonicalUsageEvent>,
+    prior_chunk: Option<StoredSourceChunk>,
+    next_chunk_hash: [u8; 32],
+    verification: StoredVerification,
+) -> AppendBatch {
+    append_for(
+        SEED,
+        expected_offset,
+        next_offset,
+        events,
+        prior_chunk,
+        next_chunk_hash,
+        verification,
+    )
+}
+
+fn append_for(
+    seed: u8,
+    expected_offset: u64,
+    next_offset: u64,
+    events: Vec<CanonicalUsageEvent>,
+    prior_chunk: Option<StoredSourceChunk>,
+    next_chunk_hash: [u8; 32],
+    verification: StoredVerification,
+) -> AppendBatch {
+    AppendBatch::new(AppendBatchParts {
+        source_key: SourceKey::from_bytes([seed; 32]),
+        expected_generation: 1,
+        expected_committed_offset: expected_offset,
+        expected_scan_offset: expected_offset,
+        events: events.into_boxed_slice(),
+        previous_partial_chunk: prior_chunk,
+        chunk_updates: vec![
+            StoredSourceChunk::new(0, u32::try_from(next_offset).unwrap(), next_chunk_hash)
+                .unwrap(),
+        ]
+        .into_boxed_slice(),
+        next_checkpoint: checkpoint_for(seed, next_offset, verification),
+        diagnostic_count_delta: 0,
+    })
+    .unwrap()
+}
+
+fn promoted_store() -> (UsageStore, tokenmaster_store::ReplayRevisionSnapshot) {
+    let mut store = UsageStore::in_memory().unwrap();
+    store.register_source(&registration(SEED)).unwrap();
+    let scan_set = store
+        .begin_scan_set(
+            &ScanSetManifest::new(
+                vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
+            )
+            .unwrap(),
+            1_000,
+        )
+        .unwrap();
+    let scan = store.scan_page(scan_set.id(), None, 1).unwrap()[0].id();
+    store
+        .observe_scan_source(scan, SourceKey::from_bytes([SEED; 32]))
+        .unwrap();
+    store
+        .finish_scan(scan, ScanOutcome::Complete, 1_010, ScanCounters::default())
+        .unwrap();
+    store.finish_scan_set(scan_set.id(), 1_020).unwrap();
+    let revision = store
+        .begin_replay_revision_for_scan_set(scan_set.id())
+        .unwrap();
+    let initial_append = append(
+        0,
+        100,
+        vec![event("first", 10)],
+        None,
+        [SEED + 3; 32],
+        StoredVerification::FullPrefix,
+    );
+    let epoch = store
+        .apply_replay_append_batch(
+            &ReplayAppendBatch::new(ReplayAppendBatchParts {
+                revision_id: revision.id(),
+                expected_epoch: revision.epoch(),
+                append_batch: initial_append,
+                relations: Box::default(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let sealed = store.seal_replay_revision(revision.id(), epoch).unwrap();
+    let promoted = store
+        .promote_replay_revision(revision.id(), sealed.epoch())
+        .unwrap();
+    (store, promoted)
+}
+
+#[test]
+fn current_tail_append_is_atomic_and_advances_both_cas_tokens() {
+    let (mut store, revision) = promoted_store();
+    let publication = store.archive_publication().unwrap();
+    assert_eq!(publication.generation(), ArchiveGeneration::new(1).unwrap());
+    assert_eq!(publication.dataset_generation().get(), 1);
+    assert_eq!(publication.quality(), ArchivePublicationQuality::Complete);
+    let batch = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            100,
+            200,
+            vec![event("second", 110)],
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    let committed = store.apply_current_replay_append_batch(&batch).unwrap();
+    assert_eq!(committed.epoch().get(), revision.epoch().get() + 1);
+    assert_eq!(committed.archive_generation().get(), 2);
+    assert_eq!(committed.quality(), ArchivePublicationQuality::Complete);
+    assert!(!committed.remaining_work());
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 2);
+    assert_eq!(
+        store
+            .archive_publication()
+            .unwrap()
+            .dataset_generation()
+            .get(),
+        2
+    );
+
+    let stale = store
+        .apply_current_replay_append_batch(&batch)
+        .expect_err("exact CAS must reject a replayed batch");
+    assert!(matches!(
+        stale.code(),
+        StoreErrorCode::StaleRevision | StoreErrorCode::StaleCheckpoint
+    ));
+}
+
+#[test]
+fn sequential_same_source_batches_commit_as_one_checked_transition() {
+    let (mut store, revision) = promoted_store();
+    let publication = store.archive_publication().unwrap();
+    let first = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            100,
+            200,
+            Vec::new(),
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    let second = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            200,
+            300,
+            vec![event("second", 210)],
+            Some(StoredSourceChunk::new(0, 200, [SEED + 4; 32]).unwrap()),
+            [SEED + 5; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+
+    let committed = store
+        .apply_current_replay_append_batches(&[first, second])
+        .unwrap();
+
+    assert_eq!(committed.epoch().get(), revision.epoch().get() + 1);
+    assert_eq!(
+        committed.archive_generation().get(),
+        publication.generation().get() + 1
+    );
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 2);
+    let generation = store
+        .generation_snapshot(SourceKey::from_bytes([SEED; 32]))
+        .unwrap()
+        .unwrap();
+    assert_eq!(generation.checkpoint().committed_offset(), 300);
+    assert_eq!(generation.checkpoint().scan_offset(), 300);
+}
+
+#[test]
+fn current_root_session_batch_materializes_every_exact_event() {
+    const EVENT_COUNT: u64 = 64;
+
+    let (mut store, revision) = promoted_store();
+    let publication = store.archive_publication().unwrap();
+    let events = (0..EVENT_COUNT)
+        .map(|ordinal| event_in_session("batched-root", ordinal, 101 + ordinal))
+        .collect();
+    let batch = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            100,
+            200,
+            events,
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+
+    let committed = store.apply_current_replay_append_batch(&batch).unwrap();
+
+    assert_eq!(committed.quality(), ArchivePublicationQuality::Complete);
+    assert!(!committed.remaining_work());
+    assert_eq!(
+        store.event_page_before(None, 256).unwrap().len(),
+        usize::try_from(EVENT_COUNT + 1).unwrap()
+    );
+    assert_eq!(store.counts().unwrap().canonical_events(), EVENT_COUNT + 1);
+}
+
+#[test]
+fn repeated_current_tail_batches_preserve_integrity_and_exact_cas() {
+    let (mut store, revision) = promoted_store();
+    let mut epoch = revision.epoch();
+    let mut generation = store.archive_publication().unwrap().generation();
+    let mut committed_offset = 100;
+    let mut prior_chunk = StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap();
+
+    for index in 0..32_u64 {
+        let next_offset = committed_offset + 100;
+        let next_digest = [SEED.wrapping_add(4 + index as u8); 32];
+        let batch = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+            revision_id: revision.id(),
+            expected_epoch: epoch,
+            expected_archive_generation: generation,
+            append_batch: append(
+                committed_offset,
+                next_offset,
+                vec![event(&format!("tail-{index}"), committed_offset + 10)],
+                Some(prior_chunk),
+                next_digest,
+                StoredVerification::Incremental,
+            ),
+            relations: Box::default(),
+        })
+        .unwrap();
+        let committed = store.apply_current_replay_append_batch(&batch).unwrap();
+        epoch = committed.epoch();
+        generation = committed.archive_generation();
+        committed_offset = next_offset;
+        prior_chunk =
+            StoredSourceChunk::new(0, u32::try_from(next_offset).unwrap(), next_digest).unwrap();
+    }
+
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 33);
+    assert_eq!(
+        store
+            .archive_publication()
+            .unwrap()
+            .dataset_generation()
+            .get(),
+        33
+    );
+    let stale = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: ArchiveGeneration::new(1).unwrap(),
+        append_batch: append(
+            100,
+            200,
+            vec![event("stale", 110)],
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    assert!(matches!(
+        store
+            .apply_current_replay_append_batch(&stale)
+            .expect_err("stale batch must remain rejected")
+            .code(),
+        StoreErrorCode::StaleRevision | StoreErrorCode::StaleCheckpoint
+    ));
+}
+
+#[test]
+fn canonical_only_append_is_disabled_after_replay_promotion() {
+    let (mut store, _) = promoted_store();
+    let legacy_append = append(
+        100,
+        200,
+        vec![event("legacy-bypass", 110)],
+        Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+        [SEED + 4; 32],
+        StoredVerification::Incremental,
+    );
+    let error = store
+        .apply_append_batch(&legacy_append)
+        .expect_err("canonical-only append must fail closed");
+    assert_eq!(error.code(), StoreErrorCode::ArchiveModeMismatch);
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 1);
+}
+
+#[test]
+fn rebuild_requirement_is_a_durable_generation_checked_publication_state() {
+    let (mut store, revision) = promoted_store();
+    let before = store.archive_publication().unwrap();
+
+    let generation = store
+        .mark_current_rebuild_required(revision.id(), before.generation())
+        .unwrap();
+
+    assert_eq!(generation.get(), before.generation().get() + 1);
+    let after = store.archive_publication().unwrap();
+    assert_eq!(after.dataset_generation(), before.dataset_generation());
+    assert_eq!(after.generation(), generation);
+    assert_eq!(after.current_revision(), Some(revision.id()));
+    assert_eq!(after.quality(), ArchivePublicationQuality::RecoveryPending);
+    let stale = store
+        .mark_current_rebuild_required(revision.id(), before.generation())
+        .expect_err("stale generation must not overwrite recovery state");
+    assert_eq!(stale.code(), StoreErrorCode::StaleRevision);
+}
+
+#[test]
+fn recovery_pending_can_restore_a_current_revision_after_staging_is_absent() {
+    let (mut store, revision) = promoted_store();
+    let complete = store.archive_publication().unwrap();
+    let recovery_generation = store
+        .mark_current_rebuild_required(revision.id(), complete.generation())
+        .unwrap();
+
+    let restored = store
+        .restore_current_partial_after_abandoned_rebuild(revision.id(), recovery_generation)
+        .unwrap();
+
+    let publication = store.archive_publication().unwrap();
+    assert_eq!(restored.get(), recovery_generation.get() + 1);
+    assert_eq!(publication.generation(), restored);
+    assert_eq!(publication.current_revision(), Some(revision.id()));
+    assert_eq!(publication.quality(), ArchivePublicationQuality::Partial);
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 1);
+}
+
+#[test]
+fn caught_up_current_source_can_repair_only_its_resume_payload() {
+    let (mut store, _revision) = promoted_store();
+    let publication = store.archive_publication().unwrap();
+    let source_key = SourceKey::from_bytes([SEED; 32]);
+    let generation = store
+        .generation_snapshot(source_key)
+        .unwrap()
+        .expect("current generation");
+    let original = generation.checkpoint().clone();
+    let repaired = StoredCheckpoint::new(StoredCheckpointParts {
+        parser_schema_version: original.parser_schema_version(),
+        physical_identity: original.physical_identity().copied(),
+        logical_identity: *original.logical_identity(),
+        committed_offset: original.committed_offset(),
+        scan_offset: original.scan_offset(),
+        observed_file_length: original.observed_file_length(),
+        modified_time_ns: original.modified_time_ns(),
+        anchor_start: original.anchor_start(),
+        anchor_len: original.anchor_len(),
+        anchor_sha256: *original.anchor_sha256(),
+        resume: b"repaired-resume".to_vec().into_boxed_slice(),
+        discarding_oversized_line: original.discarding_oversized_line(),
+        incomplete_tail: original.incomplete_tail(),
+        verification: original.verification(),
+    })
+    .unwrap();
+
+    let current = store
+        .current_replay_revision()
+        .unwrap()
+        .expect("current revision");
+    let committed = store
+        .repair_current_replay_source(
+            CurrentReplaySourceExpectation::new(
+                current.id(),
+                current.epoch(),
+                publication.generation(),
+                source_key,
+                generation.generation(),
+            ),
+            &original,
+            &repaired,
+        )
+        .unwrap();
+
+    assert_eq!(committed.quality(), ArchivePublicationQuality::Complete);
+    assert_eq!(
+        committed.archive_generation().get(),
+        publication.generation().get() + 1
+    );
+    assert_eq!(
+        store
+            .generation_snapshot(source_key)
+            .unwrap()
+            .expect("repaired generation")
+            .checkpoint()
+            .resume(),
+        b"repaired-resume"
+    );
+}
+
+fn event_with_missing_parent() -> CanonicalUsageEvent {
+    let usage = TokenUsage::new(
+        TokenCount::Available(10),
+        TokenCount::Unavailable,
+        TokenCount::Available(2),
+        TokenCount::Unavailable,
+        TokenCount::Available(12),
+    );
+    let draft = ObservationDraft::new(ObservationDraftParts {
+        provider_id: UsageProviderId::new("codex").unwrap(),
+        profile_id: UsageProfileId::new("default").unwrap(),
+        session_id: UsageSessionId::new("orphan").unwrap(),
+        parent_session_id: Some(UsageSessionId::new("missing-parent").unwrap()),
+        session_ordinal: 0,
+        lineage_conflict: false,
+        source_id: UsageSourceId::new("fixture-23").unwrap(),
+        source_offset: 110,
+        source_verification: ObservationVerification::FullPrefix,
+        timestamp: UtcTimestamp::new(1_720_598_510, 0).unwrap(),
+        model: ModelKey::new("gpt-test").unwrap(),
+        raw_model: None,
+        delta_usage: usage,
+        cumulative_usage: Some(usage),
+        fallback_model: false,
+        long_context: LongContextState::No,
+        service_tier: None,
+        reported_cost: None,
+        project: None,
+        originator: None,
+        activity: ActivityCounts::default(),
+    })
+    .unwrap();
+    Canonicalizer::new().canonicalize(&draft).unwrap()
+}
+
+fn relation(session: &str, parent: &str, source_offset: u64) -> SessionRelationDraft {
+    SessionRelationDraft::new(SessionRelationDraftParts {
+        provider_id: UsageProviderId::new("codex").unwrap(),
+        profile_id: UsageProfileId::new("default").unwrap(),
+        session_id: UsageSessionId::new(session).unwrap(),
+        parent_session_id: UsageSessionId::new(parent).unwrap(),
+        declared_conflict: false,
+        source_id: UsageSourceId::new("fixture-23").unwrap(),
+        source_offset,
+    })
+    .unwrap()
+}
+
+#[test]
+fn current_pending_work_continues_in_bounded_cas_transactions() {
+    let (mut store, revision) = promoted_store();
+    let publication = store.archive_publication().unwrap();
+    let batch = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: publication.generation(),
+        append_batch: append(
+            100,
+            200,
+            vec![event_with_missing_parent()],
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    let mut state = store.apply_current_replay_append_batch(&batch).unwrap();
+    assert!(state.remaining_work());
+    assert_eq!(state.quality(), ArchivePublicationQuality::Partial);
+
+    for _ in 0..8 {
+        if !state.remaining_work() {
+            break;
+        }
+        state = store
+            .continue_current_replay(revision.id(), state.epoch(), state.archive_generation())
+            .unwrap();
+        assert!(state.processed_count() <= 256);
+    }
+    assert!(!state.remaining_work());
+    assert_eq!(state.quality(), ArchivePublicationQuality::Complete);
+    assert_eq!(
+        store.archive_publication().unwrap().quality(),
+        ArchivePublicationQuality::Complete
+    );
+}
+
+#[test]
+fn pending_work_does_not_block_the_next_pending_source() {
+    const SECOND_SOURCE: u8 = SEED + 10;
+
+    let mut store = UsageStore::in_memory().unwrap();
+    store.register_source(&registration(SEED)).unwrap();
+    store.register_source(&registration(SECOND_SOURCE)).unwrap();
+    let scan_set = store
+        .begin_scan_set(
+            &ScanSetManifest::new(
+                vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
+            )
+            .unwrap(),
+            1_000,
+        )
+        .unwrap();
+    let scan = store.scan_page(scan_set.id(), None, 1).unwrap()[0].id();
+    for source_key in [
+        SourceKey::from_bytes([SEED; 32]),
+        SourceKey::from_bytes([SECOND_SOURCE; 32]),
+    ] {
+        store.observe_scan_source(scan, source_key).unwrap();
+    }
+    store
+        .finish_scan(scan, ScanOutcome::Complete, 1_010, ScanCounters::default())
+        .unwrap();
+    store.finish_scan_set(scan_set.id(), 1_020).unwrap();
+    let revision = store
+        .begin_replay_revision_for_scan_set(scan_set.id())
+        .unwrap();
+    let staged_epoch = store
+        .apply_replay_append_batch(
+            &ReplayAppendBatch::new(ReplayAppendBatchParts {
+                revision_id: revision.id(),
+                expected_epoch: revision.epoch(),
+                append_batch: append(
+                    0,
+                    100,
+                    vec![event("root", 10)],
+                    None,
+                    [SEED + 3; 32],
+                    StoredVerification::FullPrefix,
+                ),
+                relations: Box::default(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let current = store
+        .publish_initial_replay_partial(revision.id(), staged_epoch)
+        .unwrap();
+    let publication = store.archive_publication().unwrap();
+
+    let deferred = store
+        .apply_current_replay_append_batch(
+            &CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+                revision_id: current.id(),
+                expected_epoch: current.epoch(),
+                expected_archive_generation: publication.generation(),
+                append_batch: append(
+                    100,
+                    200,
+                    vec![event("child", 110)],
+                    Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+                    [SEED + 4; 32],
+                    StoredVerification::Incremental,
+                ),
+                relations: vec![relation("child", "root", 120)].into_boxed_slice(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    assert!(deferred.remaining_work());
+    assert_eq!(deferred.quality(), ArchivePublicationQuality::Partial);
+
+    let deferred_no_op = store
+        .continue_current_replay(
+            current.id(),
+            deferred.epoch(),
+            deferred.archive_generation(),
+        )
+        .unwrap();
+    assert_eq!(deferred_no_op.processed_count(), 0);
+    assert!(!deferred_no_op.remaining_work());
+    assert_eq!(deferred_no_op.epoch(), deferred.epoch());
+    assert_eq!(
+        deferred_no_op.archive_generation(),
+        deferred.archive_generation()
+    );
+
+    let after_second_source = store
+        .apply_current_replay_append_batch(
+            &CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+                revision_id: current.id(),
+                expected_epoch: deferred_no_op.epoch(),
+                expected_archive_generation: deferred_no_op.archive_generation(),
+                append_batch: append_for(
+                    SECOND_SOURCE,
+                    0,
+                    100,
+                    Vec::new(),
+                    None,
+                    [SECOND_SOURCE + 3; 32],
+                    StoredVerification::Incremental,
+                ),
+                relations: Box::default(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    assert!(after_second_source.remaining_work());
+
+    let mut settled = after_second_source;
+    for _ in 0..8 {
+        if !settled.remaining_work() {
+            break;
+        }
+        settled = store
+            .continue_current_replay(current.id(), settled.epoch(), settled.archive_generation())
+            .unwrap();
+    }
+    assert!(!settled.remaining_work());
+    assert_eq!(settled.quality(), ArchivePublicationQuality::Complete);
+}
+
+#[test]
+fn exact_complete_scan_publishes_freshness_with_the_same_current_revision() {
+    let (mut store, revision) = promoted_store();
+    let before = store.archive_publication().unwrap();
+    let scan_set = store
+        .begin_scan_set(
+            &ScanSetManifest::new(
+                vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
+            )
+            .unwrap(),
+            2_000,
+        )
+        .unwrap();
+    let scan = store.scan_page(scan_set.id(), None, 1).unwrap()[0].id();
+    store
+        .observe_scan_source(scan, SourceKey::from_bytes([SEED; 32]))
+        .unwrap();
+    store
+        .finish_scan(scan, ScanOutcome::Complete, 2_010, ScanCounters::default())
+        .unwrap();
+    store.finish_scan_set(scan_set.id(), 2_020).unwrap();
+    let published = store
+        .publish_current_scan(
+            &CurrentScanPublication::new(CurrentScanPublicationParts {
+                revision_id: revision.id(),
+                expected_epoch: revision.epoch(),
+                expected_archive_generation: before.generation(),
+                scan_set_id: scan_set.id(),
+                discovered_sources: Box::default(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(published.epoch().get(), revision.epoch().get() + 1);
+    assert_eq!(
+        published.archive_generation().get(),
+        before.generation().get() + 1
+    );
+    let after = store.archive_publication().unwrap();
+    assert_eq!(after.dataset_generation(), before.dataset_generation());
+    assert_eq!(after.current_revision(), Some(revision.id()));
+    assert_eq!(after.latest_complete_scan_set(), Some(scan_set.id()));
+    assert_eq!(after.quality(), ArchivePublicationQuality::Complete);
+}
+
+#[test]
+fn discovered_source_is_admitted_only_by_its_exact_complete_scan() {
+    let (mut store, revision) = promoted_store();
+    let before = store.archive_publication().unwrap();
+    let discovered_seed = 41_u8;
+    let discovered_key = SourceKey::from_bytes([discovered_seed; 32]);
+    let discovered = SourceRegistration::new(SourceRegistrationParts {
+        source_key: discovered_key,
+        provider_id: "codex".into(),
+        profile_id: "default".into(),
+        source_id: "fixture-41".into(),
+        source_kind: SourceKind::Active,
+        logical_identity: [discovered_seed + 1; 32],
+        physical_identity: Some([discovered_seed; 32]),
+        initial_checkpoint: StoredCheckpoint::new(StoredCheckpointParts {
+            parser_schema_version: 1,
+            physical_identity: Some([discovered_seed; 32]),
+            logical_identity: [discovered_seed + 1; 32],
+            committed_offset: 0,
+            scan_offset: 0,
+            observed_file_length: 100,
+            modified_time_ns: Some(3_000),
+            anchor_start: 0,
+            anchor_len: 0,
+            anchor_sha256: [discovered_seed + 2; 32],
+            resume: Box::default(),
+            discarding_oversized_line: false,
+            incomplete_tail: false,
+            verification: StoredVerification::Incremental,
+        })
+        .unwrap(),
+    })
+    .unwrap();
+    let scan_set = store
+        .begin_scan_set(
+            &ScanSetManifest::new(
+                vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
+            )
+            .unwrap(),
+            3_000,
+        )
+        .unwrap();
+    let scan = store.scan_page(scan_set.id(), None, 1).unwrap()[0].id();
+    store
+        .observe_scan_source(scan, SourceKey::from_bytes([SEED; 32]))
+        .unwrap();
+    store
+        .register_scan_discovered_source(scan, &discovered)
+        .unwrap();
+    assert!(store.generation_snapshot(discovered_key).unwrap().is_none());
+    store
+        .finish_scan(scan, ScanOutcome::Complete, 3_010, ScanCounters::default())
+        .unwrap();
+    store.finish_scan_set(scan_set.id(), 3_020).unwrap();
+    let published = store
+        .publish_current_scan(
+            &CurrentScanPublication::new(CurrentScanPublicationParts {
+                revision_id: revision.id(),
+                expected_epoch: revision.epoch(),
+                expected_archive_generation: before.generation(),
+                scan_set_id: scan_set.id(),
+                discovered_sources: vec![discovered_key].into_boxed_slice(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(published.processed_count(), 1);
+    assert_eq!(published.quality(), ArchivePublicationQuality::Partial);
+    let admitted = store
+        .generation_snapshot(discovered_key)
+        .unwrap()
+        .expect("admitted source generation");
+    assert_eq!(admitted.generation(), 0);
+    assert_eq!(admitted.checkpoint().committed_offset(), 0);
+    assert_eq!(admitted.checkpoint().observed_file_length(), 100);
+    assert_eq!(
+        store
+            .archive_publication()
+            .unwrap()
+            .latest_complete_scan_set(),
+        Some(scan_set.id())
+    );
+    assert_eq!(
+        store.archive_publication().unwrap().quality(),
+        ArchivePublicationQuality::Partial
+    );
+    let no_op = store
+        .continue_current_replay(
+            revision.id(),
+            published.epoch(),
+            published.archive_generation(),
+        )
+        .unwrap();
+    assert_eq!(no_op.processed_count(), 0);
+    assert_eq!(no_op.epoch(), published.epoch());
+    assert_eq!(no_op.archive_generation(), published.archive_generation());
+    assert_eq!(no_op.quality(), ArchivePublicationQuality::Partial);
+
+    let existing_tail = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: no_op.epoch(),
+        expected_archive_generation: no_op.archive_generation(),
+        append_batch: append(
+            100,
+            200,
+            vec![event("existing-tail", 110)],
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    let appended = store
+        .apply_current_replay_append_batch(&existing_tail)
+        .expect("a pending discovered source must not block an existing source tail");
+    assert_eq!(appended.quality(), ArchivePublicationQuality::Partial);
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 2);
+}
+
+#[test]
+fn changed_unadmitted_source_requests_rebuild_instead_of_leaking_database_conflict() {
+    let (mut store, revision) = promoted_store();
+    let discovered_seed = 51_u8;
+    let discovered_key = SourceKey::from_bytes([discovered_seed; 32]);
+    let registration = |physical_seed: u8, length: u64, modified_time_ns: i64| {
+        SourceRegistration::new(SourceRegistrationParts {
+            source_key: discovered_key,
+            provider_id: "codex".into(),
+            profile_id: "default".into(),
+            source_id: "fixture-51".into(),
+            source_kind: SourceKind::Active,
+            logical_identity: [discovered_seed + 1; 32],
+            physical_identity: Some([physical_seed; 32]),
+            initial_checkpoint: StoredCheckpoint::new(StoredCheckpointParts {
+                parser_schema_version: 1,
+                physical_identity: Some([physical_seed; 32]),
+                logical_identity: [discovered_seed + 1; 32],
+                committed_offset: 0,
+                scan_offset: 0,
+                observed_file_length: length,
+                modified_time_ns: Some(modified_time_ns),
+                anchor_start: 0,
+                anchor_len: 0,
+                anchor_sha256: [discovered_seed + 2; 32],
+                resume: Box::default(),
+                discarding_oversized_line: false,
+                incomplete_tail: false,
+                verification: StoredVerification::Incremental,
+            })
+            .unwrap(),
+        })
+        .unwrap()
+    };
+
+    let first_scan_set = store
+        .begin_scan_set(
+            &ScanSetManifest::new(
+                vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
+            )
+            .unwrap(),
+            4_000,
+        )
+        .unwrap();
+    let first_scan = store.scan_page(first_scan_set.id(), None, 1).unwrap()[0].id();
+    store
+        .observe_scan_source(first_scan, SourceKey::from_bytes([SEED; 32]))
+        .unwrap();
+    store
+        .register_scan_discovered_source(first_scan, &registration(51, 100, 4_000))
+        .unwrap();
+    store
+        .finish_scan(
+            first_scan,
+            ScanOutcome::Partial,
+            4_010,
+            ScanCounters::default(),
+        )
+        .unwrap();
+    store.finish_scan_set(first_scan_set.id(), 4_020).unwrap();
+
+    let second_scan_set = store
+        .begin_scan_set(
+            &ScanSetManifest::new(
+                vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice(),
+            )
+            .unwrap(),
+            5_000,
+        )
+        .unwrap();
+    let second_scan = store.scan_page(second_scan_set.id(), None, 1).unwrap()[0].id();
+    store
+        .observe_scan_source(second_scan, SourceKey::from_bytes([SEED; 32]))
+        .unwrap();
+
+    let error = store
+        .register_scan_discovered_source(second_scan, &registration(52, 120, 5_000))
+        .expect_err("changed provisional source must request full rebuild");
+
+    assert_eq!(error.code(), StoreErrorCode::RebuildRequired);
+    let publication = store.archive_publication().unwrap();
+    assert_eq!(publication.current_revision(), Some(revision.id()));
+    assert_eq!(publication.quality(), ArchivePublicationQuality::Complete);
+    assert!(store.generation_snapshot(discovered_key).unwrap().is_none());
+}

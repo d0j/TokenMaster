@@ -1,5 +1,12 @@
 # TokenMaster M0 acceptance
 
+> **Superseded.** The receipts below were produced by `tokenmaster-m0`, a probe
+> binary deleted in 2dd1f09. It used a different renderer and contained none of the
+> product's ingestion, query or snapshot code, so its measurements never described
+> the shipped executable. Kept for history. Release gates are in
+> `docs/RELEASE_EXIT_PLAN.md`; a soak, if one is run, must target the packaged
+> `TokenMaster.exe` and needs a harness written against it.
+
 **Status: SUFFICIENT FOR BOUNDED M1 DEVELOPMENT; NOT M0/RELEASE-ACCEPTED — automated
 developer gates pass; interactive and uninterrupted 24-hour evidence is missing.**
 
@@ -9,10 +16,11 @@ developer gates pass; interactive and uninterrupted 24-hour evidence is missing.
 - Clippy with `-D warnings`, focused tests, full workspace tests, and docs audit pass.
 - Bundled SQLite runtime is exactly 3.53.2.
 - Explicit one-million-row store test passes with 256-row keyset pages.
-- Three layouts, three themes, en/ru, pseudo-locale, and one-window state switches pass.
+- The isolated M0 probe harness (not the current product UI) passes three layouts,
+  three themes, en/ru, pseudo-locale, and one-window state switches.
 - Native tray close keeps the exact process alive; the smoke harness cleans its PID.
-- Software structured stress passes for 10K skins, 10K routes, and 1M rows plus 10K
-  skins. The 1M case ended at 69.85 MiB with zero retained sampled bytes/objects.
+- The probe harness software stress passes for 10K skins, 10K routes, and 1M rows plus
+  10K skins. The 1M case ended at 69.85 MiB with zero retained sampled bytes/objects.
 - A 0.01-hour soak harness smoke passes and cleans the process.
 - A clean-commit long run reached about nine wall-clock hours and 896 samples. The same
   process survived and resumed after Windows low power with stable one-hour resource
@@ -41,5 +49,5 @@ The long run's 5,588.6-second sample gap exceeded the 75-second hard limit, so i
 not a 24-hour pass and produced no `soak-24h.json`.
 
 Only after both external JSON receipts say `result: pass` may `package-m0.ps1` create a
-non-release architecture-proof ZIP. ADR-011 permits bounded M1 development while this
+non-release architecture-proof ZIP. ADR-006 permits bounded M1 development while this
 boundary remains open; it does not authorize M0 acceptance, packaging, or release.

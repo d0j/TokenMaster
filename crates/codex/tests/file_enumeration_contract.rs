@@ -85,6 +85,43 @@ fn direct_source_streams_only_regular_jsonl_without_retaining_a_list() {
 }
 
 #[test]
+fn dated_source_tree_emits_newest_history_first() {
+    let temp = TempDir::new().expect("temporary directory must be created");
+    let older = temp.path().join("2026").join("07").join("24");
+    let newer = temp.path().join("2026").join("07").join("25");
+    fs::create_dir_all(&older).expect("older fixture directory must be created");
+    fs::create_dir_all(&newer).expect("newer fixture directory must be created");
+    write_fixture(&older.join("older.jsonl"), b"{}\n");
+    write_fixture(&newer.join("newer.jsonl"), b"{}\n");
+    let sources = [source(SourceKind::Direct, temp.path(), "one", "direct")];
+    let mut emitted = Vec::new();
+
+    enumerate_profile_sources(
+        &sources,
+        || false,
+        |file| {
+            emitted.push(file.relative_path().to_path_buf());
+            SinkDecision::Continue
+        },
+    )
+    .expect("enumeration must succeed");
+
+    assert_eq!(
+        emitted,
+        [
+            PathBuf::from("2026")
+                .join("07")
+                .join("25")
+                .join("newer.jsonl"),
+            PathBuf::from("2026")
+                .join("07")
+                .join("24")
+                .join("older.jsonl"),
+        ]
+    );
+}
+
+#[test]
 fn empty_source_set_fails_before_traversal() {
     let mut callback_calls = 0_u64;
 

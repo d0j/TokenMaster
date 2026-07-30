@@ -1,25 +1,111 @@
 use std::fmt;
 use std::path::Path;
 
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::{Connection, OpenFlags};
 
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
+const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 64;
+
+mod aggregate;
+mod benefit_maintenance;
+mod benefit_reminder;
+mod benefit_schema;
+mod benefit_types;
+mod benefit_write;
+mod git_query;
+mod git_schema;
+mod git_types;
+mod git_write;
+mod incremental;
+pub(crate) mod migration;
+mod price_schema;
+pub(crate) mod query;
+mod quota_maintenance;
+mod quota_schema;
+mod quota_types;
+mod quota_write;
 mod read;
+mod replay;
+mod replay_manifest;
+mod scan;
 mod schema;
 mod types;
 mod write;
 
+pub use benefit_types::{
+    BenefitApplyResult, BenefitApplyStatus, BenefitInventoryRevision, BenefitMaintenanceResult,
+    BenefitProfileApplyResult, BenefitReminderAcknowledgeResult, BenefitReminderDelivery,
+    BenefitReminderProcessResult, DEFAULT_BENEFIT_CHANGES_PER_SCOPE,
+    DEFAULT_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_CHANGES_PER_SCOPE,
+    MAX_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_MAINTENANCE_PAGE_SIZE,
+    MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
+};
+pub use git_query::{
+    GitOutputCapture, GitOutputQuery, GitOutputRepositoryCapture, GitProjectMatchCapture,
+    GitProjectMatchQuery, GitRangeMetrics,
+};
+pub use git_types::{
+    GitCacheIdentity, GitIncrementalAuthority, GitProjectKey, GitProjectionInput,
+    GitProjectionInputParts, GitPublication, GitRefreshInput, GitRefreshInputParts,
+};
+pub use query::{
+    BenefitChangeCursor, BenefitChangePageCapture, BenefitChangePageQuery, BenefitChangeRecord,
+    BenefitCurrentCapture, BenefitCurrentQuery, BenefitDueSnapshot, BenefitOverviewCapture,
+    BenefitOverviewQuery, BenefitOverviewScopeCapture, BenefitReminderProfileSnapshot,
+    BenefitScopeSnapshot, MAX_BENEFIT_CHANGE_PAGE_SIZE, MAX_BENEFIT_CURRENT_LOTS,
+    MAX_BENEFIT_OVERVIEW_LOTS, MAX_BENEFIT_OVERVIEW_SCOPES, MAX_QUOTA_CURRENT_WINDOWS,
+    MAX_QUOTA_TRANSITION_PAGE_SIZE, MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS,
+    MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS,
+    MAX_USAGE_QUERY_SCOPES, MAX_USAGE_RHYTHM_OCCURRENCES, MAX_USAGE_RHYTHM_SEGMENTS,
+    MAX_USAGE_SERIES_POINTS, MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE,
+    ProductAggregateProgress, ProductAggregateState, ProductAggregateStatus, ProductBenefitStatus,
+    ProductDataStatusCapture, ProductDataStatusQuery, ProductGitStatus, ProductImportProgress,
+    ProductQuotaStatus, ProductUsageStatus, QuotaCurrentCapture, QuotaCurrentEpoch,
+    QuotaCurrentQuery, QuotaCurrentWindow, QuotaOverviewQuery, QuotaTransitionCursor,
+    QuotaTransitionPageCapture, QuotaTransitionPageQuery, QuotaTransitionRecord,
+    USAGE_RHYTHM_CELLS, USAGE_RHYTHM_HOURS, USAGE_RHYTHM_WEEKDAYS, UsageActivityQuery,
+    UsageAggregateActivity, UsageAggregateBucketWidth, UsageAggregateMetrics, UsageAggregateRange,
+    UsageAggregateSegment, UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown,
+    UsageBreakdownIdentity, UsageBreakdownItem, UsageBreakdownKind, UsageBreakdownPriceBasisQuery,
+    UsageOverviewCapture, UsageOverviewQuery, UsagePriceBasisBatchCapture,
+    UsagePriceBasisBatchQuery, UsagePriceBasisCapture, UsagePriceBasisKey, UsagePriceBasisMetrics,
+    UsagePriceBasisQuery, UsagePriceBasisRow, UsagePriceBasisTargetCapture, UsagePriceLongContext,
+    UsagePriceTier, UsageQueryCapture, UsageQueryDatasetIdentity, UsageQueryEvent,
+    UsageQueryPublication, UsageReadRuntimePolicy, UsageReadStore, UsageReportedCostState,
+    UsageRhythmCapture, UsageRhythmQuery, UsageRhythmSegment, UsageSeriesPoint,
+    UsageSeriesPointCapture, UsageSessionBreakdownPriceBasisQuery, UsageSessionCursor,
+    UsageSessionDetail, UsageSessionDetailCapture, UsageSessionDetailQuery, UsageSessionKey,
+    UsageSessionPageCapture, UsageSessionPageQuery, UsageSessionPriceBasisBatchQuery,
+    UsageSessionPriceBasisQuery, UsageSessionSummary, UsageTokenAggregate,
+};
+pub use quota_types::{
+    DEFAULT_QUOTA_EPOCHS_PER_WINDOW, DEFAULT_QUOTA_SAMPLES_PER_WINDOW,
+    DEFAULT_QUOTA_TRANSITIONS_PER_WINDOW, MAX_QUOTA_EPOCHS_PER_WINDOW,
+    MAX_QUOTA_MAINTENANCE_PAGE_SIZE, MAX_QUOTA_SAMPLES_PER_WINDOW,
+    MAX_QUOTA_TRANSITIONS_PER_WINDOW, QuotaApplyResult, QuotaApplyStatus, QuotaMaintenanceResult,
+    QuotaRevision,
+};
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{
-    AppendBatch, AppendBatchParts, EventCursor, GenerationSnapshot, GenerationStatus,
-    MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE,
-    SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts,
-    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
-    StoredVerification, UsageStoreCounts,
+    AccountingVersions, AggregateRebuildProgress, AggregateRebuildStatus, AppendBatch,
+    AppendBatchParts, ArchiveGeneration, ArchiveMode, ArchivePublication,
+    ArchivePublicationQuality, ArchiveState, CurrentReplayAppendBatch,
+    CurrentReplayAppendBatchParts, CurrentReplayCommit, CurrentReplaySourceExpectation,
+    CurrentScanPublication, CurrentScanPublicationParts, DatasetGeneration, EventCursor,
+    GenerationSnapshot, GenerationStatus, MAX_AGGREGATE_REBUILD_PAGE_SIZE,
+    MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS, MAX_APPEND_RELATIONS, MAX_REPLAY_SOURCES,
+    MAX_RESUME_BYTES, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayAppendBatch,
+    ReplayAppendBatchParts, ReplayContinuationResult, ReplayEpoch, ReplayManifest,
+    ReplayQualityCounts, ReplayRelation, ReplayRevisionId, ReplayRevisionSnapshot,
+    ReplayRevisionStatus, ReplaySourceState, SCAN_HISTORY_PER_SCOPE, SCAN_PRUNE_BATCH_SIZE,
+    SOURCE_CHUNK_BYTES, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
+    ScanSetSnapshot, ScanSnapshot, SourceKey, SourceKind, SourceRegistration,
+    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
+    StoredUsageEvent, StoredVerification, UsageLifetimeTotals, UsageStoreCounts,
 };
 
-use schema::{USAGE_INDEX_CONTRACTS, USAGE_SCHEMA, USAGE_TABLE_CONTRACTS};
+use migration::migrate_schema;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JournalMode {
@@ -101,7 +187,20 @@ impl UsageStore {
         Self::initialize(Connection::open(path)?, false)
     }
 
+    /// Opens an already-current archive without creating or migrating it.
+    ///
+    /// The schema and runtime policy checks deliberately share the retained
+    /// connection so a pathname cannot be swapped between validation and use.
+    pub fn open_current(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        let connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        Self::initialize_current(connection)
+    }
+
     fn initialize(mut connection: Connection, in_memory: bool) -> Result<Self, StoreError> {
+        connection.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
         let actual: String =
             connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
         if actual != EXPECTED_SQLITE_VERSION {
@@ -112,6 +211,30 @@ impl UsageStore {
         let store = Self {
             connection,
             in_memory,
+        };
+        store.runtime_policy()?;
+        Ok(store)
+    }
+
+    fn initialize_current(connection: Connection) -> Result<Self, StoreError> {
+        connection.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
+        let actual: String =
+            connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
+        if actual != EXPECTED_SQLITE_VERSION {
+            return Err(StoreError::new(StoreErrorCode::VersionMismatch));
+        }
+
+        let schema_version: i64 =
+            connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if schema_version != USAGE_SCHEMA_VERSION {
+            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+        }
+        migration::validate_v15(&connection)?;
+        apply_runtime_policy(&connection, false)?;
+
+        let store = Self {
+            connection,
+            in_memory: false,
         };
         store.runtime_policy()?;
         Ok(store)
@@ -201,86 +324,6 @@ fn apply_runtime_policy(connection: &Connection, in_memory: bool) -> Result<(), 
     connection.pragma_update(None, "temp_store", "FILE")?;
     connection.pragma_update(None, "mmap_size", 0_i64)?;
     Ok(())
-}
-
-fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
-    let version = pragma_i64(connection, "PRAGMA user_version")?;
-    if version > USAGE_SCHEMA_VERSION {
-        return Err(StoreError::new(StoreErrorCode::SchemaTooNew));
-    }
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    transaction.execute_batch(USAGE_SCHEMA)?;
-    if version < USAGE_SCHEMA_VERSION {
-        transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
-    }
-    validate_schema(&transaction)?;
-    transaction.commit()?;
-    Ok(())
-}
-
-fn validate_schema(connection: &Connection) -> Result<(), StoreError> {
-    let mut table_list = connection.prepare("PRAGMA table_list")?;
-    let rows = table_list.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, i64>(5)?,
-        ))
-    })?;
-    let mut actual_tables = Vec::new();
-    for row in rows {
-        let (schema, name, kind, strict) = row?;
-        if schema == "main" && kind == "table" && !name.starts_with("sqlite_") {
-            if strict != 1 {
-                return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-            }
-            actual_tables.push(name);
-        }
-    }
-    actual_tables.sort_unstable();
-    let mut expected_tables = USAGE_TABLE_CONTRACTS
-        .iter()
-        .map(|contract| contract.name)
-        .collect::<Vec<_>>();
-    expected_tables.sort_unstable();
-    if actual_tables != expected_tables {
-        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-    }
-
-    for contract in USAGE_TABLE_CONTRACTS {
-        let sql = format!("SELECT * FROM {} LIMIT 0", contract.name);
-        let statement = connection.prepare(&sql)?;
-        if statement.column_names().as_slice() != contract.columns {
-            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-        }
-    }
-
-    let mut index_list = connection.prepare(
-        "SELECT name, sql FROM sqlite_schema
-         WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
-         ORDER BY name",
-    )?;
-    let rows = index_list.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut actual_indexes = Vec::new();
-    for row in rows {
-        actual_indexes.push(row?);
-    }
-    if actual_indexes.len() != USAGE_INDEX_CONTRACTS.len() {
-        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-    }
-    for ((actual_name, actual_sql), expected) in actual_indexes.iter().zip(USAGE_INDEX_CONTRACTS) {
-        if actual_name != expected.name || normalize_schema_sql(actual_sql) != expected.sql {
-            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-        }
-    }
-    Ok(())
-}
-
-fn normalize_schema_sql(sql: &str) -> String {
-    sql.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn pragma_i64(connection: &Connection, sql: &str) -> Result<i64, StoreError> {

@@ -1,0 +1,839 @@
+import {
+    RouteRow, DashboardSectionRow, DashboardBoardSlotRow, DashboardBoardEditorRow, DashboardQuotaRow, DashboardBenefitRow,
+    DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
+    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ActivityRhythmRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow, InAppNotificationRow
+} from "models.slint";
+import { UiPalette, UiTokens } from "tokens.slint";
+export { ProjectionStrings } from "projection-strings.slint";
+import { RouteNavItem } from "components/route-nav-item.slint";
+import { RouteState } from "components/route-state.slint";
+import { InAppNotificationPanel } from "components/in-app-notification-panel.slint";
+import { RoutePalette } from "components/command-palette.slint";
+import { DashboardView } from "views/dashboard-view.slint";
+import { HistoryView } from "views/history-view.slint";
+import { ModelsView } from "views/models-view.slint";
+import { ProjectsView } from "views/projects-view.slint";
+import { ActivityView } from "views/activity-view.slint";
+import { NotificationsView } from "views/notifications-view.slint";
+import { HelpAboutView } from "views/help-about-view.slint";
+import { CompactWidgetView } from "views/compact-widget-view.slint";
+import { SessionsView } from "views/sessions-view.slint";
+import { DataHealthView } from "views/data-health-view.slint";
+import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
+import { Button, Palette } from "std-widgets.slint";
+
+component ShellTab inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> selected;
+    callback activated();
+
+    background: tab-touch.has-hover ? UiTokens.surface-raised : transparent;
+    border-radius: UiTokens.radius-sm;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.activated(); }
+
+    VerticalLayout {
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 1px;
+        Text {
+            text: root.glyph;
+            color: root.selected ? UiTokens.accent : UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+            font-weight: UiTokens.weight-bold;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.label;
+            color: root.selected ? UiTokens.text-primary : UiTokens.text-secondary;
+            font-size: UiTokens.text-caption;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+    tab-touch := TouchArea { clicked => { root.activated(); } }
+}
+
+export component MainWindow inherits Window {
+    in-out property <UiPalette> presentation-palette <=> UiTokens.palette;
+    in-out property <int> presentation-density-id <=> UiTokens.density-id;
+    out property <string> presentation-density-key: root.presentation-density-id == 2 ? "ultra_compact" : (root.presentation-density-id == 1 ? "compact" : "comfortable");
+    in-out property <int> presentation-skin-id: 0;
+    out property <string> presentation-skin-key: root.presentation-skin-id == 2 ? "ember" : (root.presentation-skin-id == 1 ? "graphite" : "refined");
+    in-out property <int> presentation-color-scheme-id: 0;
+    out property <string> presentation-color-scheme-key: root.presentation-color-scheme-id == 2 ? "dark" : (root.presentation-color-scheme-id == 1 ? "light" : "system");
+    in-out property <int> presentation-layout-id: 0;
+    out property <string> presentation-layout-key: root.presentation-layout-id == 2 ? "workbench" : (root.presentation-layout-id == 1 ? "control_center" : "refined");
+    in-out property <int> presentation-locale-id: 0;
+    out property <string> presentation-locale-key: root.presentation-locale-id == 2 ? "pseudo" : (root.presentation-locale-id == 1 ? "ru" : "en");
+    in-out property <int> presentation-effective-color-scheme-id: 2;
+    out property <string> presentation-effective-color-scheme-key: root.presentation-effective-color-scheme-id == 1 ? "light" : "dark";
+    out property <int> observed-system-color-scheme-id: Palette.color-scheme == ColorScheme.light ? 1 : (Palette.color-scheme == ColorScheme.dark ? 2 : 0);
+    in-out property <string> presentation-revision: "0";
+    in-out property <string> presentation-persistence-state: "saved";
+    out property <length> presentation-space: UiTokens.space;
+    out property <length> presentation-radius: UiTokens.radius;
+    in property <[RouteRow]> route-rows;
+    in property <string> active-route-key;
+    in property <string> active-route-label;
+    // The archive's own total. Shown beside the route name because it is the same number
+    // on every screen, and the product's whole claim is that this number is knowable.
+    in property <string> shell-lifetime-tokens;
+    in property <string> active-route-state;
+    in property <string> active-route-reasons;
+    in property <string> product-generation;
+    in property <[DashboardSectionRow]> dashboard-section-rows;
+    in property <[DashboardBoardSlotRow]> dashboard-board-visible-slots;
+    in property <[DashboardBoardEditorRow]> dashboard-board-editor-rows;
+    in property <[DashboardQuotaRow]> dashboard-quota-rows;
+    in property <[DashboardBenefitRow]> dashboard-benefit-rows;
+    in property <[DashboardTrendPoint]> dashboard-trend-points;
+    in property <string> dashboard-trend-token-geometry;
+    in property <string> dashboard-trend-cost-geometry;
+    in property <string> dashboard-trend-token-area;
+    in property <string> dashboard-trend-cost-area;
+    in property <string> dashboard-trend-token-axis;
+    in property <string> dashboard-trend-cost-axis;
+    in property <[DashboardSessionRow]> dashboard-session-rows;
+    in property <[DashboardActivityRow]> dashboard-activity-rows;
+    in property <[DashboardModelRow]> dashboard-model-rows;
+    in property <string> dashboard-header-tokens;
+    in property <string> dashboard-header-cost;
+    in property <string> dashboard-header-events;
+    in property <string> dashboard-header-evidence;
+    in property <bool> dashboard-initial-import-in-progress;
+    in property <bool> dashboard-import-progress-known: false;
+    in property <string> dashboard-import-progress-label;
+    in property <float> dashboard-import-progress-ratio: 0;
+    in property <bool> dashboard-startup-import-in-progress: false;
+    in property <int> dashboard-initial-import-stage: 0;
+    in property <string> dashboard-code-commits;
+    in property <string> dashboard-code-added;
+    in property <string> dashboard-code-removed;
+    in property <string> dashboard-code-net;
+    in property <string> dashboard-code-efficiency;
+    in property <string> dashboard-code-evidence;
+    in property <[HistoryDayRow]> history-day-rows;
+    in property <string> history-state;
+    in property <string> history-reasons;
+    in property <string> history-range-label;
+    in property <string> history-time-zone-label;
+    in property <string> history-evidence-label;
+    in property <string> history-input-tokens;
+    in property <string> history-cached-tokens;
+    in property <string> history-output-tokens;
+    in property <string> history-reasoning-tokens;
+    in property <string> history-total-tokens;
+    in property <string> history-cost;
+    in property <string> history-events;
+    in property <string> history-range-preset: "recent_30_days";
+    in property <bool> history-range-pending: false;
+    in property <[ModelUsageRow]> model-usage-rows;
+    in property <string> models-state;
+    in property <string> models-reasons;
+    in property <string> models-range-label;
+    in property <string> models-time-zone-label;
+    in property <string> models-evidence-label;
+    in property <string> models-total-tokens;
+    in property <string> models-total-availability;
+    in property <string> models-cost;
+    in property <string> models-cost-availability;
+    in property <string> models-cost-evidence-label;
+    in property <string> models-events;
+    in property <string> models-loaded-label;
+    in property <string> models-completeness-label;
+    in property <[ProjectUsageRow]> project-usage-rows;
+    in property <string> projects-state;
+    in property <string> projects-reasons;
+    in property <string> projects-usage-range-label;
+    in property <string> projects-usage-time-zone-label;
+    in property <string> projects-usage-evidence-label;
+    in property <string> projects-code-range-label;
+    in property <string> projects-code-time-zone-label;
+    in property <string> projects-code-evidence-label;
+    in property <string> projects-total-tokens;
+    in property <string> projects-total-availability;
+    in property <string> projects-cost;
+    in property <string> projects-cost-availability;
+    in property <string> projects-cost-evidence-label;
+    in property <string> projects-events;
+    in property <string> projects-loaded-label;
+    in property <string> projects-completeness-label;
+    in property <string> projects-code-coverage-label;
+    in property <string> projects-code-completeness-label;
+    in property <[RecentActivityRow]> recent-activity-rows;
+    in property <string> activity-state;
+    in property <string> activity-reasons;
+    in property <string> activity-context-label;
+    in property <string> activity-evidence-label;
+    in property <string> activity-loaded-label;
+    in property <string> activity-page-status-label;
+    in property <bool> activity-page-available;
+    in property <string> activity-rhythm-state;
+    in property <string> activity-rhythm-reasons;
+    in property <string> activity-rhythm-evidence-label;
+    in property <string> activity-rhythm-time-zone-label;
+    in property <string> activity-rhythm-range-label;
+    in property <[ActivityRhythmRow]> activity-rhythm-hour-rows;
+    in property <[ActivityRhythmRow]> activity-rhythm-weekday-rows;
+    in property <[ReminderScopeRow]> reminder-scope-rows;
+    in property <[BenefitLotRow]> benefit-lot-rows;
+    in property <string> notifications-state;
+    in property <string> notifications-reasons;
+    in property <string> notifications-evidence-label;
+    in property <string> notifications-loaded-label;
+    in property <string> notifications-completeness-label;
+    in property <string> help-product-version;
+    in property <[SessionListRow]> session-list-rows;
+    in property <string> sessions-state;
+    in property <string> sessions-reasons;
+    in property <string> sessions-evidence-label;
+    in property <string> sessions-loaded-label;
+    in property <string> sessions-page-status-label;
+    in property <bool> sessions-navigation-pending;
+    in property <bool> sessions-next-enabled;
+    in property <bool> sessions-back-to-newest-enabled;
+    in property <int> sessions-selected-row: -1;
+    in property <string> session-detail-state: "idle";
+    in property <string> session-detail-status-label;
+    in property <string> session-detail-evidence-label;
+    in property <string> session-detail-period-label;
+    in property <string> session-detail-duration-label;
+    in property <string> session-detail-event-label;
+    in property <string> session-detail-input-availability;
+    in property <string> session-detail-input-label;
+    in property <string> session-detail-cached-availability;
+    in property <string> session-detail-cached-label;
+    in property <string> session-detail-output-availability;
+    in property <string> session-detail-output-label;
+    in property <string> session-detail-reasoning-availability;
+    in property <string> session-detail-reasoning-label;
+    in property <string> session-detail-total-availability;
+    in property <string> session-detail-total-label;
+    in property <string> session-detail-cost-availability;
+    in property <string> session-detail-cost-label;
+    in property <[SessionDetailBreakdownRow]> session-detail-breakdown-rows;
+    out property <bool> dashboard-visible: root.active-route-key == "dashboard";
+    out property <bool> history-visible: root.active-route-key == "history";
+    out property <bool> sessions-visible: root.active-route-key == "sessions";
+    out property <bool> models-visible: root.active-route-key == "models";
+    out property <bool> projects-visible: root.active-route-key == "projects";
+    out property <bool> activity-visible: root.active-route-key == "activity";
+    out property <bool> notifications-visible: root.active-route-key == "notifications";
+    out property <bool> data-health-visible: root.active-route-key == "data_health";
+    out property <bool> settings-visible: root.active-route-key == "settings";
+    out property <bool> help-about-visible: root.active-route-key == "help_about";
+    in property <bool> refresh-in-flight;
+    out property <bool> compact-widget-visible: root.active-route-key == "compact_widget";
+    // Derived from the route, never from `root.width`. A child whose width depends on
+    // the parent's computed width is a binding loop -- Slint reports it as deprecated
+    // and warns it may panic at runtime. The other `*-layout-mode` properties may read
+    // `root.width` safely because they arrange content inside a view rather than
+    // contributing a layout constraint back to the window.
+    //
+    // The window's preferred width carries the sidebar on top of the content width, so
+    // the sidebar never costs a view its wide layout.
+    out property <bool> route-sidebar-visible: !root.compact-widget-visible;
+    out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
+    out property <string> dashboard-layout-preset: root.presentation-layout-key;
+    out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
+    out property <string> models-layout-mode: root.width < 984px ? "narrow" : "wide";
+    out property <string> projects-layout-mode: root.width < 984px ? "narrow" : "wide";
+    out property <string> activity-layout-mode: root.width < 984px ? "narrow" : "wide";
+    out property <string> settings-layout-mode: settings-view.settings-layout-mode;
+    out property <length> settings-reminder-card-bottom: settings-view.reminder-card-bottom;
+    out property <length> settings-backup-card-top: settings-view.backup-card-top;
+    out property <length> settings-config-card-top: settings-view.config-card-top;
+    out property <string> notifications-layout-mode: root.width < 984px ? "narrow" : "wide";
+    out property <string> help-about-layout-mode: help-view.layout-mode;
+    out property <int> help-about-section-count: help-view.section-count;
+    out property <int> compact-widget-quota-count: compact-view.quota-count;
+    out property <string> compact-widget-layout-mode: compact-view.layout-mode;
+    in property <string> reliable-state-generation;
+    in property <string> reliable-state-health;
+    in property <bool> reliable-state-safe-mode;
+    in property <string> reliable-recovery-kind;
+    in property <bool> reliable-non-reconstructible-domains-lost;
+    in property <string> settings-health;
+    in property <bool> config-import-preview-visible;
+    in property <string> config-import-created-label;
+    in property <string> config-import-bytes-label;
+    in property <string> config-import-changes-label;
+    in property <string> reliable-latest-success-label;
+    in property <string> reliable-latest-attempt-label;
+    in property <string> reliable-successful-count-label;
+    in property <string> reliable-failure-count-label;
+    in property <string> reliable-published-bytes-label;
+    in property <string> reliable-latest-failure-code;
+    in property <[RestorePointRow]> restore-point-rows;
+    in property <string> reliable-operation-kind;
+    in property <string> reliable-operation-phase;
+    in property <string> reliable-operation-failure-code;
+    in property <bool> reliable-operation-cancel-enabled;
+    in-out property <bool> restore-confirmation-visible: false;
+    in-out property <int> restore-confirmation-row: -1;
+    in-out property <string> restore-confirmation-detail;
+    in-out property <bool> backup-periodic-enabled;
+    in-out property <int> backup-quiet-seconds;
+    in-out property <int> backup-interval-seconds;
+    in-out property <int> backup-retention-budget-mib;
+    in-out property <bool> reminder-enabled: false;
+    in-out property <bool> reminder-preset-seven-days: false;
+    in-out property <bool> reminder-preset-twenty-four-hours: false;
+    in-out property <bool> reminder-preset-twelve-hours: false;
+    in-out property <bool> reminder-preset-six-hours: false;
+    in-out property <bool> reminder-preset-one-hour: false;
+    in-out property <[ReminderCustomLeadRow]> reminder-custom-lead-rows;
+    in-out property <bool> reminder-dirty: false;
+    in-out property <string> reminder-feedback: "Ready to edit reminder profile";
+    in property <string> reminder-sync-state;
+    in property <string> current-user-startup-status: "unavailable";
+    in property <bool> current-user-startup-can-enable: false;
+    in property <bool> current-user-startup-can-disable: false;
+    in property <bool> current-user-startup-can-repair: false;
+    in property <bool> high-contrast: false;
+    in property <bool> reduced-motion: false;
+    in property <[InAppNotificationRow]> in-app-notification-rows;
+    in-out property <bool> in-app-notification-visible: false;
+    in-out property <string> in-app-notification-count-label;
+    in-out property <bool> command-palette-visible: false;
+    in-out property <string> command-palette-query;
+    in property <[RouteRow]> command-palette-rows;
+    in property <int> command-palette-selected-ordinal: -1;
+    callback select-route(string);
+    callback open-command-palette();
+    callback dismiss-command-palette();
+    callback command-palette-query-edited(string);
+    callback move-command-palette-selection(int);
+    callback activate-command-palette-selection();
+    callback activate-command-palette-route(string);
+    callback request-history-range-1();
+    callback request-history-range-7();
+    callback request-history-range-30();
+    callback select-session(int);
+    callback request-session-page-next();
+    callback request-session-page-newest();
+    callback export-config();
+    callback import-config();
+    callback confirm-config-import();
+    callback cancel-config-import();
+    callback backup-normal();
+    callback backup-compact();
+    callback backup-encrypted(string, string);
+    callback verify-backups();
+    callback preview-restore(int);
+    callback confirm-restore(int, bool);
+    callback request-refresh();
+    callback rebuild-data();
+    callback retry-operation();
+    callback cancel-operation();
+    callback update-backup-policy(bool, int, int, int);
+    callback reminder-enabled-edited(bool);
+    callback reminder-preset-edited(int, bool);
+    callback reminder-custom-lead-edited(int, bool, int, int);
+    callback save-reminder-policy();
+    callback reset-reminder-recommended();
+    callback enable-current-user-startup();
+    callback repair-current-user-startup();
+    callback disable-current-user-startup();
+    callback dismiss-in-app-notifications();
+    callback select-presentation-density(int);
+    callback select-presentation-skin(int);
+    callback select-presentation-color-scheme(int);
+    callback select-presentation-layout(int);
+    callback select-presentation-locale(int);
+    callback move-dashboard-board-row(int, int);
+    callback set-dashboard-board-row-visible(int, bool);
+    callback set-dashboard-board-row-collapsed(int, bool);
+    callback reset-dashboard-board();
+    callback system-color-scheme-observed(int);
+    changed observed-system-color-scheme-id => { root.system-color-scheme-observed(root.observed-system-color-scheme-id); }
+
+    title: @tr("TokenMaster");
+    preferred-width: root.compact-widget-visible ? 420px : 1048px;
+    preferred-height: root.compact-widget-visible ? 560px : 760px;
+    min-width: root.compact-widget-visible ? 360px : 808px;
+    min-height: root.compact-widget-visible ? 320px : 480px;
+    background: UiTokens.background;
+    forward-focus: shell-focus;
+
+    shell-focus := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        KeyBinding {
+            keys: @keys(Control + K);
+            activated => { root.open-command-palette(); }
+        }
+        capture-key-pressed(event) => {
+            if (event.modifiers.control && event.text == "k") {
+                root.open-command-palette();
+                return accept;
+            }
+            return reject;
+        }
+
+    VerticalLayout {
+        width: parent.width;
+        height: parent.height;
+        visible: !root.compact-widget-visible;
+        Rectangle {
+            height: 52px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: UiTokens.space;
+                padding-right: UiTokens.space;
+                spacing: 8px;
+
+                Text {
+                    text: @tr("TokenMaster");
+                    color: UiTokens.degraded;
+                    font-size: UiTokens.text-title;
+                    font-weight: UiTokens.weight-bold;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: @tr("Local usage intelligence") + " · " + root.active-route-label
+                        + (root.shell-lifetime-tokens == "" ? "" : " · " + @tr("{0} all time", root.shell-lifetime-tokens));
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-caption;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                Button {
+                    text: root.refresh-in-flight ? @tr("Refreshing…") : @tr("Refresh");
+                    accessible-label: @tr("Refresh usage data");
+                    enabled: !root.refresh-in-flight;
+                    clicked => { root.request-refresh(); }
+                }
+                Button {
+                    text: @tr("Go to route");
+                    accessible-label: @tr("Open route palette");
+                    clicked => { root.open-command-palette(); }
+                }
+                Text {
+                    // The header showed the raw state key, so it read as lowercase
+                    // English in every locale exactly as the section chip used to.
+                    text: root.active-route-state == "ready" ? @tr("Ready")
+                        : root.active-route-state == "degraded" ? @tr("Degraded")
+                        : root.active-route-state == "waiting" ? @tr("Waiting") : @tr("Unavailable");
+                    color: root.active-route-state == "ready" ? UiTokens.ready : root.active-route-state == "degraded" ? UiTokens.degraded : root.active-route-state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
+                    vertical-alignment: center;
+        }
+    }
+
+    }
+
+        HorizontalLayout {
+            spacing: 0px;
+            vertical-stretch: 1;
+
+            Rectangle {
+                width: root.route-sidebar-visible ? 168px : 0px;
+                visible: root.route-sidebar-visible;
+                background: UiTokens.surface;
+                border-color: UiTokens.border;
+                border-width: 1px;
+
+                VerticalLayout {
+                    padding: UiTokens.space;
+                    spacing: 5px;
+
+                    // The reference mockup labels the column. Without it the list floats
+                    // against the top border with nothing saying what it is.
+                    Text {
+                        text: @tr("Views").to-uppercase();
+                        color: UiTokens.text-secondary;
+                        font-family: UiTokens.mono;
+                        font-size: UiTokens.text-caption;
+                        letter-spacing: UiTokens.tracking-label;
+                        accessible-role: none;
+                    }
+                    for route in root.route-rows: RouteNavItem {
+                        label: route.label;
+                        state: route.state;
+                        selected: route.selected;
+                        activated => { root.select-route(route.key); }
+                    }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                }
+            }
+
+            Rectangle {
+                background: UiTokens.background;
+                horizontal-stretch: 1;
+
+                if root.dashboard-visible: DashboardView {
+                    width: parent.width;
+                    height: parent.height;
+                    layout-id: root.presentation-layout-id;
+                    sections: root.dashboard-section-rows;
+                    slots: root.dashboard-board-visible-slots;
+                    quotas: root.dashboard-quota-rows;
+                    benefits: root.dashboard-benefit-rows;
+                    trend: root.dashboard-trend-points;
+                    trend-token-geometry: root.dashboard-trend-token-geometry;
+                    trend-cost-geometry: root.dashboard-trend-cost-geometry;
+                    trend-token-area: root.dashboard-trend-token-area;
+                    trend-cost-area: root.dashboard-trend-cost-area;
+                    trend-token-axis: root.dashboard-trend-token-axis;
+                    trend-cost-axis: root.dashboard-trend-cost-axis;
+                    sessions: root.dashboard-session-rows;
+                    activity: root.dashboard-activity-rows;
+                    models: root.dashboard-model-rows;
+                    header-tokens: root.dashboard-header-tokens;
+                    header-cost: root.dashboard-header-cost;
+                    header-events: root.dashboard-header-events;
+                    header-evidence: root.dashboard-header-evidence;
+                    initial-import-in-progress: root.dashboard-initial-import-in-progress;
+                    import-progress-known: root.dashboard-import-progress-known;
+                    import-progress-label: root.dashboard-import-progress-label;
+                    import-progress-ratio: root.dashboard-import-progress-ratio;
+                    startup-import-in-progress: root.dashboard-startup-import-in-progress;
+                    initial-import-stage: root.dashboard-initial-import-stage;
+                    reduced-motion: root.reduced-motion;
+                    code-commits: root.dashboard-code-commits;
+                    code-added: root.dashboard-code-added;
+                    code-removed: root.dashboard-code-removed;
+                    code-net: root.dashboard-code-net;
+                    code-efficiency: root.dashboard-code-efficiency;
+                    code-evidence: root.dashboard-code-evidence;
+                }
+
+                if root.history-visible: HistoryView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.history-day-rows;
+                    state: root.history-state;
+                    reasons: root.history-reasons;
+                    range-label: root.history-range-label;
+                    time-zone-label: root.history-time-zone-label;
+                    evidence-label: root.history-evidence-label;
+                    input-tokens: root.history-input-tokens;
+                    cached-tokens: root.history-cached-tokens;
+                    output-tokens: root.history-output-tokens;
+                    reasoning-tokens: root.history-reasoning-tokens;
+                    total-tokens: root.history-total-tokens;
+                    cost: root.history-cost;
+                    events: root.history-events;
+                    range-preset: root.history-range-preset;
+                    range-pending: root.history-range-pending;
+                    request-range-1 => { root.request-history-range-1(); }
+                    request-range-7 => { root.request-history-range-7(); }
+                    request-range-30 => { root.request-history-range-30(); }
+                }
+
+                if root.sessions-visible: SessionsView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.session-list-rows;
+                    state: root.sessions-state;
+                    reasons: root.sessions-reasons;
+                    evidence-label: root.sessions-evidence-label;
+                    loaded-label: root.sessions-loaded-label;
+                    page-status-label: root.sessions-page-status-label;
+                    navigation-pending: root.sessions-navigation-pending;
+                    next-enabled: root.sessions-next-enabled;
+                    back-to-newest-enabled: root.sessions-back-to-newest-enabled;
+                    selected-row: root.sessions-selected-row;
+                    detail-state: root.session-detail-state;
+                    detail-status-label: root.session-detail-status-label;
+                    detail-evidence-label: root.session-detail-evidence-label;
+                    detail-period-label: root.session-detail-period-label;
+                    detail-duration-label: root.session-detail-duration-label;
+                    detail-event-label: root.session-detail-event-label;
+                    detail-input-availability: root.session-detail-input-availability;
+                    detail-input-label: root.session-detail-input-label;
+                    detail-cached-availability: root.session-detail-cached-availability;
+                    detail-cached-label: root.session-detail-cached-label;
+                    detail-output-availability: root.session-detail-output-availability;
+                    detail-output-label: root.session-detail-output-label;
+                    detail-reasoning-availability: root.session-detail-reasoning-availability;
+                    detail-reasoning-label: root.session-detail-reasoning-label;
+                    detail-total-availability: root.session-detail-total-availability;
+                    detail-total-label: root.session-detail-total-label;
+                    detail-cost-availability: root.session-detail-cost-availability;
+                    detail-cost-label: root.session-detail-cost-label;
+                    detail-breakdown-rows: root.session-detail-breakdown-rows;
+                    select-row(index) => { root.select-session(index); }
+                    request-next-page => { root.request-session-page-next(); }
+                    request-back-to-newest => { root.request-session-page-newest(); }
+                }
+
+                if root.models-visible: ModelsView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.model-usage-rows;
+                    state: root.models-state;
+                    reasons: root.models-reasons;
+                    range-label: root.models-range-label;
+                    time-zone-label: root.models-time-zone-label;
+                    evidence-label: root.models-evidence-label;
+                    total-tokens: root.models-total-tokens;
+                    total-availability: root.models-total-availability;
+                    cost: root.models-cost;
+                    cost-availability: root.models-cost-availability;
+                    cost-evidence-label: root.models-cost-evidence-label;
+                    events: root.models-events;
+                    loaded-label: root.models-loaded-label;
+                    completeness-label: root.models-completeness-label;
+                }
+
+                if root.projects-visible: ProjectsView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.project-usage-rows;
+                    state: root.projects-state;
+                    reasons: root.projects-reasons;
+                    usage-range-label: root.projects-usage-range-label;
+                    usage-time-zone-label: root.projects-usage-time-zone-label;
+                    usage-evidence-label: root.projects-usage-evidence-label;
+                    code-range-label: root.projects-code-range-label;
+                    code-time-zone-label: root.projects-code-time-zone-label;
+                    code-evidence-label: root.projects-code-evidence-label;
+                    total-tokens: root.projects-total-tokens;
+                    total-availability: root.projects-total-availability;
+                    cost: root.projects-cost;
+                    cost-availability: root.projects-cost-availability;
+                    cost-evidence-label: root.projects-cost-evidence-label;
+                    events: root.projects-events;
+                    loaded-label: root.projects-loaded-label;
+                    completeness-label: root.projects-completeness-label;
+                    code-coverage-label: root.projects-code-coverage-label;
+                    code-completeness-label: root.projects-code-completeness-label;
+                }
+
+                if root.activity-visible: ActivityView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.recent-activity-rows;
+                    state: root.activity-state;
+                    reasons: root.activity-reasons;
+                    context-label: root.activity-context-label;
+                    evidence-label: root.activity-evidence-label;
+                    loaded-label: root.activity-loaded-label;
+                    page-status-label: root.activity-page-status-label;
+                    page-available: root.activity-page-available;
+                    rhythm-state: root.activity-rhythm-state;
+                    rhythm-reasons: root.activity-rhythm-reasons;
+                    rhythm-evidence-label: root.activity-rhythm-evidence-label;
+                    rhythm-time-zone-label: root.activity-rhythm-time-zone-label;
+                    rhythm-range-label: root.activity-rhythm-range-label;
+                    hour-rows: root.activity-rhythm-hour-rows;
+                    weekday-rows: root.activity-rhythm-weekday-rows;
+                }
+
+                if root.notifications-visible: NotificationsView {
+                    width: parent.width;
+                    height: parent.height;
+                    scope-rows: root.reminder-scope-rows;
+                    lot-rows: root.benefit-lot-rows;
+                    state: root.notifications-state;
+                    reasons: root.notifications-reasons;
+                    evidence-label: root.notifications-evidence-label;
+                    loaded-label: root.notifications-loaded-label;
+                    completeness-label: root.notifications-completeness-label;
+                }
+
+                if root.data-health-visible: DataHealthView {
+                    width: parent.width;
+                    height: parent.height;
+                    health: root.reliable-state-health;
+                    safe-mode: root.reliable-state-safe-mode;
+                    recovery-kind: root.reliable-recovery-kind;
+                    non-reconstructible-domains-lost: root.reliable-non-reconstructible-domains-lost;
+                    generation: root.reliable-state-generation;
+                    latest-success-label: root.reliable-latest-success-label;
+                    latest-attempt-label: root.reliable-latest-attempt-label;
+                    successful-count-label: root.reliable-successful-count-label;
+                    failure-count-label: root.reliable-failure-count-label;
+                    published-bytes-label: root.reliable-published-bytes-label;
+                    latest-failure-code: root.reliable-latest-failure-code;
+                    restore-points: root.restore-point-rows;
+                    operation-kind: root.reliable-operation-kind;
+                    operation-phase: root.reliable-operation-phase;
+                    operation-failure-code: root.reliable-operation-failure-code;
+                    operation-cancel-enabled: root.reliable-operation-cancel-enabled;
+                    restore-confirmation-visible: root.restore-confirmation-visible;
+                    restore-confirmation-row: root.restore-confirmation-row;
+                    restore-confirmation-detail: root.restore-confirmation-detail;
+                    high-contrast: root.high-contrast;
+                    reduced-motion: root.reduced-motion;
+                    backup-normal => { root.backup-normal(); }
+                    backup-compact => { root.backup-compact(); }
+                    backup-encrypted(passphrase, confirmation) => { root.backup-encrypted(passphrase, confirmation); }
+                    verify-backups => { root.verify-backups(); }
+                    preview-restore(index) => { root.preview-restore(index); }
+                    confirm-restore(index, portable-settings) => { root.confirm-restore(index, portable-settings); }
+                    dismiss-restore-confirmation => {
+                        root.restore-confirmation-visible = false;
+                        root.restore-confirmation-row = -1;
+                        root.restore-confirmation-detail = "";
+                    }
+                    rebuild-data => { root.rebuild-data(); }
+                    retry-operation => { root.retry-operation(); }
+                    cancel-operation => { root.cancel-operation(); }
+                }
+
+                settings-view := SettingsView {
+                    width: parent.width;
+                    height: parent.height;
+                    presentation-density-id: root.presentation-density-id;
+                    presentation-skin-id: root.presentation-skin-id;
+                    presentation-color-scheme-id: root.presentation-color-scheme-id;
+                    presentation-layout-id: root.presentation-layout-id;
+                    presentation-locale-id: root.presentation-locale-id;
+                    presentation-persistence-state: root.presentation-persistence-state;
+                    board-editor-rows: root.dashboard-board-editor-rows;
+                    periodic-enabled <=> root.backup-periodic-enabled;
+                    quiet-seconds <=> root.backup-quiet-seconds;
+                    interval-seconds <=> root.backup-interval-seconds;
+                    retention-budget-mib <=> root.backup-retention-budget-mib;
+                    reminder-enabled: root.reminder-enabled;
+                    reminder-preset-seven-days: root.reminder-preset-seven-days;
+                    reminder-preset-twenty-four-hours: root.reminder-preset-twenty-four-hours;
+                    reminder-preset-twelve-hours: root.reminder-preset-twelve-hours;
+                    reminder-preset-six-hours: root.reminder-preset-six-hours;
+                    reminder-preset-one-hour: root.reminder-preset-one-hour;
+                    reminder-custom-lead-rows: root.reminder-custom-lead-rows;
+                    reminder-dirty: root.reminder-dirty;
+                    reminder-feedback: root.reminder-feedback;
+                    reminder-sync-state: root.reminder-sync-state;
+                    current-user-startup-status: root.current-user-startup-status;
+                    current-user-startup-can-enable: root.current-user-startup-can-enable;
+                    current-user-startup-can-disable: root.current-user-startup-can-disable;
+                    current-user-startup-can-repair: root.current-user-startup-can-repair;
+                    settings-health: root.settings-health;
+                    config-import-preview-visible: root.config-import-preview-visible;
+                    config-import-created-label: root.config-import-created-label;
+                    config-import-bytes-label: root.config-import-bytes-label;
+                    config-import-changes-label: root.config-import-changes-label;
+                    high-contrast: root.high-contrast;
+                    reduced-motion: root.reduced-motion;
+                    export-config => { root.export-config(); }
+                    import-config => { root.import-config(); }
+                    confirm-config-import => { root.confirm-config-import(); }
+                    cancel-config-import => { root.cancel-config-import(); }
+                    update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
+                    reminder-enabled-edited(enabled) => { root.reminder-enabled-edited(enabled); }
+                    reminder-preset-edited(index, enabled) => { root.reminder-preset-edited(index, enabled); }
+                    reminder-custom-lead-edited(index, enabled, value, unit-index) => { root.reminder-custom-lead-edited(index, enabled, value, unit-index); }
+                    save-reminder-policy => { root.save-reminder-policy(); }
+                    reset-reminder-recommended => { root.reset-reminder-recommended(); }
+                    enable-current-user-startup => { root.enable-current-user-startup(); }
+                    repair-current-user-startup => { root.repair-current-user-startup(); }
+                    disable-current-user-startup => { root.disable-current-user-startup(); }
+                    select-presentation-density(index) => { root.select-presentation-density(index); }
+                    select-presentation-skin(index) => { root.select-presentation-skin(index); }
+                    select-presentation-color-scheme(index) => { root.select-presentation-color-scheme(index); }
+                    select-presentation-layout(index) => { root.select-presentation-layout(index); }
+                    select-presentation-locale(index) => { root.select-presentation-locale(index); }
+                    move-dashboard-board-row(index, delta) => { root.move-dashboard-board-row(index, delta); }
+                    set-dashboard-board-row-visible(index, visible) => { root.set-dashboard-board-row-visible(index, visible); }
+                    set-dashboard-board-row-collapsed(index, collapsed) => { root.set-dashboard-board-row-collapsed(index, collapsed); }
+                    reset-dashboard-board => { root.reset-dashboard-board(); }
+                    visible: root.settings-visible;
+                }
+
+                help-view := HelpAboutView {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.help-about-visible;
+                    product-version: root.help-product-version;
+                }
+
+                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.activity-visible && !root.notifications-visible && !root.data-health-visible && !root.settings-visible && !root.help-about-visible: RouteState {
+                    x: UiTokens.space;
+                    y: UiTokens.space;
+                    width: parent.width - 2 * UiTokens.space;
+                    height: parent.height - 2 * UiTokens.space;
+                    route-label: root.active-route-label;
+                    state: root.active-route-state;
+                    reasons: root.active-route-reasons;
+                    generation: root.product-generation;
+                }
+            }
+        }
+
+        Rectangle {
+            height: root.dashboard-visible || root.notifications-visible ? 54px : 0px;
+            visible: root.dashboard-visible || root.notifications-visible;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: 1px;
+            HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-xs;
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "●";
+                    label: @tr("Dashboard");
+                    selected: root.dashboard-visible;
+                    activated => { root.select-route("dashboard"); }
+                }
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "!";
+                    label: @tr("Alerts");
+                    selected: root.notifications-visible;
+                    activated => { root.select-route("notifications"); }
+                }
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "⚙";
+                    label: @tr("Settings");
+                    selected: root.settings-visible;
+                    activated => { root.select-route("settings"); }
+                }
+                ShellTab {
+                    horizontal-stretch: 1;
+                    glyph: "≡";
+                    label: @tr("Go to route");
+                    selected: !root.dashboard-visible && !root.notifications-visible && !root.settings-visible;
+                    activated => { root.open-command-palette(); }
+                }
+            }
+        }
+    }
+
+    compact-view := CompactWidgetView {
+        width: parent.width;
+        height: parent.height;
+        visible: root.compact-widget-visible;
+        quotas: root.dashboard-quota-rows;
+        state: root.active-route-state;
+        reasons: root.active-route-reasons;
+        return-dashboard => { root.select-route("dashboard"); }
+    }
+
+    if root.in-app-notification-visible: InAppNotificationPanel {
+        x: parent.width - self.width - UiTokens.space;
+        y: 52px + UiTokens.space;
+        width: min(440px, parent.width - 2 * UiTokens.space);
+        height: min(460px, parent.height - 52px - 54px - 2 * UiTokens.space);
+        rows: root.in-app-notification-rows;
+        count-label: root.in-app-notification-count-label;
+        dismiss => { root.dismiss-in-app-notifications(); }
+    }
+
+    RoutePalette {
+        width: parent.width;
+        height: parent.height;
+        palette-open: root.command-palette-visible;
+        rows: root.command-palette-rows;
+        query: root.command-palette-query;
+        selected-ordinal: root.command-palette-selected-ordinal;
+        query-edited(query) => { root.command-palette-query-edited(query); }
+        dismiss => { root.dismiss-command-palette(); }
+        move-selection(delta) => { root.move-command-palette-selection(delta); }
+        activate-selection => { root.activate-command-palette-selection(); }
+        activate-route(key) => { root.activate-command-palette-route(key); }
+    }
+    }
+}

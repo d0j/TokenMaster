@@ -8,6 +8,6 @@ Keep every surface local-first and privacy-safe: never add persisted prompts,
 responses, reasoning, commands, source contents, credentials, or absolute user paths.
 Do not add unbounded collection growth or whole-history work to a UI hot path.
 
-Before a pull request, update `spec/TRACEABILITY.md`, `docs/CURRENT_STATE.md`,
-`docs/PROJECT_HISTORY.md`, and the relevant contract or operational guide. State
+Before a pull request, update `spec/TRACEABILITY.md`, `docs/CHANGELOG.md`, and the
+relevant contract or operational guide. State
 unverified Windows, packaging, or release boundaries explicitly.

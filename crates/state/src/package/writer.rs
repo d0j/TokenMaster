@@ -1,0 +1,651 @@
+use std::io::{self, Read, Write};
+
+use sha2::{Digest, Sha256};
+use tokenmaster_store::{StoreErrorCode, VerifiedBackupCandidateReader};
+
+use crate::{PortableSettingsCandidate, StateError};
+
+use super::capability::{
+    BackupStagedFile, BackupWriterAdapter, DurableFileReader, DurableReaderAdapter,
+    DurableStagedFile, DurableWriterAdapter, map_backup_directory_error, map_durable_error,
+    resolve_backup_codec_error, resolve_codec_error,
+};
+use super::header::{Header, PackageKind};
+use super::manifest::{
+    EntryKind, EntryPrefix, EntrySuffix, FOOTER_MAGIC, MANIFEST_BYTES, Manifest,
+};
+use super::{
+    BackupCompression, BackupMetadata, BackupPackage, ConfigPackage, MAX_CONFIG_PACKAGE_BYTES,
+    MAX_DATABASE_PACKAGE_BYTES, MAX_ENCODED_PACKAGE_BYTES, MAX_PACKAGE_TOTAL_EXPANDED_BYTES,
+    MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_IO_BUFFER_BYTES, PACKAGE_WINDOW_LOG, PackageReceipt,
+    VerifiedBackupPackage,
+};
+
+impl ConfigPackage {
+    /// Writes and seals a deterministic settings-only package in a controlled stage.
+    pub fn write(
+        settings: &PortableSettingsCandidate,
+        created_at_utc_ms: i64,
+        destination: &mut DurableStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            let (result, failure) = {
+                let mut destination_adapter = DurableWriterAdapter::new(destination);
+                let result =
+                    write_config_stream(settings, created_at_utc_ms, &mut destination_adapter);
+                (result, destination_adapter.failure())
+            };
+            let receipt = resolve_codec_error(result, &[failure])?;
+            if receipt.package_len() > MAX_CONFIG_PACKAGE_BYTES {
+                return Err(StateError::capacity_exceeded());
+            }
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_durable_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_stage(result, destination)
+    }
+}
+
+fn write_config_stream<W: Write>(
+    settings: &PortableSettingsCandidate,
+    created_at_utc_ms: i64,
+    destination: &mut W,
+) -> Result<PackageReceipt, StateError> {
+    let settings_bytes = settings.encode_json()?;
+    let settings_len =
+        u64::try_from(settings_bytes.len()).map_err(|_| StateError::capacity_exceeded())?;
+    validate_settings_len(settings_len)?;
+    let manifest = Manifest::new(
+        PackageKind::Config,
+        0,
+        BackupCompression::Normal,
+        created_at_utc_ms,
+        None,
+    )?;
+    let header = Header::new(PackageKind::Config, MANIFEST_BYTES, settings_len)?;
+    let mut output = PackageOutput::new(destination);
+    let mut descriptor_hasher = Sha256::new();
+    output.write_checked(&header.encode())?;
+    write_manifest(&mut output, &mut descriptor_hasher, manifest)?;
+    let mut source = settings_bytes.as_slice();
+    write_entry(
+        &mut output,
+        &mut descriptor_hasher,
+        EntryPrefix::new(
+            EntryKind::Settings,
+            BackupCompression::Normal,
+            settings_len,
+            *settings.digest().as_bytes(),
+        ),
+        &mut source,
+    )?;
+    finish_package(output, descriptor_hasher)
+}
+
+impl BackupPackage {
+    /// Copies one already verified sealed backup stage into a controlled durable stage.
+    ///
+    /// The source is recounted and rehashed against the opaque verification receipt;
+    /// callers receive no generic stream or digest authority.
+    pub fn copy_verified_stage_to_durable(
+        source: &BackupStagedFile,
+        verified: &VerifiedBackupPackage,
+        destination: &mut DurableStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            let expected = verified.receipt();
+            let mut source = source.open_reader().map_err(map_backup_directory_error)?;
+            if source.len() != expected.package_len() {
+                return Err(StateError::integrity());
+            }
+            let (result, failures) = {
+                let mut source_adapter = DurableReaderAdapter::new(&mut source);
+                let mut destination_adapter = DurableWriterAdapter::new(destination);
+                let result = (|| {
+                    let mut hasher = Sha256::new();
+                    let mut observed_len = 0_u64;
+                    let mut buffer = [0_u8; PACKAGE_IO_BUFFER_BYTES];
+                    loop {
+                        let count = source_adapter
+                            .read(&mut buffer)
+                            .map_err(|_| StateError::integrity())?;
+                        if count == 0 {
+                            break;
+                        }
+                        destination_adapter
+                            .write_all(&buffer[..count])
+                            .map_err(|_| StateError::unavailable())?;
+                        hasher.update(&buffer[..count]);
+                        observed_len = observed_len
+                            .checked_add(
+                                u64::try_from(count)
+                                    .map_err(|_| StateError::capacity_exceeded())?,
+                            )
+                            .ok_or_else(StateError::capacity_exceeded)?;
+                    }
+                    let observed_sha256: [u8; 32] = hasher.finalize().into();
+                    if observed_len != expected.package_len()
+                        || &observed_sha256 != expected.file_sha256()
+                    {
+                        return Err(StateError::integrity());
+                    }
+                    Ok(expected)
+                })();
+                (
+                    result,
+                    [source_adapter.failure(), destination_adapter.failure()],
+                )
+            };
+            let receipt = resolve_codec_error(result, &failures)?;
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_durable_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_stage(result, destination)
+    }
+
+    /// Writes and seals a typed settings-plus-database package in a controlled stage.
+    ///
+    /// `database_len` and `database_sha256` must come from a verified standalone
+    /// snapshot. The source is independently counted and hashed before success.
+    #[allow(clippy::too_many_arguments)]
+    pub fn write(
+        settings: &PortableSettingsCandidate,
+        database: &mut DurableFileReader,
+        database_len: u64,
+        database_sha256: [u8; 32],
+        database_schema_version: u16,
+        compression: BackupCompression,
+        metadata: BackupMetadata,
+        destination: &mut DurableStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            if database.len() != database_len {
+                return Err(StateError::integrity());
+            }
+            let (result, failures) = {
+                let mut database_adapter = DurableReaderAdapter::new(database);
+                let mut destination_adapter = DurableWriterAdapter::new(destination);
+                let result = write_backup_stream(
+                    settings,
+                    &mut database_adapter,
+                    database_len,
+                    database_sha256,
+                    database_schema_version,
+                    compression,
+                    metadata,
+                    &mut destination_adapter,
+                );
+                (
+                    result,
+                    [database_adapter.failure(), destination_adapter.failure()],
+                )
+            };
+            let receipt = resolve_codec_error(result, &failures)?;
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_durable_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_stage(result, destination)
+    }
+
+    /// Writes and seals a typed package in one exact backup-directory stage.
+    ///
+    /// Publication remains exclusively controlled by `BackupDirectory::publish`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn write_to_backup_stage(
+        settings: &PortableSettingsCandidate,
+        database: &mut DurableFileReader,
+        database_len: u64,
+        database_sha256: [u8; 32],
+        database_schema_version: u16,
+        compression: BackupCompression,
+        metadata: BackupMetadata,
+        destination: &mut BackupStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            if database.len() != database_len {
+                return Err(StateError::integrity());
+            }
+            let (result, database_failure, destination_failure) = {
+                let mut database_adapter = DurableReaderAdapter::new(database);
+                let mut destination_adapter = BackupWriterAdapter::new(destination);
+                let result = write_backup_stream(
+                    settings,
+                    &mut database_adapter,
+                    database_len,
+                    database_sha256,
+                    database_schema_version,
+                    compression,
+                    metadata,
+                    &mut destination_adapter,
+                );
+                (
+                    result,
+                    database_adapter.failure(),
+                    destination_adapter.failure(),
+                )
+            };
+            let receipt =
+                resolve_backup_codec_error(result, database_failure, destination_failure)?;
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_backup_directory_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_backup_stage(result, destination)
+    }
+
+    /// Writes a package from one exact store-verified SQLite candidate stream.
+    ///
+    /// The typed source is revalidated by the store before opening and after complete
+    /// consumption. Any source, codec, or destination failure discards the package
+    /// stage and leaves no publication capability.
+    pub fn write_verified_candidate_to_backup_stage(
+        settings: &PortableSettingsCandidate,
+        mut database: VerifiedBackupCandidateReader<'_>,
+        compression: BackupCompression,
+        metadata: BackupMetadata,
+        destination: &mut BackupStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            let database_len = database.len();
+            let database_sha256 = *database.sha256();
+            let database_schema_version = u16::try_from(database.schema_version())
+                .map_err(|_| StateError::unsupported_version())?;
+            let (codec_result, source_failure, destination_failure) = {
+                let mut database_adapter = VerifiedCandidateAdapter::new(&mut database);
+                let mut destination_adapter = BackupWriterAdapter::new(destination);
+                let result = write_backup_stream(
+                    settings,
+                    &mut database_adapter,
+                    database_len,
+                    database_sha256,
+                    database_schema_version,
+                    compression,
+                    metadata,
+                    &mut destination_adapter,
+                );
+                (
+                    result,
+                    database_adapter.failure(),
+                    destination_adapter.failure(),
+                )
+            };
+            let receipt = match codec_result {
+                Ok(receipt) => receipt,
+                Err(codec_error) => {
+                    return Err(source_failure
+                        .map(map_store_error)
+                        .or_else(|| destination_failure.map(map_backup_directory_error))
+                        .unwrap_or(codec_error));
+                }
+            };
+            database
+                .finish()
+                .map_err(|error| map_store_error(error.code()))?;
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_backup_directory_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_backup_stage(result, destination)
+    }
+}
+
+struct VerifiedCandidateAdapter<'reader, 'candidate> {
+    source: &'reader mut VerifiedBackupCandidateReader<'candidate>,
+    failure: Option<StoreErrorCode>,
+}
+
+impl<'reader, 'candidate> VerifiedCandidateAdapter<'reader, 'candidate> {
+    const fn new(source: &'reader mut VerifiedBackupCandidateReader<'candidate>) -> Self {
+        Self {
+            source,
+            failure: None,
+        }
+    }
+
+    const fn failure(&self) -> Option<StoreErrorCode> {
+        self.failure
+    }
+}
+
+impl Read for VerifiedCandidateAdapter<'_, '_> {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        if bytes.is_empty() {
+            return Ok(0);
+        }
+        match self.source.read_chunk(bytes) {
+            Ok(read) => Ok(read),
+            Err(error) => {
+                self.failure = Some(error.code());
+                Err(io::ErrorKind::Other.into())
+            }
+        }
+    }
+}
+
+const fn map_store_error(code: StoreErrorCode) -> StateError {
+    match code {
+        StoreErrorCode::CapacityExceeded => StateError::capacity_exceeded(),
+        StoreErrorCode::Busy => StateError::from_code(crate::StateErrorCode::Busy),
+        StoreErrorCode::StaleBackupCandidate
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => StateError::integrity(),
+        StoreErrorCode::InvalidValue => StateError::invalid_input(),
+        StoreErrorCode::VersionMismatch
+        | StoreErrorCode::SchemaTooNew
+        | StoreErrorCode::SchemaMismatch
+        | StoreErrorCode::PolicyMismatch => StateError::unsupported_version(),
+        StoreErrorCode::Cancelled
+        | StoreErrorCode::DeadlineExceeded
+        | StoreErrorCode::BackupIo
+        | StoreErrorCode::Database => StateError::unavailable(),
+        StoreErrorCode::InvalidStoredValue
+        | StoreErrorCode::StaleCheckpoint
+        | StoreErrorCode::RebuildRequired
+        | StoreErrorCode::StaleRevision
+        | StoreErrorCode::AccountingVersionMismatch
+        | StoreErrorCode::IncompleteManifest
+        | StoreErrorCode::UnsealedRevision
+        | StoreErrorCode::PendingContinuation
+        | StoreErrorCode::ScanInProgress
+        | StoreErrorCode::StaleScan
+        | StoreErrorCode::PendingScan
+        | StoreErrorCode::ArchiveModeMismatch => StateError::internal_invariant(),
+    }
+}
+
+fn discard_failed_stage<T>(
+    result: Result<T, StateError>,
+    destination: &mut DurableStagedFile,
+) -> Result<T, StateError> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            destination
+                .discard()
+                .map_err(|_| StateError::recovery_required())?;
+            Err(error)
+        }
+    }
+}
+
+fn discard_failed_backup_stage<T>(
+    result: Result<T, StateError>,
+    destination: &mut BackupStagedFile,
+) -> Result<T, StateError> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            destination
+                .discard()
+                .map_err(|_| StateError::recovery_required())?;
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_backup_stream<R: Read, W: Write>(
+    settings: &PortableSettingsCandidate,
+    database: &mut R,
+    database_len: u64,
+    database_sha256: [u8; 32],
+    database_schema_version: u16,
+    compression: BackupCompression,
+    metadata: BackupMetadata,
+    destination: &mut W,
+) -> Result<PackageReceipt, StateError> {
+    validate_database(database_len, database_schema_version)?;
+    let settings_bytes = settings.encode_json()?;
+    let settings_len =
+        u64::try_from(settings_bytes.len()).map_err(|_| StateError::capacity_exceeded())?;
+    validate_settings_len(settings_len)?;
+    let total_expanded = settings_len
+        .checked_add(database_len)
+        .ok_or_else(StateError::capacity_exceeded)?;
+    if total_expanded > MAX_PACKAGE_TOTAL_EXPANDED_BYTES {
+        return Err(StateError::capacity_exceeded());
+    }
+
+    let manifest = Manifest::new(
+        PackageKind::Backup,
+        database_schema_version,
+        compression,
+        metadata.created_at_utc_ms(),
+        Some(metadata.purpose()),
+    )?;
+    let header = Header::new(PackageKind::Backup, MANIFEST_BYTES, total_expanded)?;
+    let mut output = PackageOutput::new(destination);
+    let mut descriptor_hasher = Sha256::new();
+    output.write_checked(&header.encode())?;
+    write_manifest(&mut output, &mut descriptor_hasher, manifest)?;
+
+    let mut settings_source = settings_bytes.as_slice();
+    write_entry(
+        &mut output,
+        &mut descriptor_hasher,
+        EntryPrefix::new(
+            EntryKind::Settings,
+            compression,
+            settings_len,
+            *settings.digest().as_bytes(),
+        ),
+        &mut settings_source,
+    )?;
+    write_entry(
+        &mut output,
+        &mut descriptor_hasher,
+        EntryPrefix::new(
+            EntryKind::Database,
+            compression,
+            database_len,
+            database_sha256,
+        ),
+        database,
+    )?;
+    finish_package(output, descriptor_hasher)
+}
+
+fn validate_settings_len(len: u64) -> Result<(), StateError> {
+    if len == 0 {
+        return Err(StateError::invalid_input());
+    }
+    if len > MAX_SETTINGS_PACKAGE_BYTES {
+        return Err(StateError::capacity_exceeded());
+    }
+    Ok(())
+}
+
+fn validate_database(len: u64, schema_version: u16) -> Result<(), StateError> {
+    if len == 0 || schema_version == 0 {
+        return Err(StateError::invalid_input());
+    }
+    if len > MAX_DATABASE_PACKAGE_BYTES {
+        return Err(StateError::capacity_exceeded());
+    }
+    Ok(())
+}
+
+fn write_manifest<W: Write>(
+    output: &mut PackageOutput<'_, W>,
+    descriptor_hasher: &mut Sha256,
+    manifest: Manifest,
+) -> Result<(), StateError> {
+    let encoded = manifest.encode();
+    descriptor_hasher.update(encoded);
+    output.write_checked(&encoded)
+}
+
+fn write_entry<R: Read, W: Write>(
+    output: &mut PackageOutput<'_, W>,
+    descriptor_hasher: &mut Sha256,
+    prefix: EntryPrefix,
+    source: &mut R,
+) -> Result<(), StateError> {
+    let prefix_bytes = prefix.encode();
+    descriptor_hasher.update(prefix_bytes);
+    output.write_checked(&prefix_bytes)?;
+    let compressed_start = output.len;
+    let mut expanded_hasher = Sha256::new();
+    let mut expanded = 0_u64;
+    let compression_result = (|| -> Result<(), StateError> {
+        let mut encoder =
+            zstd::stream::write::Encoder::new(&mut *output, prefix.compression.level())
+                .map_err(|_| StateError::internal_invariant())?;
+        encoder
+            .include_checksum(true)
+            .and_then(|()| encoder.include_contentsize(true))
+            .and_then(|()| encoder.long_distance_matching(false))
+            .and_then(|()| encoder.window_log(PACKAGE_WINDOW_LOG))
+            .and_then(|()| encoder.set_pledged_src_size(Some(prefix.expanded_len)))
+            .map_err(|_| StateError::internal_invariant())?;
+        let mut buffer = [0_u8; PACKAGE_IO_BUFFER_BYTES];
+        while expanded < prefix.expanded_len {
+            let remaining = prefix.expanded_len - expanded;
+            let request = usize::try_from(remaining.min(PACKAGE_IO_BUFFER_BYTES as u64))
+                .map_err(|_| StateError::capacity_exceeded())?;
+            let count = source
+                .read(&mut buffer[..request])
+                .map_err(|_| StateError::unavailable())?;
+            if count == 0 {
+                return Err(StateError::integrity());
+            }
+            encoder
+                .write_all(&buffer[..count])
+                .map_err(|_| StateError::unavailable())?;
+            expanded = expanded
+                .checked_add(u64::try_from(count).map_err(|_| StateError::capacity_exceeded())?)
+                .ok_or_else(StateError::capacity_exceeded)?;
+            expanded_hasher.update(&buffer[..count]);
+        }
+        let mut extra = [0_u8; 1];
+        if source
+            .read(&mut extra)
+            .map_err(|_| StateError::unavailable())?
+            != 0
+        {
+            return Err(StateError::integrity());
+        }
+        encoder
+            .finish()
+            .map(|_| ())
+            .map_err(|_| StateError::integrity())
+    })();
+    if output.capacity_exceeded {
+        return Err(StateError::capacity_exceeded());
+    }
+    compression_result?;
+    let expanded_sha256: [u8; 32] = expanded_hasher.finalize().into();
+    if expanded != prefix.expanded_len || expanded_sha256 != prefix.expanded_sha256 {
+        return Err(StateError::integrity());
+    }
+    let compressed_len = output
+        .len
+        .checked_sub(compressed_start)
+        .ok_or_else(StateError::internal_invariant)?;
+    if compressed_len == 0 {
+        return Err(StateError::integrity());
+    }
+    let suffix_bytes = EntrySuffix::new(compressed_len, expanded).encode();
+    descriptor_hasher.update(suffix_bytes);
+    output.write_checked(&suffix_bytes)
+}
+
+fn finish_package<W: Write>(
+    mut output: PackageOutput<'_, W>,
+    descriptor_hasher: Sha256,
+) -> Result<PackageReceipt, StateError> {
+    let descriptor_digest: [u8; 32] = descriptor_hasher.finalize().into();
+    output.write_checked(&descriptor_digest)?;
+    output.write_checked(FOOTER_MAGIC)?;
+    let package_sha256: [u8; 32] = output.package_hasher.clone().finalize().into();
+    output.write_unhashed(&package_sha256)?;
+    output
+        .destination
+        .flush()
+        .map_err(|_| StateError::unavailable())?;
+    let file_sha256: [u8; 32] = output.file_hasher.finalize().into();
+    Ok(PackageReceipt::new(output.len, package_sha256, file_sha256))
+}
+
+struct PackageOutput<'a, W: Write> {
+    destination: &'a mut W,
+    package_hasher: Sha256,
+    file_hasher: Sha256,
+    len: u64,
+    capacity_exceeded: bool,
+}
+
+impl<'a, W: Write> PackageOutput<'a, W> {
+    fn new(destination: &'a mut W) -> Self {
+        Self {
+            destination,
+            package_hasher: Sha256::new(),
+            file_hasher: Sha256::new(),
+            len: 0,
+            capacity_exceeded: false,
+        }
+    }
+
+    fn write_checked(&mut self, bytes: &[u8]) -> Result<(), StateError> {
+        self.write_all(bytes).map_err(|_| {
+            if self.capacity_exceeded {
+                StateError::capacity_exceeded()
+            } else {
+                StateError::unavailable()
+            }
+        })
+    }
+
+    fn write_unhashed(&mut self, bytes: &[u8]) -> Result<(), StateError> {
+        let additional = u64::try_from(bytes.len()).map_err(|_| StateError::capacity_exceeded())?;
+        let next = self
+            .len
+            .checked_add(additional)
+            .ok_or_else(StateError::capacity_exceeded)?;
+        if next > MAX_ENCODED_PACKAGE_BYTES {
+            return Err(StateError::capacity_exceeded());
+        }
+        self.destination
+            .write_all(bytes)
+            .map_err(|_| StateError::unavailable())?;
+        self.file_hasher.update(bytes);
+        self.len = next;
+        Ok(())
+    }
+}
+
+impl<W: Write> Write for PackageOutput<'_, W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let additional = u64::try_from(bytes.len()).map_err(|_| io::ErrorKind::OutOfMemory)?;
+        let next = self.len.checked_add(additional);
+        if next.is_none_or(|next| next > MAX_ENCODED_PACKAGE_BYTES) {
+            self.capacity_exceeded = true;
+            return Err(io::ErrorKind::OutOfMemory.into());
+        }
+        let count = self.destination.write(bytes)?;
+        self.package_hasher.update(&bytes[..count]);
+        self.file_hasher.update(&bytes[..count]);
+        self.len = self
+            .len
+            .checked_add(u64::try_from(count).map_err(|_| io::ErrorKind::OutOfMemory)?)
+            .ok_or(io::ErrorKind::OutOfMemory)?;
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.destination.flush()
+    }
+}

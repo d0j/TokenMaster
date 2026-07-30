@@ -3,6 +3,7 @@ use std::path::{Component, Path};
 use tokenmaster_domain::{
     ActivityKind, MAX_METADATA_BYTES, MetadataValue, ProjectAlias, UsageSessionId,
 };
+use tokenmaster_provider::RepositoryCandidatePath;
 
 use super::state::{MAX_CONTEXT_WINDOW_TOKENS, MAX_TOOL_NAME_BYTES};
 use super::value::{LenientU64, ResolvedModel, normalize_explicit_model};
@@ -16,10 +17,13 @@ pub(super) struct MetadataUpdate {
     pub(super) service_tier: Option<MetadataValue>,
     pub(super) session_id: Option<UsageSessionId>,
     pub(super) project: Option<ProjectAlias>,
+    pub(super) repository_candidate: RepositoryCandidateUpdate,
     pub(super) originator: Option<MetadataValue>,
     pub(super) source_alias: Option<MetadataValue>,
     pub(super) git_branch: Option<MetadataValue>,
     pub(super) context_window: Option<u64>,
+    pub(super) parent_session_id: Option<UsageSessionId>,
+    pub(super) lineage_conflict: bool,
 }
 
 impl MetadataUpdate {
@@ -28,10 +32,16 @@ impl MetadataUpdate {
             || self.service_tier.is_some()
             || self.session_id.is_some()
             || self.project.is_some()
+            || !matches!(
+                self.repository_candidate,
+                RepositoryCandidateUpdate::Missing
+            )
             || self.originator.is_some()
             || self.source_alias.is_some()
             || self.git_branch.is_some()
             || self.context_window.is_some()
+            || self.parent_session_id.is_some()
+            || self.lineage_conflict
     }
 }
 
@@ -61,16 +71,64 @@ pub(super) fn metadata_update(
             diagnostics,
         )
     });
+    let (parent_session_id, lineage_conflict) = lineage_metadata(raw, payload, diagnostics);
     MetadataUpdate {
         current_model: current_model.flatten(),
         service_tier: display_metadata(&payload.service_tier, diagnostics),
         session_id: session_metadata(raw.kind.value(), payload, diagnostics),
         project: project_alias(&payload.cwd, diagnostics),
+        repository_candidate: repository_candidate(&payload.cwd),
         originator: display_metadata(&payload.originator, diagnostics),
-        source_alias: display_metadata(&payload.source, diagnostics),
+        source_alias: display_metadata(payload.source.display(), diagnostics),
         git_branch: display_metadata(&payload.git.branch, diagnostics),
         context_window: context_window(payload.model_context_window, diagnostics),
+        parent_session_id,
+        lineage_conflict,
     }
+}
+
+#[derive(Default)]
+pub(super) enum RepositoryCandidateUpdate {
+    #[default]
+    Missing,
+    Set(RepositoryCandidatePath),
+    Clear,
+}
+
+fn lineage_metadata(
+    raw: &RawLine<'_>,
+    payload: &RawPayload<'_>,
+    diagnostics: &mut ParserDiagnostics,
+) -> (Option<UsageSessionId>, bool) {
+    let mut parent = None;
+    let mut conflict = false;
+    for candidate in [
+        &raw.forked_from_id,
+        &raw.parent_thread_id,
+        &payload.forked_from_id,
+        &payload.parent_thread_id,
+        payload.source.structured_parent_thread_id(),
+    ] {
+        if candidate.is_invalid() {
+            diagnostics.record(ParserDiagnosticCode::InvalidMetadata);
+            continue;
+        }
+        let Some(value) = candidate.value() else {
+            continue;
+        };
+        let Some(candidate) = UsageSessionId::new(value.to_owned())
+            .map_err(|_| diagnostics.record(ParserDiagnosticCode::InvalidMetadata))
+            .ok()
+        else {
+            continue;
+        };
+        match parent.as_ref() {
+            None => parent = Some(candidate),
+            Some(existing) if existing == &candidate => {}
+            Some(_) => conflict = true,
+        }
+    }
+    (parent, conflict)
 }
 
 fn normalize_metadata_model(
@@ -181,6 +239,32 @@ fn project_alias(
     )
 }
 
+fn repository_candidate(raw: &RawPathText<'_>) -> RepositoryCandidateUpdate {
+    if raw.is_missing() {
+        return RepositoryCandidateUpdate::Missing;
+    }
+    if raw.is_invalid() {
+        return RepositoryCandidateUpdate::Clear;
+    }
+    let Some(value) = raw.value() else {
+        return RepositoryCandidateUpdate::Clear;
+    };
+    let value = value.trim();
+    let path = Path::new(value);
+    if value.is_empty()
+        || validate_local_root_namespace(path).is_err()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
+        return RepositoryCandidateUpdate::Clear;
+    }
+    RepositoryCandidatePath::new(path.to_path_buf()).map_or(
+        RepositoryCandidateUpdate::Clear,
+        RepositoryCandidateUpdate::Set,
+    )
+}
+
 fn context_window(raw: LenientU64, diagnostics: &mut ParserDiagnostics) -> Option<u64> {
     match raw {
         LenientU64::Valid(value) if (1..=MAX_CONTEXT_WINDOW_TOKENS).contains(&value) => Some(value),
@@ -278,6 +362,14 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> (&str, bool) {
 }
 
 pub(super) fn apply_metadata(state: &mut ParserState, update: MetadataUpdate) {
+    if let Some(parent) = update.parent_session_id {
+        match state.parent_session_id.as_ref() {
+            None => state.parent_session_id = Some(parent),
+            Some(existing) if existing == &parent => {}
+            Some(_) => state.lineage_conflict = true,
+        }
+    }
+    state.lineage_conflict |= update.lineage_conflict;
     if let Some(value) = update.current_model {
         state.current_model = Some(value);
     }
@@ -287,8 +379,20 @@ pub(super) fn apply_metadata(state: &mut ParserState, update: MetadataUpdate) {
     if let Some(value) = update.session_id {
         state.session_id = Some(value);
     }
+    let repository_project = update.project.clone();
     if let Some(value) = update.project {
         state.project = Some(value);
+    }
+    match update.repository_candidate {
+        RepositoryCandidateUpdate::Missing => {}
+        RepositoryCandidateUpdate::Set(value) => {
+            state.repository_candidate = Some(value);
+            state.repository_project = repository_project;
+        }
+        RepositoryCandidateUpdate::Clear => {
+            state.repository_candidate = None;
+            state.repository_project = None;
+        }
     }
     if let Some(value) = update.originator {
         state.originator = Some(value);

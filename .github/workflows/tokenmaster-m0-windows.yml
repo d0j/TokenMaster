@@ -5,20 +5,30 @@ on:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "deny.toml"
+      - ".gitattributes"
+      - ".gitleaks.toml"
+      - ".gitleaksignore"
       - "crates/**"
       - "scripts/**"
       - "spec/**"
       - "docs/**"
-      - ".github/workflows/tokenmaster-m0-windows.yml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "deny.toml"
+      - ".gitattributes"
+      - ".gitleaks.toml"
+      - ".gitleaksignore"
       - "crates/**"
       - "scripts/**"
       - "spec/**"
       - "docs/**"
-      - ".github/workflows/tokenmaster-m0-windows.yml"
+      - ".github/workflows/**"
 
 permissions:
   contents: read
@@ -26,23 +36,39 @@ permissions:
 jobs:
   verify:
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Install Pester 5.7.1
         shell: pwsh
-        run: Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+        run: |
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Default
+          }
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
       - name: Install Rust 1.97.0
         shell: pwsh
-        run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt --component clippy --target x86_64-pc-windows-gnu
+        run: rustup toolchain install 1.97.0-x86_64-pc-windows-msvc --profile minimal --component rustfmt --component clippy
+      # Repository policy allows GitHub-owned actions only, so the Rust-specific
+      # third-party cache cannot be used here. See scripts/validate-immutable-actions.ps1.
+      - name: Cache Cargo registry and build artifacts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
       - name: Verify TokenMaster M0
         shell: pwsh
         run: ./scripts/verify-m0.ps1 -RepositoryRoot $PWD.Path
       - name: Upload developer receipts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: tokenmaster-m0-developer-receipts
           path: reports/*.json

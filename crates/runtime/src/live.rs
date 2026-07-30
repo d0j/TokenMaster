@@ -1,0 +1,921 @@
+use std::fmt;
+use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
+
+use tokenmaster_engine::{
+    Clock, ExecutionTimings, OneShotExecutor, OperationControl, PortError, PortErrorCode,
+    RefreshOutcome, RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion,
+    WorkerCompletionNotifier, WorkerError, WorkerErrorCode, WorkerPhase, WriterLease,
+    WriterLeaseGuard,
+};
+use tokenmaster_platform::ExclusiveFileLeaseGuard;
+use tokenmaster_platform::PowerLifecycleEvent;
+use tokenmaster_provider::DiscoveryRequest;
+use tokenmaster_store::{ArchiveMode, ArchivePublicationQuality, UsageStore};
+
+use crate::lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntimeSnapshot};
+use crate::publication::{
+    EnginePublicationQuality, EnginePublicationState, archive_snapshot_candidate,
+};
+use crate::recovery::{StagingRecoveryOutcome, StartupRecoveryReport, recover_startup};
+use crate::watcher::{ChangedPathBatch, ChangedPathBuffer};
+use crate::{
+    BoundedFilesystemWatcher, CodexUsageProviderFactory, GitRuntime, GitRuntimeConfig,
+    IncrementalRefreshOutcome, LiveProviderAdapter, RefreshHintSink, RefreshScheduler,
+    RuntimeError, RuntimeErrorCode, SchedulerError, SchedulerErrorCode, SchedulerPhase,
+    StoreArchive, SystemClock, TargetedRefreshOutcome, UsageProviderFactory, WatcherSnapshot,
+    refresh_incremental, refresh_targeted,
+};
+
+pub struct LiveRuntime {
+    phase: LivePhase,
+    startup_recovery: StartupRecoveryReport,
+    scheduler: RefreshScheduler,
+    worker: Arc<RefreshWorker>,
+    watcher_slot: Arc<Mutex<Option<BoundedFilesystemWatcher>>>,
+    last_watcher_snapshot: WatcherSnapshot,
+    admission_open: Arc<Mutex<bool>>,
+    reset_watcher: Arc<AtomicBool>,
+    latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
+    last_full_rebuild_timings: Arc<Mutex<Option<ExecutionTimings>>>,
+    engine_publication: Arc<Mutex<EnginePublicationState>>,
+    git_runtime: GitRuntime,
+}
+
+impl LiveRuntime {
+    pub fn start(archive_path: &Path, request: DiscoveryRequest) -> Result<Self, RuntimeError> {
+        Self::start_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+        )
+    }
+
+    pub fn start_notified(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_notified_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+            notifier,
+        )
+    }
+
+    /// Starts with the exact platform writer guard already held by state bootstrap.
+    pub fn start_guarded(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        startup_guard: ExclusiveFileLeaseGuard,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_guarded_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+            startup_guard,
+        )
+    }
+
+    /// Starts with an existing bootstrap guard and completion notifier.
+    pub fn start_notified_guarded(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        startup_guard: ExclusiveFileLeaseGuard,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_notified_guarded_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+            startup_guard,
+            notifier,
+        )
+    }
+
+    pub fn start_with_provider(
+        archive_path: &Path,
+        factory: Box<dyn UsageProviderFactory>,
+    ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        let startup_guard = lease.try_acquire_startup().map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(archive_path, factory, lease, startup_guard, None)
+    }
+
+    pub fn start_notified_with_provider(
+        archive_path: &Path,
+        factory: Box<dyn UsageProviderFactory>,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        let startup_guard = lease.try_acquire_startup().map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(
+            archive_path,
+            factory,
+            lease,
+            startup_guard,
+            Some(notifier),
+        )
+    }
+
+    pub fn start_guarded_with_provider(
+        archive_path: &Path,
+        factory: Box<dyn UsageProviderFactory>,
+        startup_guard: ExclusiveFileLeaseGuard,
+    ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        lease
+            .authorize_startup_guard(&startup_guard)
+            .map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(archive_path, factory, lease, startup_guard, None)
+    }
+
+    pub fn start_notified_guarded_with_provider(
+        archive_path: &Path,
+        factory: Box<dyn UsageProviderFactory>,
+        startup_guard: ExclusiveFileLeaseGuard,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        lease
+            .authorize_startup_guard(&startup_guard)
+            .map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(
+            archive_path,
+            factory,
+            lease,
+            startup_guard,
+            Some(notifier),
+        )
+    }
+
+    fn start_with_lease_and_guard(
+        archive_path: &Path,
+        factory: Box<dyn UsageProviderFactory>,
+        lease: crate::RuntimeWriterLease,
+        startup_guard: ExclusiveFileLeaseGuard,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
+        let clock: Arc<dyn Clock> = SystemClock::shared();
+        let store = UsageStore::open(archive_path)
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?;
+        let mut archive = StoreArchive::new(store);
+        let startup_recovery = recover_startup(&mut archive).map_err(startup_port_error)?;
+        if startup_recovery.staging() == StagingRecoveryOutcome::Discarded
+            && archive
+                .store()
+                .archive_publication()
+                .map_err(|_| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?
+                .quality()
+                == ArchivePublicationQuality::RecoveryPending
+        {
+            let cursor = archive.current_cursor().map_err(startup_port_error)?;
+            archive
+                .restore_partial_after_abandoned_rebuild(cursor)
+                .map_err(startup_port_error)?;
+        }
+        drop(startup_guard);
+
+        let initial_publication = archive_snapshot_candidate(archive.store())
+            .map_err(|()| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?;
+        let initial_refresh = initial_refresh_snapshot(initial_publication.quality);
+        let engine_publication = Arc::new(Mutex::new(EnginePublicationState::seed(
+            initial_publication,
+        )));
+        archive.observe_progress_with(Arc::clone(&engine_publication));
+        let git_config = GitRuntimeConfig::new(archive_path.to_path_buf())?;
+        let git_runtime = match notifier.as_ref() {
+            Some(notifier) => GitRuntime::start_notified(git_config, notifier.clone())?,
+            None => GitRuntime::start(git_config)?,
+        };
+
+        let watcher_slot = Arc::new(Mutex::new(None));
+        let changed_paths = ChangedPathBuffer::new();
+        let force_reconcile = Arc::new(AtomicBool::new(false));
+        let reset_watcher = Arc::new(AtomicBool::new(true));
+        let execution_watcher = Arc::clone(&watcher_slot);
+        let execution_reset = Arc::clone(&reset_watcher);
+        let execution_clock = Arc::clone(&clock);
+        let latest_refresh = Arc::new(Mutex::new(initial_refresh));
+        let execution_refresh = Arc::clone(&latest_refresh);
+        let last_full_rebuild_timings = Arc::new(Mutex::new(None));
+        let execution_full_rebuild_timings = Arc::clone(&last_full_rebuild_timings);
+        let execution_publication = Arc::clone(&engine_publication);
+        let repository_hints =
+            crate::provider::repository_hints_for(&*factory, git_runtime.ingress());
+        let continuation_schedule = Arc::new(Mutex::new(None::<RefreshHintSink>));
+        let mut execution = LiveExecution {
+            clock: Arc::clone(&clock),
+            lease,
+            adapter: factory.build(repository_hints)?,
+            archive,
+            watcher_slot: execution_watcher,
+            changed_paths: changed_paths.clone(),
+            force_reconcile: Arc::clone(&force_reconcile),
+            reset_watcher: execution_reset,
+            last_watch_roots: Vec::new(),
+            watch_set_complete: false,
+            latest_refresh: execution_refresh,
+            last_full_rebuild_timings: execution_full_rebuild_timings,
+            engine_publication: execution_publication,
+            continuation_schedule: Arc::clone(&continuation_schedule),
+        };
+        let worker = Arc::new(
+            match notifier {
+                Some(notifier) => {
+                    RefreshWorker::spawn_notified(execution_clock, notifier, move |permit| {
+                        execution.run(permit)
+                    })
+                }
+                None => RefreshWorker::spawn(execution_clock, move |permit| execution.run(permit)),
+            }
+            .map_err(runtime_worker_error)?,
+        );
+
+        let admission_open = Arc::new(Mutex::new(false));
+        let scheduler_worker = Arc::clone(&worker);
+        let scheduler_admission = Arc::clone(&admission_open);
+        let scheduler =
+            RefreshScheduler::spawn_paused_tracked(clock, force_reconcile, move |urgency| {
+                let admission = scheduler_admission.lock().map_err(|_| ())?;
+                if !*admission {
+                    return Ok(());
+                }
+                scheduler_worker
+                    .submit(urgency, None)
+                    .map(|_admission| ())
+                    .map_err(|_| ())
+            })
+            .map_err(runtime_scheduler_error)?;
+        *continuation_schedule
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))? = Some(scheduler.hints());
+        let watcher =
+            BoundedFilesystemWatcher::with_changed_paths(scheduler.hints(), changed_paths)
+                .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?;
+        let last_watcher_snapshot = watcher.snapshot();
+        *watcher_slot
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))? = Some(watcher);
+        *admission_open
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))? = true;
+        scheduler.resume().map_err(runtime_scheduler_error)?;
+
+        Ok(Self {
+            phase: LivePhase::Running,
+            startup_recovery,
+            scheduler,
+            worker,
+            watcher_slot,
+            last_watcher_snapshot,
+            admission_open,
+            reset_watcher,
+            latest_refresh,
+            last_full_rebuild_timings,
+            engine_publication,
+            git_runtime,
+        })
+    }
+
+    #[must_use]
+    pub const fn startup_recovery(&self) -> StartupRecoveryReport {
+        self.startup_recovery
+    }
+
+    #[must_use]
+    pub fn hints(&self) -> RefreshHintSink {
+        self.scheduler.hints()
+    }
+
+    pub fn refresh_now(&self, urgency: RefreshUrgency) -> Result<(), RuntimeError> {
+        if self.phase != LivePhase::Running {
+            return Err(RuntimeError::new(match self.phase {
+                LivePhase::Faulted => RuntimeErrorCode::Faulted,
+                LivePhase::Running => RuntimeErrorCode::Internal,
+                LivePhase::Paused | LivePhase::Stopping | LivePhase::Stopped => {
+                    RuntimeErrorCode::Closed
+                }
+            }));
+        }
+        if self.scheduler.hints().force_reconcile(urgency) {
+            Ok(())
+        } else {
+            Err(RuntimeError::new(RuntimeErrorCode::Closed))
+        }
+    }
+
+    pub fn try_completion(&self) -> Result<Option<WorkerCompletion>, RuntimeError> {
+        self.worker.try_completion().map_err(runtime_worker_error)
+    }
+
+    pub fn last_full_rebuild_timings(&self) -> Result<Option<ExecutionTimings>, RuntimeError> {
+        self.last_full_rebuild_timings
+            .lock()
+            .map(|timings| *timings)
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))
+    }
+
+    pub fn wait_for_completion(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<Option<WorkerCompletion>, RuntimeError> {
+        self.worker
+            .wait_for_completion(timeout)
+            .map_err(runtime_worker_error)
+    }
+
+    pub fn snapshot(&self) -> Result<LiveRuntimeSnapshot, RuntimeError> {
+        let scheduler = self.scheduler.snapshot();
+        let worker = self.worker.snapshot().map_err(runtime_worker_error)?;
+        let watcher = self
+            .watcher_slot
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?
+            .as_ref()
+            .map_or(
+                self.last_watcher_snapshot,
+                BoundedFilesystemWatcher::snapshot,
+            );
+        let phase = if scheduler.phase() == SchedulerPhase::Faulted
+            || worker.phase() == WorkerPhase::Faulted
+        {
+            LivePhase::Faulted
+        } else {
+            self.phase
+        };
+        let refresh = *self
+            .latest_refresh
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?;
+        let engine = self
+            .engine_publication
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?
+            .snapshot();
+        Ok(LiveRuntimeSnapshot {
+            phase,
+            scheduler,
+            worker,
+            watcher,
+            refresh,
+            engine,
+            git: self.git_runtime.snapshot()?,
+        })
+    }
+
+    pub fn pause(&mut self) -> Result<LivePhase, RuntimeError> {
+        match self.phase {
+            LivePhase::Paused => return Ok(LivePhase::Paused),
+            LivePhase::Running => {}
+            LivePhase::Faulted => return Err(RuntimeError::new(RuntimeErrorCode::Faulted)),
+            LivePhase::Stopping | LivePhase::Stopped => {
+                return Err(RuntimeError::new(RuntimeErrorCode::Closed));
+            }
+        }
+        let mut admission = match self.admission_open.lock() {
+            Ok(admission) => admission,
+            Err(_) => {
+                self.phase = LivePhase::Faulted;
+                return Err(RuntimeError::new(RuntimeErrorCode::Internal));
+            }
+        };
+        *admission = false;
+        if let Err(error) = self.scheduler.pause() {
+            self.phase = LivePhase::Faulted;
+            return Err(runtime_scheduler_error(error));
+        }
+        let snapshot = match self.worker.snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.phase = LivePhase::Faulted;
+                return Err(runtime_worker_error(error));
+            }
+        };
+        if let Some(active) = snapshot.active_request_id()
+            && let Err(error) = self.worker.cancel(active)
+            && error.code() != WorkerErrorCode::StaleRequest
+        {
+            self.phase = LivePhase::Faulted;
+            return Err(runtime_worker_error(error));
+        }
+        if let Err(error) = self.git_runtime.pause() {
+            self.phase = LivePhase::Faulted;
+            return Err(error);
+        }
+        self.phase = LivePhase::Paused;
+        Ok(self.phase)
+    }
+
+    pub fn resume(&mut self) -> Result<LivePhase, RuntimeError> {
+        match self.phase {
+            LivePhase::Running => return Ok(LivePhase::Running),
+            LivePhase::Paused => {}
+            LivePhase::Faulted => return Err(RuntimeError::new(RuntimeErrorCode::Faulted)),
+            LivePhase::Stopping | LivePhase::Stopped => {
+                return Err(RuntimeError::new(RuntimeErrorCode::Closed));
+            }
+        }
+        let mut admission = match self.admission_open.lock() {
+            Ok(admission) => admission,
+            Err(_) => {
+                self.phase = LivePhase::Faulted;
+                return Err(RuntimeError::new(RuntimeErrorCode::Internal));
+            }
+        };
+        self.reset_watcher.store(true, Ordering::Release);
+        if let Err(error) = self.git_runtime.resume() {
+            self.phase = LivePhase::Faulted;
+            return Err(error);
+        }
+        *admission = true;
+        if let Err(error) = self.scheduler.resume() {
+            *admission = false;
+            let _ = self.git_runtime.pause();
+            self.phase = LivePhase::Faulted;
+            return Err(runtime_scheduler_error(error));
+        }
+        self.phase = LivePhase::Running;
+        Ok(self.phase)
+    }
+
+    pub fn apply_power_event(
+        &mut self,
+        event: PowerLifecycleEvent,
+    ) -> Result<LivePhase, RuntimeError> {
+        match event {
+            PowerLifecycleEvent::Suspend => self.pause(),
+            PowerLifecycleEvent::Resume if self.phase == LivePhase::Running => {
+                self.reset_watcher.store(true, Ordering::Release);
+                self.git_runtime.force_recovery()?;
+                self.refresh_now(RefreshUrgency::Recovery)?;
+                Ok(self.phase)
+            }
+            PowerLifecycleEvent::Resume => self.resume(),
+        }
+    }
+
+    pub fn shutdown(&mut self) -> Result<LivePhase, RuntimeError> {
+        if self.phase == LivePhase::Stopped {
+            return Ok(self.phase);
+        }
+        self.phase = LivePhase::Stopping;
+        let mut failed = false;
+        match self.admission_open.lock() {
+            Ok(mut admission) => *admission = false,
+            Err(poisoned) => {
+                *poisoned.into_inner() = false;
+                failed = true;
+            }
+        }
+        let watcher_snapshot = match self.watcher_slot.lock() {
+            Ok(mut slot) => stop_watcher_slot(&mut slot),
+            Err(poisoned) => {
+                let snapshot = stop_watcher_slot(&mut poisoned.into_inner());
+                failed = true;
+                snapshot
+            }
+        };
+        if let Some(snapshot) = watcher_snapshot {
+            self.last_watcher_snapshot = snapshot;
+        }
+
+        let scheduler_phase = match self.scheduler.shutdown() {
+            Ok(phase) => phase,
+            Err(_) => {
+                failed = true;
+                SchedulerPhase::Faulted
+            }
+        };
+        let worker_phase = match Arc::get_mut(&mut self.worker) {
+            Some(worker) => match worker.shutdown() {
+                Ok(phase) => phase,
+                Err(_) => {
+                    failed = true;
+                    WorkerPhase::Faulted
+                }
+            },
+            None => {
+                failed = true;
+                WorkerPhase::Faulted
+            }
+        };
+        let git_phase = self.git_runtime.shutdown().unwrap_or_else(|_| {
+            failed = true;
+            crate::GitRuntimePhase::Faulted
+        });
+        if failed
+            || scheduler_phase == SchedulerPhase::Faulted
+            || worker_phase == WorkerPhase::Faulted
+            || git_phase == crate::GitRuntimePhase::Faulted
+        {
+            self.phase = LivePhase::Faulted;
+            Err(RuntimeError::new(RuntimeErrorCode::Internal))
+        } else {
+            self.phase = LivePhase::Stopped;
+            Ok(self.phase)
+        }
+    }
+}
+
+impl fmt::Debug for LiveRuntime {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("LiveRuntime")
+            .field("snapshot", &self.snapshot().ok())
+            .field("startup_recovery", &self.startup_recovery)
+            .finish()
+    }
+}
+
+impl Drop for LiveRuntime {
+    fn drop(&mut self) {
+        let _ = self.shutdown();
+    }
+}
+
+struct LiveExecution {
+    clock: Arc<dyn Clock>,
+    lease: crate::RuntimeWriterLease,
+    adapter: Box<dyn LiveProviderAdapter>,
+    archive: StoreArchive,
+    watcher_slot: Arc<Mutex<Option<BoundedFilesystemWatcher>>>,
+    changed_paths: ChangedPathBuffer,
+    force_reconcile: Arc<AtomicBool>,
+    reset_watcher: Arc<AtomicBool>,
+    last_watch_roots: Vec<PathBuf>,
+    watch_set_complete: bool,
+    latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
+    last_full_rebuild_timings: Arc<Mutex<Option<ExecutionTimings>>>,
+    engine_publication: Arc<Mutex<EnginePublicationState>>,
+    continuation_schedule: Arc<Mutex<Option<RefreshHintSink>>>,
+}
+
+impl LiveExecution {
+    fn run(&mut self, permit: &RefreshPermit) -> RefreshOutcome {
+        let mut refresh = self.refresh(permit);
+        let mut outcome = refresh.outcome().unwrap_or(RefreshOutcome::Failed);
+        if outcome == RefreshOutcome::Completed {
+            self.sync_watcher(permit.urgency());
+        }
+        let candidate = archive_snapshot_candidate(self.archive.store());
+        match self.engine_publication.lock() {
+            Ok(mut publication) => {
+                if candidate.is_err() {
+                    outcome = RefreshOutcome::Failed;
+                    refresh = LiveRefreshSnapshot::result(
+                        refresh.kind(),
+                        outcome,
+                        Some(PortErrorCode::Unavailable),
+                    );
+                }
+                publication.record_outcome(outcome);
+                if let Ok(candidate) = candidate {
+                    publication.publish(candidate);
+                }
+            }
+            Err(_) => {
+                outcome = RefreshOutcome::Failed;
+                refresh = LiveRefreshSnapshot::result(
+                    refresh.kind(),
+                    outcome,
+                    Some(PortErrorCode::Failed),
+                );
+            }
+        }
+        if let Ok(mut latest) = self.latest_refresh.lock() {
+            *latest = refresh;
+        }
+        outcome
+    }
+
+    fn refresh(&mut self, permit: &RefreshPermit) -> LiveRefreshSnapshot {
+        let control = OperationControl::new(permit, self.clock.as_ref());
+        if let Err(error) = control.check() {
+            return refresh_error(LiveRefreshKind::None, error);
+        }
+        let guard = match self.lease.try_acquire() {
+            Ok(guard) => guard,
+            Err(error) => return refresh_error(LiveRefreshKind::None, error),
+        };
+        let mode = match self.archive.store().archive_state() {
+            Ok(state) => state.mode(),
+            Err(_) => {
+                return LiveRefreshSnapshot::result(
+                    LiveRefreshKind::None,
+                    RefreshOutcome::Failed,
+                    Some(PortErrorCode::Unavailable),
+                );
+            }
+        };
+        let quality = match self.archive.store().archive_publication() {
+            Ok(publication) => publication.quality(),
+            Err(_) => {
+                return LiveRefreshSnapshot::result(
+                    LiveRefreshKind::None,
+                    RefreshOutcome::Failed,
+                    Some(PortErrorCode::Unavailable),
+                );
+            }
+        };
+        let incremental = mode == ArchiveMode::ReplayVerified
+            && matches!(
+                quality,
+                ArchivePublicationQuality::Complete | ArchivePublicationQuality::Partial
+            );
+        let force_reconcile = self.force_reconcile.swap(false, Ordering::AcqRel);
+        if incremental {
+            let targeted_paths =
+                select_targeted_paths(permit.urgency(), force_reconcile, self.changed_paths.take());
+            let result = if let Some(paths) = targeted_paths.as_ref() {
+                let borrowed = paths.iter().map(PathBuf::as_path).collect::<Vec<_>>();
+                match refresh_targeted(
+                    self.adapter.as_mut(),
+                    &mut self.archive,
+                    &control,
+                    &borrowed,
+                ) {
+                    Ok(TargetedRefreshOutcome::Applied(report)) => Ok(report),
+                    Ok(TargetedRefreshOutcome::ReconcileRequired) => {
+                        refresh_incremental(self.adapter.as_mut(), &mut self.archive, &control)
+                    }
+                    Err(error) => Err(error),
+                }
+            } else {
+                refresh_incremental(self.adapter.as_mut(), &mut self.archive, &control)
+            };
+            match result {
+                Ok(report) if report.outcome() == IncrementalRefreshOutcome::RebuildRequired => {
+                    self.full_rebuild(permit, guard)
+                }
+                Ok(report) => {
+                    self.schedule_partial_continuation(report);
+                    drop(guard);
+                    LiveRefreshSnapshot::result(
+                        LiveRefreshKind::Incremental,
+                        RefreshOutcome::Completed,
+                        None,
+                    )
+                }
+                Err(error) => {
+                    drop(guard);
+                    refresh_error(LiveRefreshKind::Incremental, error)
+                }
+            }
+        } else {
+            self.full_rebuild(permit, guard)
+        }
+    }
+
+    fn schedule_partial_continuation(&self, report: crate::IncrementalRefreshReport) {
+        if report.outcome() != IncrementalRefreshOutcome::Partial || !report.made_progress() {
+            return;
+        }
+        let Ok(schedule) = self.continuation_schedule.lock() else {
+            return;
+        };
+        let _ = schedule
+            .as_ref()
+            .is_some_and(|hints| hints.force_reconcile(RefreshUrgency::Recovery));
+    }
+
+    fn full_rebuild(
+        &mut self,
+        permit: &RefreshPermit,
+        guard: Box<dyn WriterLeaseGuard>,
+    ) -> LiveRefreshSnapshot {
+        let starting_generation = self
+            .archive
+            .current_cursor()
+            .ok()
+            .map(|cursor| cursor.archive_generation.get());
+        let mut lease = PreAcquiredLease { guard: Some(guard) };
+        let result = OneShotExecutor::new().run(
+            permit,
+            self.clock.as_ref(),
+            &mut lease,
+            self.adapter.as_mut(),
+            &mut self.archive,
+        );
+        if let Ok(mut timings) = self.last_full_rebuild_timings.lock() {
+            *timings = Some(result.timings());
+        }
+        let current_generation = self
+            .archive
+            .current_cursor()
+            .ok()
+            .map(|cursor| cursor.archive_generation.get());
+        let publication_is_partial = self
+            .archive
+            .store()
+            .archive_publication()
+            .is_ok_and(|publication| publication.quality() == ArchivePublicationQuality::Partial);
+        if publication_is_partial
+            && durable_generation_advanced(starting_generation, current_generation)
+        {
+            self.schedule_recovery();
+        }
+        LiveRefreshSnapshot::result(
+            LiveRefreshKind::FullRebuild,
+            result.outcome(),
+            result.error(),
+        )
+    }
+
+    fn schedule_recovery(&self) {
+        let Ok(schedule) = self.continuation_schedule.lock() else {
+            return;
+        };
+        let _ = schedule
+            .as_ref()
+            .is_some_and(|hints| hints.force_reconcile(RefreshUrgency::Recovery));
+    }
+
+    fn sync_watcher(&mut self, urgency: RefreshUrgency) {
+        let roots = self.adapter.watch_roots();
+        let roots = roots.as_slice();
+        let reset = self.reset_watcher.swap(false, Ordering::AcqRel);
+        let roots_changed = roots != self.last_watch_roots;
+        let periodic_retry = !self.watch_set_complete && urgency == RefreshUrgency::Periodic;
+        if !reset && !roots_changed && !periodic_retry {
+            return;
+        }
+        let Ok(mut slot) = self.watcher_slot.lock() else {
+            return;
+        };
+        let Some(watcher) = slot.as_mut() else {
+            return;
+        };
+        let root_count = match watcher.replace_roots(roots) {
+            Ok(snapshot) => snapshot.root_count(),
+            Err(_) => 0,
+        };
+        self.watch_set_complete = root_count == roots.len();
+        self.last_watch_roots = roots.to_vec();
+    }
+}
+
+fn select_targeted_paths(
+    urgency: RefreshUrgency,
+    force_reconcile: bool,
+    batch: ChangedPathBatch,
+) -> Option<Vec<PathBuf>> {
+    match batch {
+        ChangedPathBatch::Paths(paths)
+            if urgency == RefreshUrgency::Hint && !force_reconcile && !paths.is_empty() =>
+        {
+            Some(paths)
+        }
+        ChangedPathBatch::Paths(_) | ChangedPathBatch::Reconcile => None,
+    }
+}
+
+fn durable_generation_advanced(starting: Option<u64>, current: Option<u64>) -> bool {
+    match (starting, current) {
+        (None, Some(_)) => true,
+        (Some(starting), Some(current)) => current > starting,
+        (None, None) | (Some(_), None) => false,
+    }
+}
+
+const fn initial_refresh_snapshot(quality: EnginePublicationQuality) -> LiveRefreshSnapshot {
+    match quality {
+        EnginePublicationQuality::Empty
+        | EnginePublicationQuality::Partial
+        | EnginePublicationQuality::RecoveryPending => {
+            LiveRefreshSnapshot::in_progress(LiveRefreshKind::FullRebuild)
+        }
+        EnginePublicationQuality::Complete => LiveRefreshSnapshot::not_run(),
+    }
+}
+
+struct PreAcquiredLease {
+    guard: Option<Box<dyn WriterLeaseGuard>>,
+}
+
+fn stop_watcher_slot(slot: &mut Option<BoundedFilesystemWatcher>) -> Option<WatcherSnapshot> {
+    slot.take().map(|mut watcher| {
+        let generation = watcher.snapshot().generation();
+        watcher.shutdown();
+        WatcherSnapshot::stopped(generation)
+    })
+}
+
+impl WriterLease for PreAcquiredLease {
+    fn try_acquire(&mut self) -> Result<Box<dyn WriterLeaseGuard>, PortError> {
+        self.guard
+            .take()
+            .ok_or_else(|| PortError::new(PortErrorCode::Busy))
+    }
+}
+
+fn outcome_for_port_error(error: PortError) -> RefreshOutcome {
+    match error.code() {
+        PortErrorCode::Busy => RefreshOutcome::Busy,
+        PortErrorCode::Cancelled => RefreshOutcome::Cancelled,
+        PortErrorCode::DeadlineExceeded => RefreshOutcome::DeadlineExceeded,
+        PortErrorCode::InvalidData
+        | PortErrorCode::CapacityExceeded
+        | PortErrorCode::StaleState
+        | PortErrorCode::RebuildRequired
+        | PortErrorCode::Unavailable
+        | PortErrorCode::Failed => RefreshOutcome::Failed,
+    }
+}
+
+fn refresh_error(kind: LiveRefreshKind, error: PortError) -> LiveRefreshSnapshot {
+    LiveRefreshSnapshot::result(kind, outcome_for_port_error(error), Some(error.code()))
+}
+
+fn startup_port_error(error: PortError) -> RuntimeError {
+    RuntimeError::new(match error.code() {
+        PortErrorCode::Busy => RuntimeErrorCode::Busy,
+        PortErrorCode::InvalidData
+        | PortErrorCode::Cancelled
+        | PortErrorCode::DeadlineExceeded
+        | PortErrorCode::CapacityExceeded
+        | PortErrorCode::StaleState
+        | PortErrorCode::RebuildRequired
+        | PortErrorCode::Unavailable
+        | PortErrorCode::Failed => RuntimeErrorCode::StoreUnavailable,
+    })
+}
+
+fn runtime_worker_error(error: WorkerError) -> RuntimeError {
+    RuntimeError::new(match error.code() {
+        WorkerErrorCode::Closed | WorkerErrorCode::StaleRequest => RuntimeErrorCode::Closed,
+        WorkerErrorCode::Faulted => RuntimeErrorCode::Faulted,
+        WorkerErrorCode::CapacityExceeded
+        | WorkerErrorCode::Unavailable
+        | WorkerErrorCode::Internal => RuntimeErrorCode::Internal,
+    })
+}
+
+fn runtime_scheduler_error(error: SchedulerError) -> RuntimeError {
+    RuntimeError::new(match error.code() {
+        SchedulerErrorCode::Closed => RuntimeErrorCode::Closed,
+        SchedulerErrorCode::Faulted => RuntimeErrorCode::Faulted,
+        SchedulerErrorCode::CapacityExceeded
+        | SchedulerErrorCode::Unavailable
+        | SchedulerErrorCode::Internal => RuntimeErrorCode::Internal,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forced_pathless_hint_cannot_be_downgraded_by_buffered_watcher_path() {
+        let path = PathBuf::from(if cfg!(windows) {
+            r"C:\tokenmaster\known.jsonl"
+        } else {
+            "/tokenmaster/known.jsonl"
+        });
+        assert!(
+            select_targeted_paths(
+                RefreshUrgency::Hint,
+                true,
+                ChangedPathBatch::Paths(vec![path.clone()]),
+            )
+            .is_none()
+        );
+        assert_eq!(
+            select_targeted_paths(
+                RefreshUrgency::Hint,
+                false,
+                ChangedPathBatch::Paths(vec![path.clone()]),
+            ),
+            Some(vec![path])
+        );
+    }
+
+    #[test]
+    fn recovery_requires_a_durable_full_rebuild_generation_advance() {
+        assert!(durable_generation_advanced(None, Some(1)));
+        assert!(durable_generation_advanced(Some(7), Some(8)));
+        assert!(!durable_generation_advanced(None, None));
+        assert!(!durable_generation_advanced(Some(7), None));
+        assert!(!durable_generation_advanced(Some(7), Some(7)));
+        assert!(!durable_generation_advanced(Some(8), Some(7)));
+    }
+
+    #[test]
+    fn startup_exposes_required_full_rebuild_until_the_archive_is_complete() {
+        for quality in [
+            EnginePublicationQuality::Empty,
+            EnginePublicationQuality::Partial,
+            EnginePublicationQuality::RecoveryPending,
+        ] {
+            let rebuilding = initial_refresh_snapshot(quality);
+            assert_eq!(rebuilding.kind(), LiveRefreshKind::FullRebuild);
+            assert_eq!(rebuilding.outcome(), None);
+            assert_eq!(rebuilding.error(), None);
+        }
+
+        let complete = initial_refresh_snapshot(EnginePublicationQuality::Complete);
+        assert_eq!(complete.kind(), LiveRefreshKind::None);
+        assert_eq!(complete.outcome(), None);
+        assert_eq!(complete.error(), None);
+    }
+}

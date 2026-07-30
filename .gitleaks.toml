@@ -1,4 +1,4 @@
-title = "TokenMaster public repository secret scanning"
+title = "TokenMaster release secret scan"
 
 [extend]
 useDefault = true

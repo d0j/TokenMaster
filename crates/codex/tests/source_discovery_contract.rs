@@ -53,6 +53,7 @@ fn provider_descriptor_declares_complete_codex_capabilities() {
         ProviderCapability::Projects,
         ProviderCapability::Models,
         ProviderCapability::CodeOutput,
+        ProviderCapability::RepositoryActivity,
     ] {
         assert!(provider.descriptor().supports(capability));
     }

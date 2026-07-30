@@ -1,9 +1,30 @@
 use std::fs::File;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::path::Path;
+
+pub(super) fn available_space(path: &Path) -> Result<u64, DurableFileError> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| DurableFileError::UnsupportedLocation)?;
+    let mut facts = core::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: `path` is NUL-terminated and `facts` points to writable storage
+    // initialized by a successful `statvfs` call.
+    if unsafe { libc::statvfs(path.as_ptr(), facts.as_mut_ptr()) } != 0 {
+        return Err(DurableFileError::Unavailable);
+    }
+    // SAFETY: the successful call above initialized the complete structure.
+    let facts = unsafe { facts.assume_init() };
+    facts
+        .f_bavail
+        .checked_mul(facts.f_frsize)
+        .ok_or(DurableFileError::CapacityExceeded)
+}
 
 use sha2::{Digest, Sha256};
 
-use super::{PhysicalFileIdentity, PhysicalIdentityError, from_digest};
+use super::{DurableFileError, PhysicalFileIdentity, PhysicalIdentityError, from_digest};
 
 pub(super) fn platform_identity(
     file: &File,
@@ -16,4 +37,168 @@ pub(super) fn platform_identity(
     hasher.update(metadata.dev().to_le_bytes());
     hasher.update(metadata.ino().to_le_bytes());
     Ok(from_digest(hasher.finalize()))
+}
+
+pub(super) fn create_stage_file(path: &Path) -> std::io::Result<File> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+}
+
+pub(super) fn open_regular_no_follow(path: &Path) -> Result<File, DurableFileError> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|_| DurableFileError::Unavailable)?;
+    if !file
+        .metadata()
+        .map_err(|_| DurableFileError::Unavailable)?
+        .is_file()
+    {
+        return Err(DurableFileError::UnexpectedType);
+    }
+    Ok(file)
+}
+
+pub(super) fn open_regular_for_delete_no_follow(path: &Path) -> Result<File, DurableFileError> {
+    open_regular_no_follow(path)
+}
+
+pub(super) fn directory_identity(path: &Path) -> Result<PhysicalFileIdentity, DurableFileError> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(path)
+        .map_err(|_| DurableFileError::Unavailable)?;
+    platform_identity(&file).map_err(|_| DurableFileError::Unavailable)
+}
+
+pub(super) fn move_file_write_through(
+    source: &Path,
+    target: &Path,
+) -> Result<(), DurableFileError> {
+    match std::fs::hard_link(source, target) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(DurableFileError::TargetExists);
+        }
+        Err(_) => return Err(DurableFileError::Unavailable),
+    }
+
+    if sync_file(target).is_err() || sync_parent_io(target).is_err() {
+        return Err(DurableFileError::RecoveryRequired);
+    }
+    if std::fs::remove_file(source).is_err() || sync_parent_io(source).is_err() {
+        return Err(DurableFileError::RecoveryRequired);
+    }
+    Ok(())
+}
+
+pub(super) fn replace_file_write_through(
+    target: &Path,
+    source: &Path,
+    backup: &Path,
+) -> Result<(), DurableFileError> {
+    match std::fs::hard_link(target, backup) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(DurableFileError::TargetExists);
+        }
+        Err(_) => return Err(DurableFileError::Unavailable),
+    }
+
+    if sync_file(backup).is_err() || sync_parent_io(backup).is_err() {
+        return Err(DurableFileError::RecoveryRequired);
+    }
+
+    if std::fs::rename(source, target).is_err() {
+        if std::fs::remove_file(backup).is_ok() && sync_parent_io(backup).is_ok() {
+            return Err(DurableFileError::Unavailable);
+        }
+        return Err(DurableFileError::RecoveryRequired);
+    }
+
+    if sync_file(target).is_err()
+        || sync_parent_io(source).is_err()
+        || sync_parent_io(target).is_err()
+        || sync_parent_io(backup).is_err()
+    {
+        return Err(DurableFileError::RecoveryRequired);
+    }
+    Ok(())
+}
+
+pub(super) fn replace_file_redundant_write_through(
+    source: &Path,
+    target: &Path,
+) -> Result<(), DurableFileError> {
+    std::fs::rename(source, target).map_err(|_| DurableFileError::Unavailable)?;
+    if sync_file(target).is_err()
+        || sync_parent_io(source).is_err()
+        || sync_parent_io(target).is_err()
+    {
+        return Err(DurableFileError::RecoveryRequired);
+    }
+    Ok(())
+}
+
+fn sync_file(path: &Path) -> std::io::Result<()> {
+    File::open(path)?.sync_all()
+}
+
+fn sync_parent_io(path: &Path) -> std::io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "missing parent directory")
+    })?;
+    File::open(parent)?.sync_all()
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::{move_file_write_through, replace_file_write_through};
+    use crate::DurableFileError;
+    use tempfile::TempDir;
+
+    #[test]
+    fn create_new_never_overwrites_a_concurrent_target() {
+        let root = TempDir::new().expect("root");
+        let source = root.path().join("source.slot");
+        let target = root.path().join("target.slot");
+        std::fs::write(&source, b"new").expect("source");
+        std::fs::write(&target, b"concurrent").expect("target");
+
+        assert_eq!(
+            move_file_write_through(&source, &target).expect_err("target exists"),
+            DurableFileError::TargetExists
+        );
+        assert_eq!(std::fs::read(source).expect("source retained"), b"new");
+        assert_eq!(
+            std::fs::read(target).expect("target retained"),
+            b"concurrent"
+        );
+    }
+
+    #[test]
+    fn occupied_backup_preserves_all_replacement_inputs() {
+        let root = TempDir::new().expect("root");
+        let source = root.path().join("source.slot");
+        let target = root.path().join("target.slot");
+        let backup = root.path().join("backup.slot");
+        std::fs::write(&source, b"new").expect("source");
+        std::fs::write(&target, b"old").expect("target");
+        std::fs::write(&backup, b"occupied").expect("backup");
+
+        assert_eq!(
+            replace_file_write_through(&target, &source, &backup).expect_err("backup exists"),
+            DurableFileError::TargetExists
+        );
+        assert_eq!(std::fs::read(source).expect("source retained"), b"new");
+        assert_eq!(std::fs::read(target).expect("target retained"), b"old");
+        assert_eq!(std::fs::read(backup).expect("backup retained"), b"occupied");
+    }
 }

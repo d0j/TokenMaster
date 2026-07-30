@@ -1,0 +1,268 @@
+export struct RouteRow {
+    key: string,
+    label-key: string,
+    label: string,
+    state: string,
+    reasons: string,
+    selected: bool,
+}
+
+export struct DashboardSectionRow {
+    key: string,
+    label-key: string,
+    label: string,
+    state: string,
+    reasons: string,
+    has-data: bool,
+}
+
+export struct DashboardBoardSlotRow {
+    key: string,
+    collapsed: bool,
+}
+
+export struct DashboardBoardEditorRow {
+    key: string,
+    label: string,
+    visible: bool,
+    collapsed: bool,
+    can-move-up: bool,
+    can-move-down: bool,
+    can-hide: bool,
+}
+
+export struct DashboardQuotaRow {
+    ordinal: int,
+    label-key: string,
+    label: string,
+    ratio-known: bool,
+    used-ratio: float,
+    usage-label: string,
+    remaining-label: string,
+    units-label: string,
+    reset-label: string,
+    evidence-label: string,
+}
+
+export struct DashboardBenefitRow {
+    ordinal: int,
+    reset-quantity-label: string,
+    credit-quantity-label: string,
+    temporary-quantity-label: string,
+    other-quantity-label: string,
+    unavailable-quantity-label: string,
+    expiry-label: string,
+    reminder-label: string,
+    evidence-label: string,
+}
+
+export struct DashboardTrendPoint {
+    date-label: string,
+    axis-label: string,
+    tokens-availability: string,
+    tokens-label: string,
+    tokens-ratio: float,
+    cost-availability: string,
+    cost-label: string,
+    cost-ratio: float,
+}
+
+export struct DashboardSessionRow {
+    ordinal: int,
+    time-label: string,
+    tokens-availability: string,
+    tokens-label: string,
+    cost-availability: string,
+    cost-label: string,
+}
+
+export struct DashboardActivityRow {
+    key: string,
+    count-label: string,
+    ratio: float,
+}
+
+export struct RecentActivityRow {
+    time-label: string,
+    model-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+}
+
+export struct ActivityRhythmRow {
+    label: string,
+    tokens-label: string,
+    events-label: string,
+    exposure-label: string,
+    ratio: float,
+}
+
+export struct ReminderScopeRow {
+    scope-label: string,
+    lot-count-label: string,
+    coverage-label: string,
+    source-label: string,
+    leads-label: string,
+    next-due-label: string,
+    nearest-expiry-label: string,
+    evidence-label: string,
+    warning-label: string,
+    completeness-label: string,
+}
+
+export struct BenefitLotRow {
+    scope-label: string,
+    benefit-label: string,
+    kind-label: string,
+    quantity-label: string,
+    state-label: string,
+    expiry-label: string,
+    granted-label: string,
+    evidence-label: string,
+}
+
+export struct DashboardModelRow {
+    ordinal: int,
+    label: string,
+    tokens-availability: string,
+    tokens-label: string,
+    tokens-ratio: float,
+    cost-availability: string,
+    cost-label: string,
+}
+
+export struct ModelUsageRow {
+    model-label: string,
+    event-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+    cost-availability: string,
+    cost-label: string,
+    cost-evidence-label: string,
+    token-ratio: float,
+}
+
+export struct ProjectUsageRow {
+    project-label: string,
+    unassociated: bool,
+    event-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+    cost-availability: string,
+    cost-label: string,
+    cost-evidence-label: string,
+    token-ratio: float,
+    code-available: bool,
+    code-complete: bool,
+    code-status-label: string,
+    repository-label: string,
+    commits-label: string,
+    added-label: string,
+    removed-label: string,
+    net-label: string,
+    efficiency-label: string,
+    efficiency-reason-label: string,
+    code-evidence-label: string,
+}
+
+export struct HistoryDayRow {
+    date-label: string,
+    event-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+    cost-availability: string,
+    cost-label: string,
+    token-ratio: float,
+    cost-ratio: float,
+}
+
+export struct SessionListRow {
+    row-index: int,
+    first-label: string,
+    last-label: string,
+    duration-label: string,
+    event-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+    cost-availability: string,
+    cost-label: string,
+}
+
+export struct SessionDetailBreakdownRow {
+    kind: string,
+    label: string,
+    event-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+    cost-availability: string,
+    cost-label: string,
+}
+
+export struct RestorePointRow {
+    row-index: int,
+    created-label: string,
+    size-label: string,
+    health: string,
+    purpose-label: string,
+    schema-label: string,
+    compression-label: string,
+}
+
+export struct InAppNotificationRow {
+    benefit-label: string,
+    kind-label: string,
+    quantity-label: string,
+    lead-label: string,
+    due-label: string,
+    expiry-label: string,
+    delivered-label: string,
+    accessible-label: string,
+}

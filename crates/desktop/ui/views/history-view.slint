@@ -1,0 +1,334 @@
+import { HistoryDayRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { MetricValue } from "../components/metric-value.slint";
+import { SectionState } from "../components/section-state.slint";
+import { Button, ScrollView } from "std-widgets.slint";
+
+component HistoryHeaderCard inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> range-label;
+    in property <string> time-zone-label;
+    in property <string> evidence-label;
+    in property <string> input-tokens;
+    in property <string> cached-tokens;
+    in property <string> output-tokens;
+    in property <string> reasoning-tokens;
+    in property <string> total-tokens;
+    in property <string> cost;
+    in property <string> events;
+    in property <string> range-preset;
+    in property <bool> range-pending;
+    callback request-range-1();
+    callback request-range-7();
+    callback request-range-30();
+    in property <bool> narrow;
+
+    min-height: root.narrow ? 324px : 234px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: @tr("Usage history ") + root.range-label;
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                horizontal-stretch: 1;
+                Text { text: @tr("Usage History"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
+                Text {
+                    text: root.range-label + " · " + root.time-zone-label;
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-body;
+                    overflow: elide;
+                }
+            }
+            SectionState { state: root.state; reasons: root.reasons; }
+        }
+        range-1-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.range-pending && root.range-preset != "recent_1_day";
+            forward-focus: recent-1-button;
+        }
+        range-7-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.range-pending && root.range-preset != "recent_7_days";
+            forward-focus: recent-7-button;
+        }
+        range-30-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.range-pending && root.range-preset != "recent_30_days";
+            forward-focus: recent-30-button;
+        }
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            recent-1-button := Button {
+                text: @tr("1 day");
+                accessible-label: @tr("History range 1 day");
+                enabled: !root.range-pending && root.range-preset != "recent_1_day";
+                clicked => {
+                    recent-1-button.focus();
+                    root.request-range-1();
+                }
+            }
+            recent-7-button := Button {
+                text: @tr("7 days");
+                accessible-label: @tr("History range 7 days");
+                enabled: !root.range-pending && root.range-preset != "recent_7_days";
+                clicked => {
+                    recent-7-button.focus();
+                    root.request-range-7();
+                }
+            }
+            recent-30-button := Button {
+                text: @tr("30 days");
+                accessible-label: @tr("History range 30 days");
+                enabled: !root.range-pending && root.range-preset != "recent_30_days";
+                clicked => {
+                    recent-30-button.focus();
+                    root.request-range-30();
+                }
+            }
+            Text {
+                text: root.range-pending ? @tr("Loading history…") : @tr("Selected range");
+                color: UiTokens.text-secondary;
+                font-size: UiTokens.text-body;
+                horizontal-stretch: 1;
+            }
+        }
+        Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+        HorizontalLayout {
+            spacing: UiTokens.space;
+            MetricValue { label: @tr("Total tokens"); value: root.total-tokens; availability: root.total-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Cost"); value: root.cost; availability: root.cost == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+        }
+        if root.narrow: VerticalLayout {
+            spacing: UiTokens.space-xs;
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                MetricValue { label: @tr("Input"); value: root.input-tokens; availability: root.input-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+                MetricValue { label: @tr("Cached"); value: root.cached-tokens; availability: root.cached-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            }
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                MetricValue { label: @tr("Output"); value: root.output-tokens; availability: root.output-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+                MetricValue { label: @tr("Reasoning"); value: root.reasoning-tokens; availability: root.reasoning-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            }
+        }
+        if !root.narrow: HorizontalLayout {
+            spacing: UiTokens.space;
+            MetricValue { label: @tr("Input"); value: root.input-tokens; availability: root.input-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Cached"); value: root.cached-tokens; availability: root.cached-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Output"); value: root.output-tokens; availability: root.output-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Reasoning"); value: root.reasoning-tokens; availability: root.reasoning-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+        }
+    }
+}
+
+component HistoryTrendCard inherits Rectangle {
+    in property <[HistoryDayRow]> rows;
+    in property <string> state;
+    in property <string> reasons;
+
+    min-height: 176px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: @tr("Daily token history");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            Text { text: @tr("Daily trend"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; horizontal-stretch: 1; }
+            SectionState { state: root.state; reasons: root.reasons; }
+        }
+        if root.rows.length == 0: Text {
+            text: root.state == "waiting" ? @tr("Waiting for history evidence") : @tr("History evidence unavailable");
+            color: UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+        }
+        Rectangle {
+            min-height: 104px;
+            background: UiTokens.surface-subtle;
+            border-radius: UiTokens.radius;
+            accessible-role: image;
+            accessible-label: @tr("Thirty day token trend");
+            HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                padding-top: UiTokens.space-sm;
+                spacing: 2px;
+                for row in root.rows: Rectangle {
+                    min-width: 1px;
+                    horizontal-stretch: 1;
+                    background: transparent;
+                    Rectangle {
+                        y: parent.height - self.height;
+                        width: parent.width;
+                        // `ratio()` returns 0.0 for an unavailable day, so drawing it
+                        // unconditionally puts a bar at the baseline that is pixel
+                        // identical to a legitimate zero. A day with no evidence and a
+                        // day that truly cost nothing are different facts, and the
+                        // column is where that distinction is most visible.
+                        height: row.total-availability == "unavailable"
+                            ? 3px
+                            : max(1px, row.token-ratio * parent.height);
+                        background: row.total-availability == "unavailable"
+                            ? UiTokens.unavailable
+                            : row.total-availability == "partial"
+                            ? UiTokens.degraded
+                            : UiTokens.accent;
+                        border-radius: 2px;
+                        // The product invariant requires unavailable, partial and
+                        // legitimate zero to stay distinguishable in text, in chart and
+                        // in the accessible label. Height and colour carry the first two;
+                        // without a label per column a screen reader hears only the
+                        // card's own "Thirty day token trend" and loses the distinction
+                        // entirely. Both parts are already localized where they are built.
+                        accessible-role: text;
+                        accessible-label: row.date-label + ", " + row.total-label;
+                    }
+                }
+            }
+        }
+    }
+}
+
+component HistoryTableCard inherits Rectangle {
+    in property <[HistoryDayRow]> rows;
+    in property <bool> narrow;
+
+    min-height: 96px + root.rows.length * 34px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: table;
+    accessible-label: @tr("Daily usage history");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 0px;
+        Text { text: @tr("Daily details"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
+        if root.narrow: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: @tr("Date"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 54px; horizontal-alignment: right; }
+            Text { text: @tr("Tokens"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 70px; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 78px; horizontal-alignment: right; }
+        }
+        if !root.narrow: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: @tr("Date"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 84px; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 52px; horizontal-alignment: right; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 78px; horizontal-alignment: right; }
+        }
+        for row[i] in root.rows: Rectangle {
+            height: 34px;
+            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: list-item;
+            accessible-label: row.date-label + " " + row.event-label + " " + row.total-label + @tr(" tokens ") + row.cost-label;
+            if root.narrow: HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: row.date-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+                Text { text: row.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 54px; horizontal-alignment: right; }
+                Text { text: row.total-label; color: row.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 70px; horizontal-alignment: right; }
+                Text { text: row.cost-label; color: row.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 78px; horizontal-alignment: right; }
+            }
+            if !root.narrow: HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: row.date-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 84px; }
+                Text { text: row.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 52px; horizontal-alignment: right; }
+                Text { text: row.input-label; color: row.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.cached-label; color: row.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.output-label; color: row.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.reasoning-label; color: row.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.total-label; color: row.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: row.cost-label; color: row.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 78px; horizontal-alignment: right; }
+            }
+        }
+    }
+}
+
+export component HistoryView inherits Rectangle {
+    in property <[HistoryDayRow]> rows;
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> range-label;
+    in property <string> time-zone-label;
+    in property <string> evidence-label;
+    in property <string> input-tokens;
+    in property <string> cached-tokens;
+    in property <string> output-tokens;
+    in property <string> reasoning-tokens;
+    in property <string> total-tokens;
+    in property <string> cost;
+    in property <string> events;
+    in property <string> range-preset: "recent_30_days";
+    in property <bool> range-pending: false;
+    callback request-range-1();
+    callback request-range-7();
+    callback request-range-30();
+    out property <bool> narrow: root.width < 944px;
+    out property <string> layout-mode: root.narrow ? "narrow" : "wide";
+
+    background: UiTokens.background;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        content := VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            HistoryHeaderCard {
+                state: root.state;
+                reasons: root.reasons;
+                range-label: root.range-label;
+                time-zone-label: root.time-zone-label;
+                evidence-label: root.evidence-label;
+                input-tokens: root.input-tokens;
+                cached-tokens: root.cached-tokens;
+                output-tokens: root.output-tokens;
+                reasoning-tokens: root.reasoning-tokens;
+                total-tokens: root.total-tokens;
+                cost: root.cost;
+                events: root.events;
+                range-preset: root.range-preset;
+                range-pending: root.range-pending;
+                request-range-1 => { root.request-range-1(); }
+                request-range-7 => { root.request-range-7(); }
+                request-range-30 => { root.request-range-30(); }
+                narrow: root.narrow;
+            }
+            HistoryTrendCard { rows: root.rows; state: root.state; reasons: root.reasons; }
+            HistoryTableCard { rows: root.rows; narrow: root.narrow; }
+        }
+        viewport-height: max(self.height, content.min-height);
+    }
+}

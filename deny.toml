@@ -1,0 +1,59 @@
+[graph]
+targets = [
+    { triple = "x86_64-pc-windows-msvc" },
+]
+all-features = true
+
+[advisories]
+ignore = []
+unmaintained = "workspace"
+
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "LicenseRef-Slint-Royalty-free-2.0",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.93
+exceptions = []
+
+# TokenMaster is local-first and offline by contract: no network client, no async
+# runtime, no browser launch, no second Git implementation. Ten audit scripts each
+# walked the cargo resolve graph to assert this crate-by-crate. cargo-deny expresses
+# it natively and the quality gate already runs it, so the assertion lives here and
+# actually executes instead of in scripts nothing invokes.
+[bans]
+multiple-versions = "allow"
+deny = [
+    { name = "reqwest" },
+    { name = "hyper" },
+    { name = "isahc" },
+    { name = "surf" },
+    { name = "ureq" },
+    { name = "curl" },
+    { name = "tokio" },
+    { name = "async-std" },
+    { name = "smol" },
+    { name = "git2" },
+    { name = "gix" },
+]
+# `webbrowser` is deliberately absent from that list. It arrives transitively through
+# slint -> i-slint-backend-winit and cannot be removed without leaving the UI toolkit.
+# The audits banned it per-crate rather than graph-wide; the real invariant is that
+# TokenMaster's own code never calls it, which `grep -rn webbrowser crates/*/src`
+# confirms and which a graph-wide ban cannot express.
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

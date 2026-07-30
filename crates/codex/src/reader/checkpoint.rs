@@ -4,7 +4,7 @@ use serde::Serialize;
 use tokenmaster_platform::PhysicalFileIdentity;
 
 use super::LogicalFileIdentity;
-use crate::{PARSER_SCHEMA_VERSION, ParserResumeStateV1, ParserState};
+use crate::{PARSER_SCHEMA_VERSION, ParserResumeState, ParserState};
 
 pub const READER_CHECKPOINT_SCHEMA_VERSION: u16 = 1;
 pub const MAX_ANCHOR_BYTES: u16 = 4096;
@@ -138,7 +138,7 @@ pub struct ReaderCheckpointParts {
     pub observed_file_length: u64,
     pub modified_time_ns: Option<i64>,
     pub anchor: BoundaryAnchor,
-    pub resume: ParserResumeStateV1,
+    pub resume: ParserResumeState,
     pub discarding_oversized_line: bool,
     pub incomplete_tail: bool,
     pub verification: VerificationLevel,
@@ -248,7 +248,7 @@ impl ReaderCheckpointV1 {
     }
 
     #[must_use]
-    pub const fn resume(&self) -> &ParserResumeStateV1 {
+    pub const fn resume(&self) -> &ParserResumeState {
         &self.parts.resume
     }
 

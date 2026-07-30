@@ -208,6 +208,7 @@ impl FileMetadataHint {
     }
 }
 
+#[derive(Clone)]
 pub struct SourceFileDescriptor {
     profile_id: Arc<UsageProfileId>,
     source_id: Arc<UsageSourceId>,
@@ -381,6 +382,17 @@ pub fn enumerate_profile_sources(
     }
 
     Ok(state.into_report())
+}
+
+pub fn inspect_profile_source_path(
+    sources: &[SourceDescriptor],
+    absolute_path: &Path,
+) -> Result<Option<SourceFileDescriptor>, EnumerationError> {
+    validate_source_set(sources)?;
+    for source in sources {
+        walk::validate_root(source.path())?;
+    }
+    walk::inspect_source_path(sources, absolute_path)
 }
 
 fn validate_source_set(sources: &[SourceDescriptor]) -> Result<(), EnumerationError> {

@@ -1,0 +1,30 @@
+[package]
+name = "tokenmaster-app"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "TokenMaster"
+path = "src/main.rs"
+
+[dependencies]
+slint.workspace = true
+tokenmaster-codex = { path = "../codex" }
+tokenmaster-desktop = { path = "../desktop" }
+tokenmaster-domain = { path = "../domain" }
+tokenmaster-engine = { path = "../engine" }
+tokenmaster-platform = { path = "../platform" }
+tokenmaster-product = { path = "../product" }
+tokenmaster-runtime = { path = "../runtime" }
+tokenmaster-state = { path = "../state" }
+tokenmaster-store = { path = "../store" }
+windows.workspace = true
+
+[dev-dependencies]
+i-slint-backend-testing = { version = "=1.17.1", features = ["renderer-software"] }
+rusqlite.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true

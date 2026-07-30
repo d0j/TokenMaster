@@ -1,0 +1,399 @@
+import { Button, CheckBox, ComboBox, ScrollView, SpinBox } from "std-widgets.slint";
+import { UiTokens } from "../tokens.slint";
+import { DashboardBoardEditorRow } from "../models.slint";
+
+export struct ReminderCustomLeadRow {
+    enabled: bool,
+    value: int,
+    unit-index: int,
+}
+
+export component SettingsView inherits Rectangle {
+    in property <int> presentation-density-id;
+    in property <int> presentation-skin-id;
+    in property <int> presentation-color-scheme-id;
+    in property <int> presentation-layout-id;
+    in property <int> presentation-locale-id;
+    in property <string> presentation-persistence-state;
+    in property <[DashboardBoardEditorRow]> board-editor-rows;
+    in-out property <bool> periodic-enabled;
+    in-out property <int> quiet-seconds;
+    in-out property <int> interval-seconds;
+    in-out property <int> retention-budget-mib;
+    in property <bool> reminder-enabled;
+    in property <bool> reminder-preset-seven-days;
+    in property <bool> reminder-preset-twenty-four-hours;
+    in property <bool> reminder-preset-twelve-hours;
+    in property <bool> reminder-preset-six-hours;
+    in property <bool> reminder-preset-one-hour;
+    in property <[ReminderCustomLeadRow]> reminder-custom-lead-rows;
+    in property <bool> reminder-dirty;
+    in property <string> reminder-feedback;
+    in property <string> reminder-sync-state;
+    in property <string> settings-health;
+    in property <string> current-user-startup-status;
+    in property <bool> current-user-startup-can-enable;
+    in property <bool> current-user-startup-can-disable;
+    in property <bool> current-user-startup-can-repair;
+    in property <bool> config-import-preview-visible;
+    in property <string> config-import-created-label;
+    in property <string> config-import-bytes-label;
+    in property <string> config-import-changes-label;
+    in property <bool> high-contrast;
+    in property <bool> reduced-motion;
+    out property <string> settings-layout-mode: root.width < 944px ? "narrow" : "wide";
+    out property <length> reminder-card-bottom: reminder-card.y + reminder-card.height;
+    out property <length> backup-card-top: backup-card.y;
+    out property <length> config-card-top: config-card.y;
+
+    callback export-config();
+    callback import-config();
+    callback confirm-config-import();
+    callback cancel-config-import();
+    callback update-backup-policy(bool, int, int, int);
+    callback reminder-enabled-edited(bool);
+    callback reminder-preset-edited(int, bool);
+    callback reminder-custom-lead-edited(int, bool, int, int);
+    callback save-reminder-policy();
+    callback reset-reminder-recommended();
+    callback enable-current-user-startup();
+    callback repair-current-user-startup();
+    callback disable-current-user-startup();
+    callback select-presentation-density(int);
+    callback select-presentation-skin(int);
+    callback select-presentation-color-scheme(int);
+    callback select-presentation-layout(int);
+    callback select-presentation-locale(int);
+    callback move-dashboard-board-row(int, int);
+    callback set-dashboard-board-row-visible(int, bool);
+    callback set-dashboard-board-row-collapsed(int, bool);
+    callback reset-dashboard-board();
+
+    background: UiTokens.background;
+    accessible-role: groupbox;
+    accessible-label: @tr("TokenMaster settings");
+
+    presentation-strip := Rectangle {
+        width: root.width;
+        height: root.settings-layout-mode == "wide" ? 88px : 148px;
+        background: UiTokens.background;
+
+        density-label := Text {
+            x: 8px;
+            y: 8px;
+            width: 64px;
+            height: 32px;
+            text: @tr("Density");
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
+        }
+        density-selector := ComboBox {
+            x: 80px;
+            y: 8px;
+            width: root.settings-layout-mode == "wide" ? root.width / 4 - 88px : root.width / 2 - 88px;
+            height: 32px;
+            model: [@tr("Comfortable"), @tr("Compact"), @tr("Ultra compact")];
+            current-index: root.presentation-density-id;
+            accessible-label: @tr("Presentation density");
+            selected(_) => { root.select-presentation-density(self.current-index); }
+        }
+        skin-label := Text {
+            x: root.settings-layout-mode == "wide" ? root.width / 4 + 8px : root.width / 2 + 8px;
+            y: 8px;
+            width: 40px;
+            height: 32px;
+            text: @tr("Skin");
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
+        }
+        skin-selector := ComboBox {
+            x: root.settings-layout-mode == "wide" ? root.width / 4 + 56px : root.width / 2 + 56px;
+            y: 8px;
+            width: root.settings-layout-mode == "wide" ? root.width / 4 - 64px : root.width / 2 - 64px;
+            height: 32px;
+            model: [@tr("Refined"), @tr("Graphite"), @tr("Ember")];
+            current-index: root.presentation-skin-id;
+            accessible-label: @tr("Presentation skin");
+            selected(_) => { root.select-presentation-skin(self.current-index); }
+        }
+        scheme-label := Text {
+            x: root.settings-layout-mode == "wide" ? 2 * root.width / 4 + 8px : 8px;
+            y: root.settings-layout-mode == "wide" ? 8px : 44px;
+            width: 56px;
+            height: 32px;
+            text: @tr("Scheme");
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
+        }
+        scheme-selector := ComboBox {
+            x: root.settings-layout-mode == "wide" ? 2 * root.width / 4 + 72px : 80px;
+            y: root.settings-layout-mode == "wide" ? 8px : 44px;
+            width: root.settings-layout-mode == "wide" ? root.width / 4 - 80px : root.width / 2 - 88px;
+            height: 32px;
+            model: [@tr("System"), @tr("Light"), @tr("Dark")];
+            current-index: root.presentation-color-scheme-id;
+            accessible-label: @tr("Presentation color scheme");
+            selected(_) => { root.select-presentation-color-scheme(self.current-index); }
+        }
+        layout-label := Text {
+            x: root.settings-layout-mode == "wide" ? 3 * root.width / 4 + 8px : root.width / 2 + 8px;
+            y: root.settings-layout-mode == "wide" ? 8px : 44px;
+            width: 56px;
+            height: 32px;
+            text: @tr("Layout");
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
+        }
+        layout-selector := ComboBox {
+            x: root.settings-layout-mode == "wide" ? 3 * root.width / 4 + 72px : root.width / 2 + 72px;
+            y: root.settings-layout-mode == "wide" ? 8px : 44px;
+            width: root.settings-layout-mode == "wide" ? root.width / 4 - 80px : root.width / 2 - 80px;
+            height: 32px;
+            model: [@tr("Refined"), @tr("Control center"), @tr("Workbench")];
+            current-index: root.presentation-layout-id;
+            accessible-label: @tr("Presentation layout");
+            selected(_) => { root.select-presentation-layout(self.current-index); }
+        }
+        persistence-label := Text {
+            x: root.settings-layout-mode == "wide" ? root.width / 4 + 8px : 8px;
+            y: root.settings-layout-mode == "wide" ? 48px : 116px;
+            width: root.settings-layout-mode == "wide" ? 3 * root.width / 4 - 16px : root.width - 16px;
+            height: 24px;
+            text: root.presentation-persistence-state == "saved" ? @tr("Saved")
+                : root.presentation-persistence-state == "saving" ? @tr("Saving…")
+                : @tr("Not saved — choose the current presentation again to retry");
+            color: UiTokens.text-secondary;
+            accessible-label: @tr("Presentation persistence {0}", self.text);
+        }
+        locale-label := Text {
+            x: 8px;
+            y: root.settings-layout-mode == "wide" ? 48px : 84px;
+            width: 64px;
+            height: 24px;
+            text: @tr("Language");
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
+        }
+        locale-selector := ComboBox {
+            x: 80px;
+            y: root.settings-layout-mode == "wide" ? 48px : 84px;
+            width: root.settings-layout-mode == "wide" ? root.width / 4 - 88px : root.width / 2 - 88px;
+            height: 24px;
+            model: [@tr("English"), @tr("Russian"), @tr("Pseudo")];
+            current-index: root.presentation-locale-id;
+            accessible-label: @tr("Presentation language");
+            selected(_) => { root.select-presentation-locale(self.current-index); }
+        }
+    }
+
+    settings-scroll := ScrollView {
+        y: presentation-strip.height;
+        width: root.width;
+        height: root.height - presentation-strip.height;
+        viewport := VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space;
+
+        Text { text: @tr("Settings"); color: UiTokens.text-primary; font-size: UiTokens.text-display; font-weight: UiTokens.weight-medium; }
+        Text { text: @tr("Settings health: {0}", root.settings-health); color: UiTokens.text-secondary; }
+
+        reminder-card := Rectangle {
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+
+            reminder-content := VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: @tr("Expiry reminders"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
+                Text { text: @tr("Sync state: {0}", root.reminder-sync-state); color: UiTokens.text-secondary; accessible-label: @tr("Reminder synchronization state {0}", root.reminder-sync-state); }
+                reminder-enabled-control := CheckBox { text: @tr("Enable expiry reminders"); checked: root.reminder-enabled; accessible-label: @tr("Enable expiry reminders"); toggled => { root.reminder-enabled-edited(self.checked); } }
+                Text { text: @tr("Recommended lead times"); color: UiTokens.text-secondary; }
+                presets := VerticalLayout {
+                    spacing: 2px;
+                    CheckBox { text: @tr("7 days"); checked: root.reminder-preset-seven-days; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(0, self.checked); } }
+                    CheckBox { text: @tr("24 hours"); checked: root.reminder-preset-twenty-four-hours; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(1, self.checked); } }
+                    CheckBox { text: @tr("12 hours"); checked: root.reminder-preset-twelve-hours; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(2, self.checked); } }
+                    CheckBox { text: @tr("6 hours"); checked: root.reminder-preset-six-hours; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(3, self.checked); } }
+                    CheckBox { text: @tr("1 hour"); checked: root.reminder-preset-one-hour; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(4, self.checked); } }
+                }
+                Text { text: @tr("Custom lead times"); color: UiTokens.text-secondary; }
+                for row[index] in root.reminder-custom-lead-rows: HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    row-enabled := CheckBox { text: @tr("Custom lead"); checked: row.enabled; accessible-label: @tr("Enable custom reminder lead row {0}", index + 1); toggled => { root.reminder-custom-lead-edited(index, self.checked, value.value, unit.current-index); } }
+                    value := SpinBox { minimum: 1; maximum: 2147483647; value: row.value; accessible-label: @tr("Custom reminder lead value row {0}", index + 1); edited(v) => { root.reminder-custom-lead-edited(index, row-enabled.checked, v, unit.current-index); } }
+                    unit := ComboBox { model: [@tr("seconds"), @tr("minutes"), @tr("hours"), @tr("days")]; current-index: row.unit-index; accessible-label: @tr("Custom reminder lead unit row {0}", index + 1); selected(_) => { root.reminder-custom-lead-edited(index, row-enabled.checked, value.value, self.current-index); } }
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Button { text: @tr("Save reminder profile"); accessible-label: @tr("Save reminder profile"); clicked => { root.save-reminder-policy(); } }
+                    Button { text: @tr("Reset to recommended"); accessible-label: @tr("Reset reminder profile to recommended"); clicked => { root.reset-reminder-recommended(); } }
+                }
+                Text { text: root.reminder-feedback; color: UiTokens.text-secondary; accessible-label: @tr("Reminder editor feedback {0}", root.reminder-feedback); }
+            }
+        }
+
+        backup-card := Rectangle {
+            height: root.settings-layout-mode == "narrow" ? 330px : 214px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: @tr("Automatic backup policy"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
+                enabled := CheckBox { text: @tr("Enable periodic backups"); checked <=> root.periodic-enabled; accessible-label: @tr("Enable periodic backups"); }
+                GridLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { row: 0; col: 0; text: @tr("Quiet seconds"); color: UiTokens.text-secondary; vertical-alignment: center; }
+                    quiet := SpinBox { row: 0; col: 1; minimum: 300; maximum: 3600; value <=> root.quiet-seconds; accessible-label: @tr("Backup quiet period in seconds"); }
+                    Text { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 2 : 0; text: @tr("Interval seconds"); color: UiTokens.text-secondary; vertical-alignment: center; }
+                    interval := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 3 : 1; minimum: 21600; maximum: 604800; value <=> root.interval-seconds; accessible-label: @tr("Backup interval in seconds"); }
+                    Text { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 4 : 0; text: @tr("Budget MiB"); color: UiTokens.text-secondary; vertical-alignment: center; }
+                    budget := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 5 : 1; minimum: 256; maximum: 65536; value <=> root.retention-budget-mib; accessible-label: @tr("Backup retention budget in mebibytes"); }
+                }
+                Button { text: @tr("Save backup policy"); accessible-label: @tr("Save automatic backup policy"); clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); } }
+            }
+        }
+
+        startup-card := Rectangle {
+            height: root.current-user-startup-status == "stale_relocation" ? 190px : 146px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: @tr("Start with Windows"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
+                Text {
+                    text: root.current-user-startup-status == "disabled" ? @tr("Disabled. TokenMaster will not start when you sign in.")
+                        : root.current-user-startup-status == "enabled_verified" ? @tr("Enabled and verified for this executable.")
+                        : root.current-user-startup-status == "stale_relocation" ? @tr("The registration points to a previous TokenMaster location. Repair or remove it explicitly.")
+                        : root.current-user-startup-status == "conflict" ? @tr("A conflicting startup value is present. TokenMaster will not overwrite it.")
+                        : root.current-user-startup-status == "access_denied" ? @tr("Windows denied access to the current-user startup value.")
+                        : @tr("Current-user startup is unavailable on this system.");
+                    color: root.current-user-startup-status == "enabled_verified" ? UiTokens.ready : root.current-user-startup-status == "disabled" ? UiTokens.text-secondary : UiTokens.degraded;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                    accessible-label: @tr("Current-user startup status {0}", root.current-user-startup-status);
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    if root.current-user-startup-can-enable: Button {
+                        text: @tr("Enable at sign-in");
+                        accessible-label: @tr("Enable TokenMaster at Windows sign-in");
+                        clicked => { root.enable-current-user-startup(); }
+                    }
+                    if root.current-user-startup-can-disable && !root.current-user-startup-can-repair: Button {
+                        text: @tr("Disable at sign-in");
+                        accessible-label: @tr("Disable TokenMaster at Windows sign-in");
+                        clicked => { root.disable-current-user-startup(); }
+                    }
+                    if root.current-user-startup-can-repair: Button {
+                        text: @tr("Repair registration");
+                        accessible-label: @tr("Repair TokenMaster startup registration");
+                        clicked => { root.repair-current-user-startup(); }
+                    }
+                    if root.current-user-startup-can-repair: Button {
+                        text: @tr("Remove old registration");
+                        accessible-label: @tr("Remove old TokenMaster startup registration");
+                        clicked => { root.disable-current-user-startup(); }
+                    }
+                }
+            }
+        }
+
+        config-card := Rectangle {
+            height: root.config-import-preview-visible ? 182px : 118px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: @tr("Portable configuration"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; }
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Button { text: @tr("Export configuration"); accessible-label: @tr("Export TokenMaster configuration"); clicked => { root.export-config(); } }
+                    Button { text: @tr("Import configuration"); accessible-label: @tr("Import TokenMaster configuration"); clicked => { root.import-config(); } }
+                }
+                if root.config-import-preview-visible: HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text {
+                        text: @tr("Import review · {0} · {1} · {2}", root.config-import-created-label, root.config-import-bytes-label, root.config-import-changes-label);
+                        color: UiTokens.degraded;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                    }
+                    Button { text: @tr("Apply"); accessible-label: @tr("Apply reviewed configuration import"); clicked => { root.confirm-config-import(); } }
+                    Button { text: @tr("Discard"); accessible-label: @tr("Discard reviewed configuration import"); clicked => { root.cancel-config-import(); } }
+                }
+            }
+        }
+
+        board-card := Rectangle {
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+            accessible-role: groupbox;
+            accessible-label: @tr("Dashboard board");
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                HorizontalLayout {
+                    Text { text: @tr("Dashboard board"); color: UiTokens.text-primary; font-size: UiTokens.text-title; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; }
+                    Button {
+                        text: @tr("Reset board");
+                        accessible-label: @tr("Reset dashboard board");
+                        clicked => { root.reset-dashboard-board(); }
+                    }
+                }
+                Text {
+                    text: @tr("Order, visibility, and collapse are saved with the current presentation.");
+                    color: UiTokens.text-secondary;
+                    wrap: word-wrap;
+                }
+                for row[index] in root.board-editor-rows: Rectangle {
+                    min-height: root.settings-layout-mode == "narrow" ? 84px : 36px;
+                    background: UiTokens.surface-subtle;
+                    border-radius: UiTokens.radius-sm;
+                    accessible-role: groupbox;
+                    accessible-label: @tr("Dashboard board section {0}", row.label);
+                    if root.settings-layout-mode == "narrow": VerticalLayout {
+                        padding: UiTokens.space-xs;
+                        spacing: UiTokens.space-xs;
+                        Text { text: row.label; color: UiTokens.text-primary; font-weight: UiTokens.weight-medium; }
+                        HorizontalLayout {
+                            spacing: UiTokens.space-xs;
+                            Button { text: @tr("Up"); enabled: row.can-move-up; accessible-label: @tr("Move {0} up", row.label); clicked => { root.move-dashboard-board-row(index, -1); } }
+                            Button { text: @tr("Down"); enabled: row.can-move-down; accessible-label: @tr("Move {0} down", row.label); clicked => { root.move-dashboard-board-row(index, 1); } }
+                            CheckBox { text: @tr("Visible"); checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: @tr("Show {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
+                            CheckBox { text: @tr("Collapsed"); checked: row.collapsed; accessible-label: @tr("Collapse {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
+                        }
+                    }
+                    if root.settings-layout-mode == "wide": HorizontalLayout {
+                        padding-left: UiTokens.space-sm;
+                        padding-right: UiTokens.space-sm;
+                        spacing: UiTokens.space-sm;
+                        Text { text: row.label; color: UiTokens.text-primary; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; vertical-alignment: center; }
+                        Button { text: @tr("Up"); enabled: row.can-move-up; accessible-label: @tr("Move {0} up", row.label); clicked => { root.move-dashboard-board-row(index, -1); } }
+                        Button { text: @tr("Down"); enabled: row.can-move-down; accessible-label: @tr("Move {0} down", row.label); clicked => { root.move-dashboard-board-row(index, 1); } }
+                        CheckBox { text: @tr("Visible"); checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: @tr("Show {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
+                        CheckBox { text: @tr("Collapsed"); checked: row.collapsed; accessible-label: @tr("Collapse {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
+                    }
+                }
+            }
+        }
+        Text { text: root.reduced-motion ? @tr("Reduced motion enabled") : @tr("Reduced motion ready"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+        Rectangle { vertical-stretch: 1; background: transparent; }
+        }
+    }
+}

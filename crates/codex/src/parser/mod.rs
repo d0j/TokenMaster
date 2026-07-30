@@ -1,20 +1,20 @@
 use serde::Serialize;
 use tokenmaster_domain::{
-    ActivityCounts, CanonicalUsageEvent, CanonicalUsageEventParts, LongContextState, TokenCount,
-    TokenUsage, UsageProfileId, UsageSessionId, UsageSourceId,
+    ActivityCounts, LongContextState, ObservationDraft, ObservationDraftParts,
+    ObservationVerification, SessionRelationDraft, SessionRelationDraftParts, TokenCount,
+    TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId,
 };
+use tokenmaster_provider::{RepositoryActivityHint, RepositoryActivityHintParts};
 
 mod effects;
-mod fingerprint;
 mod state;
 mod value;
 mod wire;
 
 use effects::{apply_metadata, metadata_update, tool_update};
-use fingerprint::canonical_fingerprint;
 pub use state::{
     MAX_TOOL_NAME_BYTES, MAX_TOOL_NAMES, PARSER_SCHEMA_VERSION, ParserResumeError,
-    ParserResumeErrorCode, ParserResumeStateV1, ParserState, ToolCountEntry,
+    ParserResumeErrorCode, ParserResumeState, ParserState, ToolCountEntry,
 };
 use value::{first_token, resolve_model, timestamp_value};
 use wire::{RawLine, RawResult, RawText, RawUsage};
@@ -36,10 +36,12 @@ const RELEVANCE_MARKERS: [&[u8]; 9] = [
 
 #[derive(Clone, Debug)]
 pub struct ParseContext {
+    provider_id: UsageProviderId,
     profile_id: UsageProfileId,
     source_id: UsageSourceId,
     filename_session_hint: Option<UsageSessionId>,
     hashed_session_hint: UsageSessionId,
+    source_verification: ObservationVerification,
 }
 
 impl ParseContext {
@@ -50,12 +52,24 @@ impl ParseContext {
         filename_session_hint: Option<UsageSessionId>,
         hashed_session_hint: UsageSessionId,
     ) -> Self {
+        let provider_id = match UsageProviderId::new("codex") {
+            Ok(value) => value,
+            Err(_) => unreachable!("the built-in Codex provider ID is valid"),
+        };
         Self {
+            provider_id,
             profile_id,
             source_id,
             filename_session_hint,
             hashed_session_hint,
+            source_verification: ObservationVerification::Incremental,
         }
+    }
+
+    #[must_use]
+    pub fn with_source_verification(mut self, verification: ObservationVerification) -> Self {
+        self.source_verification = verification;
+        self
     }
 }
 
@@ -196,7 +210,8 @@ impl ParserDiagnostics {
 // Keeping the event inline avoids one heap allocation on every emitted usage record.
 #[allow(clippy::large_enum_variant)]
 pub enum ParseOutcome {
-    Emitted(CanonicalUsageEvent),
+    Emitted(ObservationDraft),
+    SessionRelation(SessionRelationDraft),
     MetadataOnly,
     ToolOnly,
     Skipped,
@@ -228,10 +243,20 @@ pub fn parse_line(
         }
     };
     let Some(effect) = line_effect(&raw, state.previous_totals.as_ref(), diagnostics) else {
-        let metadata = metadata_update(&raw, true, diagnostics);
+        let mut metadata = metadata_update(&raw, true, diagnostics);
+        let session_id = resolved_session_id(context, state, &metadata);
+        normalize_lineage_conflict(state, &mut metadata, &session_id);
+        let relation = session_relation_draft(context, &metadata, &session_id, source_offset);
         let metadata_only = metadata.has_updates();
         let tool = tool_update(&raw, diagnostics);
         let tool_only = tool.is_some();
+        record_repository_activity_hint(
+            context,
+            state,
+            &metadata,
+            &session_id,
+            first_timestamp([&raw.timestamp, &raw.created_at, &raw.created_at_v2]),
+        );
         apply_metadata(state, metadata);
         if metadata_only {
             diagnostics.record_metadata_line();
@@ -240,7 +265,9 @@ pub fn parse_line(
             state.record_tool(tool.name, tool.activity, diagnostics);
             diagnostics.record_tool_event();
         }
-        return if tool_only {
+        return if let Some(relation) = relation {
+            ParseOutcome::SessionRelation(relation)
+        } else if tool_only {
             ParseOutcome::ToolOnly
         } else if metadata_only {
             ParseOutcome::MetadataOnly
@@ -255,10 +282,12 @@ pub fn parse_line(
     let usage_positive = usage_is_positive(&effect.usage);
     let include_metadata_model =
         !usage_positive || (!effect.model_includes_payload && effect.model.value.is_none());
-    let metadata = metadata_update(&raw, include_metadata_model, diagnostics);
+    let mut metadata = metadata_update(&raw, include_metadata_model, diagnostics);
     let metadata_line = metadata.has_updates();
     let tool = tool_update(&raw, diagnostics);
     if !usage_positive {
+        let session_id = resolved_session_id(context, state, &metadata);
+        normalize_lineage_conflict(state, &mut metadata, &session_id);
         apply_metadata(state, metadata);
         if metadata_line {
             diagnostics.record_metadata_line();
@@ -291,19 +320,14 @@ pub fn parse_line(
         TokenCount::Available(_) => LongContextState::No,
         TokenCount::Unavailable => LongContextState::Unavailable,
     };
-    let Some(fingerprint) =
-        canonical_fingerprint(&timestamp, &model.key, &context.profile_id, &effect.usage)
-    else {
-        diagnostics.record(ParserDiagnosticCode::InvalidTimestamp);
-        return ParseOutcome::Rejected(ParserDiagnosticCode::InvalidTimestamp);
-    };
-    let session_id = metadata
-        .session_id
+    let session_id = resolved_session_id(context, state, &metadata);
+    normalize_lineage_conflict(state, &mut metadata, &session_id);
+    let parent_session_id = metadata
+        .parent_session_id
         .as_ref()
-        .or(state.session_id.as_ref())
-        .or(context.filename_session_hint.as_ref())
-        .unwrap_or(&context.hashed_session_hint)
-        .clone();
+        .or(state.parent_session_id.as_ref())
+        .cloned();
+    let lineage_conflict = metadata.lineage_conflict || state.lineage_conflict;
     let service_tier = metadata
         .service_tier
         .as_ref()
@@ -323,25 +347,36 @@ pub fn parse_line(
     if let Some(tool) = tool.as_ref() {
         activity.increment(tool.activity);
     }
-    let event = CanonicalUsageEvent::new(
-        CanonicalUsageEventParts {
-            profile_id: context.profile_id.clone(),
-            session_id: session_id.clone(),
-            source_id: context.source_id.clone(),
-            source_offset,
-            timestamp,
-            model: model.key.clone(),
-            raw_model: model.raw.clone(),
-            usage: effect.usage,
-            fallback_model: model.fallback,
-            long_context,
-            service_tier,
-            project,
-            originator,
-            activity,
-        },
-        fingerprint,
-    );
+    let event = match ObservationDraft::new(ObservationDraftParts {
+        provider_id: context.provider_id.clone(),
+        profile_id: context.profile_id.clone(),
+        session_id: session_id.clone(),
+        parent_session_id,
+        session_ordinal: state.next_usage_ordinal,
+        lineage_conflict,
+        source_id: context.source_id.clone(),
+        source_offset,
+        source_verification: context.source_verification,
+        timestamp,
+        model: model.key.clone(),
+        raw_model: model.raw.clone(),
+        delta_usage: effect.usage,
+        cumulative_usage: effect.baseline_update,
+        fallback_model: model.fallback,
+        long_context,
+        service_tier,
+        reported_cost: None,
+        project,
+        originator,
+        activity,
+    }) {
+        Ok(event) => event,
+        Err(_) => {
+            diagnostics.record(ParserDiagnosticCode::InvalidMetadata);
+            return ParseOutcome::Rejected(ParserDiagnosticCode::InvalidMetadata);
+        }
+    };
+    record_repository_activity_hint(context, state, &metadata, &session_id, Some(timestamp));
     apply_metadata(state, metadata);
     if metadata_line {
         diagnostics.record_metadata_line();
@@ -357,9 +392,95 @@ pub fn parse_line(
     if state.session_id.is_none() {
         state.session_id = Some(session_id);
     }
+    state.next_usage_ordinal = state.next_usage_ordinal.saturating_add(1);
     state.pending_activity = ActivityCounts::default();
     diagnostics.record_emitted_event();
     ParseOutcome::Emitted(event)
+}
+
+fn record_repository_activity_hint(
+    context: &ParseContext,
+    state: &mut ParserState,
+    metadata: &effects::MetadataUpdate,
+    session_id: &UsageSessionId,
+    observed_at: Option<tokenmaster_domain::UtcTimestamp>,
+) {
+    let Some(observed_at) = observed_at else {
+        return;
+    };
+    let (candidate, project) = match &metadata.repository_candidate {
+        effects::RepositoryCandidateUpdate::Missing => {
+            let Some(candidate) = state.repository_candidate.clone() else {
+                return;
+            };
+            (candidate, state.repository_project.clone())
+        }
+        effects::RepositoryCandidateUpdate::Set(candidate) => {
+            (candidate.clone(), metadata.project.clone())
+        }
+        effects::RepositoryCandidateUpdate::Clear => return,
+    };
+    state.record_repository_activity_hint(RepositoryActivityHint::new(
+        RepositoryActivityHintParts {
+            provider_id: context.provider_id.clone(),
+            profile_id: context.profile_id.clone(),
+            source_id: context.source_id.clone(),
+            session_id: session_id.clone(),
+            observed_at,
+            project,
+            candidate,
+        },
+    ));
+}
+
+fn resolved_session_id(
+    context: &ParseContext,
+    state: &ParserState,
+    metadata: &effects::MetadataUpdate,
+) -> UsageSessionId {
+    metadata
+        .session_id
+        .as_ref()
+        .or(state.session_id.as_ref())
+        .or(context.filename_session_hint.as_ref())
+        .unwrap_or(&context.hashed_session_hint)
+        .clone()
+}
+
+fn normalize_lineage_conflict(
+    state: &ParserState,
+    metadata: &mut effects::MetadataUpdate,
+    session_id: &UsageSessionId,
+) {
+    let incoming_parent = metadata.parent_session_id.as_ref();
+    let effective_parent = incoming_parent.or(state.parent_session_id.as_ref());
+    metadata.lineage_conflict |= state.lineage_conflict
+        || effective_parent.is_some_and(|parent| parent == session_id)
+        || incoming_parent.is_some_and(|parent| {
+            state
+                .parent_session_id
+                .as_ref()
+                .is_some_and(|existing| existing != parent)
+        });
+}
+
+fn session_relation_draft(
+    context: &ParseContext,
+    metadata: &effects::MetadataUpdate,
+    session_id: &UsageSessionId,
+    source_offset: u64,
+) -> Option<SessionRelationDraft> {
+    let parent_session_id = metadata.parent_session_id.clone()?;
+    SessionRelationDraft::new(SessionRelationDraftParts {
+        provider_id: context.provider_id.clone(),
+        profile_id: context.profile_id.clone(),
+        session_id: session_id.clone(),
+        parent_session_id,
+        declared_conflict: metadata.lineage_conflict,
+        source_id: context.source_id.clone(),
+        source_offset,
+    })
+    .ok()
 }
 
 struct LineEffect<'a> {

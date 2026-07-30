@@ -4,7 +4,7 @@ use std::path::Component;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokenmaster_domain::CanonicalUsageEvent;
+use tokenmaster_domain::{ObservationDraft, ObservationVerification, SessionRelationDraft};
 use tokenmaster_platform::PhysicalFileIdentity;
 use tokenmaster_provider::SourceKind;
 
@@ -28,6 +28,74 @@ pub const SOURCE_CHUNK_BYTES: u64 = 1 << 20;
 const LOGICAL_FILE_DOMAIN: &[u8] = b"tm-source-path-v1";
 const PROFILE_HISTORY_CLASS: &[u8] = b"profile-history";
 const DIRECT_CLASS: &[u8] = b"direct";
+
+#[derive(Clone)]
+pub struct ReaderProofCache {
+    logical_identity: Option<LogicalFileIdentity>,
+    physical_identity: Option<PhysicalFileIdentity>,
+    observed_file_length: u64,
+    modified_time_ns: Option<i64>,
+    chunk_index: u64,
+    covered_len: u32,
+    hasher: Sha256,
+    recovery_bytes_read: u64,
+}
+
+impl Default for ReaderProofCache {
+    fn default() -> Self {
+        Self {
+            logical_identity: None,
+            physical_identity: None,
+            observed_file_length: 0,
+            modified_time_ns: None,
+            chunk_index: 0,
+            covered_len: 0,
+            hasher: Sha256::new(),
+            recovery_bytes_read: 0,
+        }
+    }
+}
+
+impl ReaderProofCache {
+    fn bind(
+        &mut self,
+        logical_identity: LogicalFileIdentity,
+        physical_identity: Option<PhysicalFileIdentity>,
+        observed_file_length: u64,
+        modified_time_ns: Option<i64>,
+    ) {
+        if self.logical_identity != Some(logical_identity)
+            || self.physical_identity != physical_identity
+            || self.observed_file_length != observed_file_length
+            || self.modified_time_ns != modified_time_ns
+        {
+            self.logical_identity = Some(logical_identity);
+            self.physical_identity = physical_identity;
+            self.observed_file_length = observed_file_length;
+            self.modified_time_ns = modified_time_ns;
+            self.chunk_index = 0;
+            self.covered_len = 0;
+            self.hasher = Sha256::new();
+        }
+    }
+
+    #[must_use]
+    pub const fn recovery_bytes_read(&self) -> u64 {
+        self.recovery_bytes_read
+    }
+}
+
+impl fmt::Debug for ReaderProofCache {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ReaderProofCache")
+            .field("bound", &self.logical_identity.is_some())
+            .field("chunk_index", &self.chunk_index)
+            .field("covered_len", &self.covered_len)
+            .field("recovery_bytes_read", &self.recovery_bytes_read)
+            .finish_non_exhaustive()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -250,13 +318,15 @@ impl fmt::Debug for ReaderOutcome {
 
 pub struct ReadBatch {
     checkpoint: ReaderCheckpointV1,
-    events: Vec<CanonicalUsageEvent>,
+    events: Vec<ObservationDraft>,
+    relations: Vec<SessionRelationDraft>,
     diagnostics: ReaderDiagnostics,
     parser_diagnostics: ParserDiagnostics,
     bytes_read: u64,
     reached_snapshot_end: bool,
     source_chunks: Vec<SourceChunkDigest>,
     previous_partial_chunk: Option<SourceChunkDigest>,
+    latest_repository_activity_hint: Option<tokenmaster_provider::RepositoryActivityHint>,
 }
 
 impl ReadBatch {
@@ -266,8 +336,13 @@ impl ReadBatch {
     }
 
     #[must_use]
-    pub fn events(&self) -> &[CanonicalUsageEvent] {
+    pub fn events(&self) -> &[ObservationDraft] {
         &self.events
+    }
+
+    #[must_use]
+    pub fn relations(&self) -> &[SessionRelationDraft] {
+        &self.relations
     }
 
     #[must_use]
@@ -299,6 +374,13 @@ impl ReadBatch {
     pub const fn previous_partial_chunk(&self) -> Option<SourceChunkDigest> {
         self.previous_partial_chunk
     }
+
+    #[must_use]
+    pub fn take_latest_repository_activity_hint(
+        &mut self,
+    ) -> Option<tokenmaster_provider::RepositoryActivityHint> {
+        self.latest_repository_activity_hint.take()
+    }
 }
 
 impl fmt::Debug for ReadBatch {
@@ -307,6 +389,7 @@ impl fmt::Debug for ReadBatch {
             .debug_struct("ReadBatch")
             .field("checkpoint", &self.checkpoint)
             .field("events_count", &self.events.len())
+            .field("relations_count", &self.relations.len())
             .field("diagnostics", &self.diagnostics)
             .field("parser_diagnostics", &self.parser_diagnostics)
             .field("bytes_read", &self.bytes_read)
@@ -315,6 +398,10 @@ impl fmt::Debug for ReadBatch {
             .field(
                 "has_previous_partial_chunk",
                 &self.previous_partial_chunk.is_some(),
+            )
+            .field(
+                "has_repository_activity_hint",
+                &self.latest_repository_activity_hint.is_some(),
             )
             .finish()
     }
@@ -409,9 +496,100 @@ pub fn logical_file_identity(descriptor: &SourceFileDescriptor) -> LogicalFileId
     LogicalFileIdentity::from_bytes(hasher.finalize().into())
 }
 
+/// Opens and validates one source, then creates a zero-offset checkpoint without
+/// reading source content.
+pub fn initialize_source_checkpoint(
+    descriptor: &SourceFileDescriptor,
+) -> Result<ReaderCheckpointV1, ReaderError> {
+    let source = source::open_source(descriptor)?;
+    ReaderCheckpointV1::new(ReaderCheckpointParts {
+        parser_schema_version: PARSER_SCHEMA_VERSION,
+        physical_identity: source.physical_identity,
+        logical_identity: logical_file_identity(descriptor),
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_file_length: source.file_length,
+        modified_time_ns: source.modified_time_ns,
+        anchor: BoundaryAnchor::new(0, 0, [0; 32])
+            .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?,
+        resume: ParserState::new().snapshot(),
+        discarding_oversized_line: false,
+        incomplete_tail: false,
+        verification: VerificationLevel::FullPrefix,
+    })
+    .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SourceCheckpointStatus {
+    Unchanged,
+    Appended,
+    RebuildRequired(RebuildReason),
+}
+
+pub fn validate_source_checkpoint(
+    descriptor: &SourceFileDescriptor,
+    checkpoint: &ReaderCheckpointV1,
+) -> Result<SourceCheckpointStatus, ReaderError> {
+    let logical_identity = logical_file_identity(descriptor);
+    let mut source = source::open_source(descriptor)?;
+    if checkpoint.logical_identity() != logical_identity
+        || checkpoint.physical_identity() != source.physical_identity
+    {
+        return Ok(SourceCheckpointStatus::RebuildRequired(
+            RebuildReason::IdentityChanged,
+        ));
+    }
+    if source.file_length < checkpoint.observed_file_length() {
+        return Ok(SourceCheckpointStatus::RebuildRequired(
+            RebuildReason::Truncated,
+        ));
+    }
+    if source.file_length == checkpoint.observed_file_length()
+        && source.modified_time_ns != checkpoint.modified_time_ns()
+    {
+        return Ok(SourceCheckpointStatus::RebuildRequired(
+            RebuildReason::RewriteDetected,
+        ));
+    }
+    if !checkpoint.anchor().is_empty() {
+        let anchor = checkpoint.anchor();
+        let observed =
+            source::hash_range(&mut source.file, anchor.start(), u64::from(anchor.len()))?;
+        if &observed != anchor.sha256() {
+            return Ok(SourceCheckpointStatus::RebuildRequired(
+                RebuildReason::AnchorMismatch,
+            ));
+        }
+    }
+    let unchanged = source.file_length == checkpoint.observed_file_length()
+        && source.modified_time_ns == checkpoint.modified_time_ns()
+        && ((checkpoint.incomplete_tail() && !checkpoint.discarding_oversized_line())
+            || checkpoint.scan_offset() == source.file_length);
+    Ok(if unchanged {
+        SourceCheckpointStatus::Unchanged
+    } else {
+        SourceCheckpointStatus::Appended
+    })
+}
+
 pub fn read_source_batch(
     descriptor: &SourceFileDescriptor,
     checkpoint: Option<&ReaderCheckpointV1>,
+    mut should_cancel: impl FnMut() -> bool,
+) -> Result<ReaderOutcome, ReaderError> {
+    read_source_batch_with_cache(
+        descriptor,
+        checkpoint,
+        &mut ReaderProofCache::default(),
+        &mut should_cancel,
+    )
+}
+
+pub fn read_source_batch_with_cache(
+    descriptor: &SourceFileDescriptor,
+    checkpoint: Option<&ReaderCheckpointV1>,
+    proof_cache: &mut ReaderProofCache,
     mut should_cancel: impl FnMut() -> bool,
 ) -> Result<ReaderOutcome, ReaderError> {
     if should_cancel() {
@@ -419,6 +597,12 @@ pub fn read_source_batch(
     }
     let logical_identity = logical_file_identity(descriptor);
     let mut source = source::open_source(descriptor)?;
+    proof_cache.bind(
+        logical_identity,
+        source.physical_identity,
+        source.file_length,
+        source.modified_time_ns,
+    );
     let probe = SourceProbe {
         physical_identity: source.physical_identity,
         logical_identity,
@@ -481,7 +665,7 @@ pub fn read_source_batch(
         .map_err(|_| ReaderError::new(ReaderErrorCode::SeekFailed))?;
     let remaining = source.file_length.saturating_sub(start_offset);
     let mut reader = BufReader::with_capacity(READ_BUFFER_BYTES, source.file.take(remaining));
-    let framed = framing::read_lines(
+    let mut framed = framing::read_lines(
         &mut reader,
         framing::FramingInput {
             descriptor,
@@ -491,6 +675,10 @@ pub fn read_source_batch(
             snapshot_end_offset: source.file_length,
             discarding_oversized_line: checkpoint
                 .is_some_and(ReaderCheckpointV1::discarding_oversized_line),
+            source_verification: match verification {
+                VerificationLevel::Incremental => ObservationVerification::Incremental,
+                VerificationLevel::FullPrefix => ObservationVerification::FullPrefix,
+            },
         },
         &mut should_cancel,
     )?;
@@ -498,43 +686,25 @@ pub fn read_source_batch(
     if should_cancel() {
         return Err(ReaderError::new(ReaderErrorCode::Cancelled));
     }
-    let observed_range_sha256 = source::hash_range(&mut file, start_offset, framed.bytes_read)
-        .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
-    if observed_range_sha256 != framed.consumed_sha256 {
-        return Err(ReaderError::new(ReaderErrorCode::SourceChanged));
-    }
-
-    let anchor = source::boundary_anchor(&mut file, framed.committed_offset)
-        .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
     let verified_chunk_end = if framed.discarding_oversized_line {
         framed.scan_offset
     } else {
         framed.committed_offset
     };
-    let (source_chunks, previous_partial_chunk) = if verified_chunk_end > start_offset {
-        let first_chunk = start_offset / SOURCE_CHUNK_BYTES;
-        if start_offset % SOURCE_CHUNK_BYTES == 0 {
-            (
-                source::source_chunks_for_range(&mut file, first_chunk, verified_chunk_end)
-                    .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?,
-                None,
-            )
-        } else {
-            let (previous, current) =
-                source::extended_partial_chunk(&mut file, start_offset, verified_chunk_end)
-                    .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
-            let mut chunks = source::source_chunks_for_range(
-                &mut file,
-                first_chunk.saturating_add(1),
-                verified_chunk_end,
-            )
-            .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
-            chunks.insert(0, current);
-            (chunks, Some(previous))
-        }
-    } else {
-        (Vec::new(), None)
-    };
+    let proof_validation = source::validate_and_extend_chunk_proofs(
+        &mut file,
+        start_offset,
+        framed.bytes_read,
+        verified_chunk_end,
+        proof_cache,
+    )
+    .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
+    if proof_validation.observed_sha256 != framed.consumed_sha256 {
+        return Err(ReaderError::new(ReaderErrorCode::SourceChanged));
+    }
+
+    let anchor = source::boundary_anchor(&mut file, framed.committed_offset)
+        .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
     let (final_identity, final_length, final_modified_time_ns) =
         source::current_handle_observation(&file)
             .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
@@ -552,6 +722,7 @@ pub fn read_source_batch(
         source::revalidate_path_identity(descriptor, expected)
             .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
     }
+    let latest_repository_activity_hint = framed.state.take_latest_repository_activity_hint();
     let checkpoint = ReaderCheckpointV1::new(ReaderCheckpointParts {
         parser_schema_version: PARSER_SCHEMA_VERSION,
         physical_identity: source.physical_identity,
@@ -571,12 +742,14 @@ pub fn read_source_batch(
     Ok(ReaderOutcome::Batch(ReadBatch {
         checkpoint,
         events: framed.events,
+        relations: framed.relations,
         diagnostics: framed.diagnostics,
         parser_diagnostics: framed.parser_diagnostics,
         bytes_read: framed.bytes_read,
         reached_snapshot_end: framed.reached_snapshot_end,
-        source_chunks,
-        previous_partial_chunk,
+        source_chunks: proof_validation.chunks,
+        previous_partial_chunk: proof_validation.previous_partial,
+        latest_repository_activity_hint,
     }))
 }
 

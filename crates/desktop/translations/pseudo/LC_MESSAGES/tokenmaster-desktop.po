@@ -1,0 +1,1367 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: pseudo\n"
+
+msgid "TokenMaster"
+msgstr "［TokenMaster ···］"
+
+msgid "Local usage intelligence"
+msgstr "［Ŀõçåļ ûšåğê îñţêļļîğêñçê ·······］"
+
+msgid "Go to route"
+msgstr "［Ĝõ ţõ řõûţê ·····］"
+
+msgid "Open route palette"
+msgstr "［Õþêñ řõûţê þåļêţţê ·······］"
+
+msgid "TokenMaster settings"
+msgstr "［ŢõķêñMåšţêř šêţţîñğš ·······］"
+
+msgid "Density"
+msgstr "［Ðêñšîţÿ ···］"
+
+msgid "Comfortable"
+msgstr "［Çõɱƒõřţåβļê ·····］"
+
+msgid "Compact"
+msgstr "［Çõɱþåçţ ···］"
+
+msgid "Ultra compact"
+msgstr "［Ûļţřå çõɱþåçţ ·····］"
+
+msgid "Presentation density"
+msgstr "［Þřêšêñţåţîõñ ðêñšîţÿ ·······］"
+
+msgid "Skin"
+msgstr "［Šķîñ ···］"
+
+msgid "Refined"
+msgstr "［Řêƒîñêð ···］"
+
+msgid "Graphite"
+msgstr "［Ĝřåþĥîţê ···］"
+
+msgid "Ember"
+msgstr "［Êɱβêř ···］"
+
+msgid "Presentation skin"
+msgstr "［Þřêšêñţåţîõñ šķîñ ·······］"
+
+msgid "Scheme"
+msgstr "［Šçĥêɱê ···］"
+
+msgid "System"
+msgstr "［Šÿšţêɱ ···］"
+
+msgid "Light"
+msgstr "［Ŀîğĥţ ···］"
+
+msgid "Dark"
+msgstr "［Ðåřķ ···］"
+
+msgid "Presentation color scheme"
+msgstr "［Þřêšêñţåţîõñ çõļõř šçĥêɱê ·······］"
+
+msgid "Layout"
+msgstr "［Ŀåÿõûţ ···］"
+
+msgid "Control center"
+msgstr "［Çõñţřõļ çêñţêř ·······］"
+
+msgid "Workbench"
+msgstr "［Ŵõřķβêñçĥ ···］"
+
+msgid "Presentation layout"
+msgstr "［Þřêšêñţåţîõñ ļåÿõûţ ·······］"
+
+msgid "Saved"
+msgstr "［Šåṽêð ···］"
+
+msgid "Saving…"
+msgstr "［Šåṽîñğ… ···］"
+
+msgid "Not saved — choose the current presentation again to retry"
+msgstr "［Ñõţ šåṽêð — çĥõõšê ţĥê çûřřêñţ þřêšêñţåţîõñ åğåîñ ţõ řêţřÿ ·······］"
+
+msgid "Presentation persistence {0}"
+msgstr "［Þřêšêñţåţîõñ þêřšîšţêñçê {0} ·······］"
+
+msgid "Language"
+msgstr "［Ŀåñğûåğê ···］"
+
+msgid "English"
+msgstr "［Êñğļîšĥ ···］"
+
+msgid "Russian"
+msgstr "［Řûššîåñ ···］"
+
+msgid "Pseudo"
+msgstr "［Þšêûðõ ···］"
+
+msgid "Presentation language"
+msgstr "［Þřêšêñţåţîõñ ļåñğûåğê ·······］"
+
+msgid "Review"
+msgstr "［Řêṽîêŵ ···］"
+
+msgid "Review restore point "
+msgstr "［Řêṽîêŵ řêšţõřê þõîñţ ···］"
+
+msgid "Route palette"
+msgstr "［Řõûţê þåļêţţê ·····］"
+
+msgid "Filter routes"
+msgstr "［Fîļţêř řõûţêš ·····］"
+
+msgid "No matching routes"
+msgstr "［Ñõ ɱåţçĥîñğ řõûţêš ·······］"
+
+msgid "Up/Down to select · Enter to open · Escape to dismiss"
+msgstr "［Ûþ/Ðõŵñ ţõ šêļêçţ · Êñţêř ţõ õþêñ · Êšçåþê ţõ ðîšɱîšš ·······］"
+
+msgid "Expiry notifications. "
+msgstr "［Êxþîřÿ ñõţîƒîçåţîõñš ···］"
+
+msgid ". Open Notifications for current inventory and reminder policy."
+msgstr "［Õþêñ Ñõţîƒîçåţîõñš ƒõř çûřřêñţ îñṽêñţõřÿ åñð řêɱîñðêř þõļîçÿ ·······］"
+
+msgid "Expiry reminder"
+msgstr "［Êxþîřÿ řêɱîñðêř ···］"
+
+msgid "Dismiss"
+msgstr "［Ðîšɱîšš ···］"
+
+msgid "Dismiss expiry notifications"
+msgstr "［Ðîšɱîšš êxþîřÿ ñõţîƒîçåţîõñš ·····］"
+
+msgid "These reminders were applied in TokenMaster. Open Notifications for the complete current inventory."
+msgstr "［Ţĥêšê řêɱîñðêřš ŵêřê åþþļîêð îñ ŢõķêñMåšţêř. Õþêñ Ñõţîƒîçåţîõñš ƒõř ţĥê çõɱþļêţê çûřřêñţ îñṽêñţõřÿ ·······］"
+
+msgid "Qty "
+msgstr "［Qţÿ ···］"
+
+msgid "Reliable state operation "
+msgstr "［Řêļîåβļê šţåţê õþêřåţîõñ ···］"
+
+msgid "Refresh"
+msgstr "［Rêfřêšĥ ···］"
+
+msgid "Refreshing…"
+msgstr "［Rêfřêšĥîñğ… ···］"
+
+msgid "Refresh usage data"
+msgstr "［Rêfřêšĥ ûšåğê ðåţå ···］"
+
+msgid "Retry"
+msgstr "［Řêţřÿ ···］"
+
+msgid "Retry reliable state operation"
+msgstr "［Řêţřÿ řêļîåβļê šţåţê õþêřåţîõñ ·····］"
+
+msgid "Cancel"
+msgstr "［Çåñçêļ ···］"
+
+msgid "Cancel reliable state operation"
+msgstr "［Çåñçêļ řêļîåβļê šţåţê õþêřåţîõñ ·····］"
+
+msgid "Recovery mode status"
+msgstr "［Řêçõṽêřÿ ɱõðê šţåţûš ·····］"
+
+msgid "Safe mode is active. Usage data remains offline while recovery controls stay available."
+msgstr "［Šåƒê ɱõðê îš åçţîṽê. Ûšåğê ðåţå řêɱåîñš õƒƒļîñê ŵĥîļê řêçõṽêřÿ çõñţřõļš šţåÿ åṽåîļåβļê ·······］"
+
+msgid "Usage was rebuilt from local Codex sources. Previous quota, reset-credit, reminder, and Git history is unavailable."
+msgstr "［Ûšåğê ŵåš řêβûîļţ ƒřõɱ ļõçåļ Çõðêx šõûřçêš. Þřêṽîõûš ǫûõţå, řêšêţ-çřêðîţ, řêɱîñðêř, åñð Ĝîţ ĥîšţõřÿ îš ûñåṽåîļåβļê ·······］"
+
+msgid "Usage was rebuilt from local Codex sources."
+msgstr "［Ûšåğê ŵåš řêβûîļţ ƒřõɱ ļõçåļ Çõðêx šõûřçêš ·····］"
+
+msgid "Data recovery completed from a verified backup."
+msgstr "［Ðåţå řêçõṽêřÿ çõɱþļêţêð ƒřõɱ å ṽêřîƒîêð βåçķûþ ·······］"
+
+msgid "Data recovery requires attention."
+msgstr "［Ðåţå řêçõṽêřÿ řêǫûîřêš åţţêñţîõñ ·····］"
+
+msgid "State: "
+msgstr "［Šţåţê ···］"
+
+msgid "No blocking reasons"
+msgstr "［Ñõ βļõçķîñğ řêåšõñš ·····］"
+
+msgid "Reasons: "
+msgstr "［Řêåšõñš ···］"
+
+msgid "Product generation "
+msgstr "［Þřõðûçţ ğêñêřåţîõñ ···］"
+
+msgid ": "
+msgstr "［: ···］"
+
+msgid "Settings"
+msgstr "［Šêţţîñğš ···］"
+
+msgid "Settings health: {0}"
+msgstr "［Šêţţîñğš ĥêåļţĥ: {0} ·····］"
+
+msgid "Expiry reminders"
+msgstr "［Êxþîřÿ řêɱîñðêřš ·····］"
+
+msgid "Sync state: {0}"
+msgstr "［Šÿñç šţåţê: {0} ·····］"
+
+msgid "Reminder synchronization state {0}"
+msgstr "［Řêɱîñðêř šÿñçĥřõñîžåţîõñ šţåţê {0} ·······］"
+
+msgid "Enable expiry reminders"
+msgstr "［Êñåβļê êxþîřÿ řêɱîñðêřš ·····］"
+
+msgid "Recommended lead times"
+msgstr "［Řêçõɱɱêñðêð ļêåð ţîɱêš ·····］"
+
+msgid "7 days"
+msgstr "［7 ðåÿš ···］"
+
+msgid "24 hours"
+msgstr "［24 ĥõûřš ···］"
+
+msgid "12 hours"
+msgstr "［12 ĥõûřš ···］"
+
+msgid "6 hours"
+msgstr "［6 ĥõûřš ···］"
+
+msgid "1 hour"
+msgstr "［1 ĥõûř ···］"
+
+msgid "Reminder lead time {0}"
+msgstr "［Řêɱîñðêř ļêåð ţîɱê {0} ·····］"
+
+msgid "Custom lead times"
+msgstr "［Çûšţõɱ ļêåð ţîɱêš ·····］"
+
+msgid "Custom lead"
+msgstr "［Çûšţõɱ ļêåð ···］"
+
+msgid "Enable custom reminder lead row {0}"
+msgstr "［Êñåβļê çûšţõɱ řêɱîñðêř ļêåð řõŵ {0} ·······］"
+
+msgid "Custom reminder lead value row {0}"
+msgstr "［Çûšţõɱ řêɱîñðêř ļêåð ṽåļûê řõŵ {0} ·······］"
+
+msgid "seconds"
+msgstr "［šêçõñðš ···］"
+
+msgid "minutes"
+msgstr "［ɱîñûţêš ···］"
+
+msgid "hours"
+msgstr "［ĥõûřš ···］"
+
+msgid "days"
+msgstr "［ðåÿš ···］"
+
+msgid "Custom reminder lead unit row {0}"
+msgstr "［Çûšţõɱ řêɱîñðêř ļêåð ûñîţ řõŵ {0} ·······］"
+
+msgid "Save reminder profile"
+msgstr "［Šåṽê řêɱîñðêř þřõƒîļê ·····］"
+
+msgid "Reset to recommended"
+msgstr "［Řêšêţ ţõ řêçõɱɱêñðêð ·····］"
+
+msgid "Reset reminder profile to recommended"
+msgstr "［Řêšêţ řêɱîñðêř þřõƒîļê ţõ řêçõɱɱêñðêð ·······］"
+
+msgid "Reminder editor feedback {0}"
+msgstr "［Řêɱîñðêř êðîţõř ƒêêðβåçķ {0} ·····］"
+
+msgid "Automatic backup policy"
+msgstr "［Åûţõɱåţîç βåçķûþ þõļîçÿ ·····］"
+
+msgid "Enable periodic backups"
+msgstr "［Êñåβļê þêřîõðîç βåçķûþš ·····］"
+
+msgid "Quiet seconds"
+msgstr "［Qûîêţ šêçõñðš ···］"
+
+msgid "Backup quiet period in seconds"
+msgstr "［βåçķûþ ǫûîêţ þêřîõð îñ šêçõñðš ·······］"
+
+msgid "Interval seconds"
+msgstr "［Îñţêřṽåļ šêçõñðš ···］"
+
+msgid "Backup interval in seconds"
+msgstr "［βåçķûþ îñţêřṽåļ îñ šêçõñðš ·······］"
+
+msgid "Budget MiB"
+msgstr "［βûðğêţ Mîβ ···］"
+
+msgid "Backup retention budget in mebibytes"
+msgstr "［βåçķûþ řêţêñţîõñ βûðğêţ îñ ɱêβîβÿţêš ·······］"
+
+msgid "Save backup policy"
+msgstr "［Šåṽê βåçķûþ þõļîçÿ ·····］"
+
+msgid "Save automatic backup policy"
+msgstr "［Šåṽê åûţõɱåţîç βåçķûþ þõļîçÿ ·······］"
+
+msgid "Start with Windows"
+msgstr "［Šţåřţ ŵîţĥ Ŵîñðõŵš ·····］"
+
+msgid "Disabled. TokenMaster will not start when you sign in."
+msgstr "［Ðîšåβļêð. ŢõķêñMåšţêř ŵîļļ ñõţ šţåřţ ŵĥêñ ÿõû šîğñ îñ. ·······］"
+
+msgid "Enabled and verified for this executable."
+msgstr "［Êñåβļêð åñð ṽêřîƒîêð ƒõř ţĥîš êxêçûţåβļê. ·····］"
+
+msgid "The registration points to a previous TokenMaster location. Repair or remove it explicitly."
+msgstr "［Ţĥê řêğîšţřåţîõñ þõîñţš ţõ å þřêṽîõûš ŢõķêñMåšţêř ļõçåţîõñ. Řêþåîř õř řêɱõṽê îţ êxþļîçîţļÿ. ·······］"
+
+msgid "A conflicting startup value is present. TokenMaster will not overwrite it."
+msgstr "［Å çõñƒļîçţîñğ šţåřţûþ ṽåļûê îš þřêšêñţ. ŢõķêñMåšţêř ŵîļļ ñõţ õṽêřŵřîţê îţ. ·······］"
+
+msgid "Windows denied access to the current-user startup value."
+msgstr "［Ŵîñðõŵš ðêñîêð åççêšš ţõ ţĥê çûřřêñţ-ûšêř šţåřţûþ ṽåļûê. ·······］"
+
+msgid "Current-user startup is unavailable on this system."
+msgstr "［Çûřřêñţ-ûšêř šţåřţûþ îš ûñåṽåîļåβļê õñ ţĥîš šÿšţêɱ. ·······］"
+
+msgid "Current-user startup status {0}"
+msgstr "［Çûřřêñţ-ûšêř šţåřţûþ šţåţûš {0} ·····］"
+
+msgid "Enable at sign-in"
+msgstr "［Êñåβļê åţ šîğñ-îñ ·····］"
+
+msgid "Enable TokenMaster at Windows sign-in"
+msgstr "［Êñåβļê ŢõķêñMåšţêř åţ Ŵîñðõŵš šîğñ-îñ ·······］"
+
+msgid "Disable at sign-in"
+msgstr "［Ðîšåβļê åţ šîğñ-îñ ·····］"
+
+msgid "Disable TokenMaster at Windows sign-in"
+msgstr "［Ðîšåβļê ŢõķêñMåšţêř åţ Ŵîñðõŵš šîğñ-îñ ·······］"
+
+msgid "Repair registration"
+msgstr "［Řêþåîř řêğîšţřåţîõñ ·····］"
+
+msgid "Repair TokenMaster startup registration"
+msgstr "［Řêþåîř ŢõķêñMåšţêř šţåřţûþ řêğîšţřåţîõñ ·······］"
+
+msgid "Remove old registration"
+msgstr "［Řêɱõṽê õļð řêğîšţřåţîõñ ·····］"
+
+msgid "Remove old TokenMaster startup registration"
+msgstr "［Řêɱõṽê õļð ŢõķêñMåšţêř šţåřţûþ řêğîšţřåţîõñ ·······］"
+
+msgid "Portable configuration"
+msgstr "［Þõřţåβļê çõñƒîğûřåţîõñ ·····］"
+
+msgid "Export configuration"
+msgstr "［Êxþõřţ çõñƒîğûřåţîõñ ·····］"
+
+msgid "Export TokenMaster configuration"
+msgstr "［Êxþõřţ ŢõķêñMåšţêř çõñƒîğûřåţîõñ ·······］"
+
+msgid "Import configuration"
+msgstr "［Îɱþõřţ çõñƒîğûřåţîõñ ·····］"
+
+msgid "Import TokenMaster configuration"
+msgstr "［Îɱþõřţ ŢõķêñMåšţêř çõñƒîğûřåţîõñ ·······］"
+
+msgid "Import review · {0} · {1} · {2}"
+msgstr "［Îɱþõřţ řêṽîêŵ · {0} · {1} · {2} ·······］"
+
+msgid "Apply"
+msgstr "［Åþþļÿ ···］"
+
+msgid "Apply reviewed configuration import"
+msgstr "［Åþþļÿ řêṽîêŵêð çõñƒîğûřåţîõñ îɱþõřţ ·······］"
+
+msgid "Discard"
+msgstr "［Ðîšçåřð ···］"
+
+msgid "Discard reviewed configuration import"
+msgstr "［Ðîšçåřð řêṽîêŵêð çõñƒîğûřåţîõñ îɱþõřţ ·······］"
+
+msgid "Dashboard board"
+msgstr "［Ðåšĥβõåřð βõåřð ·····］"
+
+msgid "Reset board"
+msgstr "［Řêšêţ βõåřð ·····］"
+
+msgid "Reset dashboard board"
+msgstr "［Řêšêţ ðåšĥβõåřð βõåřð ·····］"
+
+msgid "Order, visibility, and collapse are saved with the current presentation."
+msgstr "［Õřðêř, ṽîšîβîļîţÿ, åñð çõļļåþšê åřê šåṽêð ŵîţĥ ţĥê çûřřêñţ þřêšêñţåţîõñ. ·······］"
+
+msgid "Dashboard board section {0}"
+msgstr "［Ðåšĥβõåřð βõåřð šêçţîõñ {0} ·····］"
+
+msgid "Up"
+msgstr "［Ûþ ···］"
+
+msgid "Move {0} up"
+msgstr "［Mõṽê {0} ûþ ·····］"
+
+msgid "Down"
+msgstr "［Ðõŵñ ···］"
+
+msgid "Move {0} down"
+msgstr "［Mõṽê {0} ðõŵñ ·····］"
+
+msgid "Visible"
+msgstr "［Vîšîβļê ···］"
+
+msgid "Show {0} on dashboard"
+msgstr "［Šĥõŵ {0} õñ ðåšĥβõåřð ·····］"
+
+msgid "Collapsed"
+msgstr "［Çõļļåþšêð ···］"
+
+msgid "Collapse {0} on dashboard"
+msgstr "［Çõļļåþšê {0} õñ ðåšĥβõåřð ·····］"
+
+msgid "Reduced motion enabled"
+msgstr "［Řêðûçêð ɱõţîõñ êñåβļêð ·····］"
+
+msgid "Reduced motion ready"
+msgstr "［Řêðûçêð ɱõţîõñ řêåðÿ ·····］"
+
+msgid "Projects"
+msgstr "［Þřõĵêçţš ·····］"
+
+msgid "Recent usage · {0} · {1}"
+msgstr "［Řêçêñţ ûšåğê · {0} · {1} ·····］"
+
+msgid "Projects. Recent usage {0} {1} {2}. Today code {3} {4} {5}. {6}. {7}."
+msgstr "［Þřõĵêçţš. Řêçêñţ ûšåğê {0} {1} {2}. Ţõðåÿ çõðê {3} {4} {5}. {6}. {7}. ·······］"
+
+msgid "Today code · {0} · {1}"
+msgstr "［Ţõðåÿ çõðê · {0} · {1} ·····］"
+
+msgid "Recent tokens"
+msgstr "［Řêçêñţ ţõķêñš ·····］"
+
+msgid "Recent cost · {0}"
+msgstr "［Řêçêñţ çõšţ · {0} ·····］"
+
+msgid "Recent events"
+msgstr "［Řêçêñţ êṽêñţš ·····］"
+
+msgid "Recent usage by project with separately labelled today code output"
+msgstr "［Řêçêñţ ûšåğê βÿ þřõĵêçţ ŵîţĥ šêþåřåţêļÿ ļåβêļļêð ţõðåÿ çõðê õûţþûţ ·······］"
+
+msgid "Usage by project"
+msgstr "［Ûšåğê βÿ þřõĵêçţ ·····］"
+
+msgid "Waiting for project evidence"
+msgstr "［Ŵåîţîñğ ƒõř þřõĵêçţ êṽîðêñçê ·····］"
+
+msgid "No project usage in this range"
+msgstr "［Ñõ þřõĵêçţ ûšåğê îñ ţĥîš řåñğê ·····］"
+
+msgid "Project evidence unavailable"
+msgstr "［Þřõĵêçţ êṽîðêñçê ûñåṽåîļåβļê ·····］"
+
+msgid "Project"
+msgstr "［Þřõĵêçţ ···］"
+
+msgid "Relative"
+msgstr "［Řêļåţîṽê ···］"
+
+msgid "Total"
+msgstr "［Ţõţåļ ···］"
+
+msgid "Cost"
+msgstr "［Çõšţ ···］"
+
+msgid "Events"
+msgstr "［Êṽêñţš ···］"
+
+msgid "Commits"
+msgstr "［Çõɱɱîţš ···］"
+
+msgid "+Added"
+msgstr "［+Åððêð ···］"
+
+msgid "-Removed"
+msgstr "［-Řêɱõṽêð ···］"
+
+msgid "Net"
+msgstr "［Ñêţ ···］"
+
+msgid "Cost / 100 added product-code lines"
+msgstr "［Çõšţ / 100 åððêð þřõðûçţ-çõðê ļîñêš ·······］"
+
+msgid "Recent usage {0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}. Today code {9} {10} commits {11} added {12} removed {13} net {14} efficiency {15} {16} {17}"
+msgstr "［Řêçêñţ ûšåğê {0} îñþûţ {1} çåçĥêð {2} õûţþûţ {3} řêåšõñîñğ {4} ţõţåļ {5} çõšţ {6} {7} êṽêñţš {8}. Ţõðåÿ çõðê {9} {10} çõɱɱîţš {11} åððêð {12} řêɱõṽêð {13} ñêţ {14} êƒƒîçîêñçÿ {15} {16} {17} ·······］"
+
+msgid "Recent · In {0} · Cache {1} · Out {2} · Reason {3} · {4} events"
+msgstr "［Řêçêñţ · Îñ {0} · Çåçĥê {1} · Õûţ {2} · Řêåšõñ {3} · {4} êṽêñţš ·····］"
+
+msgid "Today code · {0} · {1} · {2} commits · {3} / {4} · net {5}"
+msgstr "［Ţõðåÿ çõðê · {0} · {1} · {2} çõɱɱîţš · {3} / {4} · ñêţ {5} ·····］"
+
+msgid "Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}"
+msgstr "［Řêçêñţ ɱîẋ · Îñ {0} · Çåçĥê {1} · Õûţ {2} · Řêåšõñ {3} · {4} | Ţõðåÿ çõðê · {5} · {6} · {7} {8} ·······］"
+
+msgid "Compact quota window {0} {1} {2} {3}"
+msgstr "［Çõɱþåçţ ɋûõţå ŵîñðõŵ {0} {1} {2} {3} ·····］"
+
+msgid "Usage ratio unavailable"
+msgstr "［Ûšåğê řåţîõ ûñåṽåîļåβļê ·····］"
+
+msgid "Compact quota"
+msgstr "［Çõɱþåçţ ɋûõţå ·····］"
+
+msgid "Current quota"
+msgstr "［Çûřřêñţ ɋûõţå ·····］"
+
+msgid "Return to Dashboard"
+msgstr "［Řêţûřñ ţõ Ðåšĥβõåřð ·····］"
+
+msgid "Waiting for quota evidence"
+msgstr "［Ŵåîţîñğ ƒõř ɋûõţå êṽîðêñçê ·····］"
+
+msgid "Quota evidence unavailable"
+msgstr "［Ɋûõţå êṽîðêñçê ûñåṽåîļåβļê ·····］"
+
+msgid "Sessions {0} {1}"
+msgstr "［Šêššîõñš {0} {1} ···］"
+msgid "Sessions"
+msgstr "［Šêššîõñš ···］"
+msgid "All-time session summaries"
+msgstr "［Åļļ-ţîɱê šêššîõñ šûɱɱåřîêš ·····］"
+msgid "Next page"
+msgstr "［Ñêẋţ þåğê ···］"
+msgid "Back to newest"
+msgstr "［βåçķ ţõ ñêŵêšţ ···］"
+msgid "Loading sessions…"
+msgstr "［Ļõåðîñğ šêššîõñš… ···］"
+msgid "Session summaries"
+msgstr "［Šêššîõñ šûɱɱåřîêš ···］"
+msgid "Waiting for session evidence"
+msgstr "［Ŵåîţîñğ ƒõř šêššîõñ êṽîðêñçê ···］"
+msgid "Session evidence unavailable"
+msgstr "［Šêššîõñ êṽîðêñçê ûñåṽåîļåβļê ···］"
+msgid "Last activity"
+msgstr "［Ļåšţ åçţîṽîţÿ ···］"
+msgid "Tokens"
+msgstr "［Ţõķêñš ···］"
+msgid "Duration"
+msgstr "［Ðûřåţîõñ ···］"
+msgid "Input"
+msgstr "［Îñþûţ ···］"
+msgid "Cached"
+msgstr "［Çåçĥêð ···］"
+msgid "Output"
+msgstr "［Õûţþûţ ···］"
+msgid "Reasoning"
+msgstr "［Řêåšõñîñğ ···］"
+msgid "From {0} to {1} {2} events {3} tokens {4}"
+msgstr "［Ƒřõɱ {0} ţõ {1} {2} êṽêñţš {3} ţõķêñš {4} ···］"
+msgid "Selected session detail {0}"
+msgstr "［Šêļêçţêð šêššîõñ ðêţåîļ {0} ···］"
+msgid "Selected session"
+msgstr "［Šêļêçţêð šêššîõñ ···］"
+msgid "Select a session summary to inspect its exact totals and breakdown."
+msgstr "［Šêļêçţ å šêššîõñ šûɱɱåřÿ ţõ îñšþêçţ îţš êẋåçţ ţõţåļš åñð βřêåķðõŵñ. ·····］"
+msgid "Loading exact session detail…"
+msgstr "［Ļõåðîñğ êẋåçţ šêššîõñ ðêţåîļ… ···］"
+msgid "This session is no longer present in the current archive snapshot."
+msgstr "［Ţĥîš šêššîõñ îš ñõ ļõñğêř þřêšêñţ îñ ţĥê çûřřêñţ åřçĥîṽê šñåþšĥõţ. ·····］"
+msgid "Session detail is unavailable. Select the row again to retry."
+msgstr "［Šêššîõñ ðêţåîļ îš ûñåṽåîļåβļê. Šêļêçţ ţĥê řõŵ åğåîñ ţõ řêţřÿ. ·····］"
+msgid "Duration {0}"
+msgstr "［Ðûřåţîõñ {0} ···］"
+msgid "Events {0}"
+msgstr "［Êṽêñţš {0} ···］"
+msgid "Input {0}"
+msgstr "［Îñþûţ {0} ···］"
+msgid "Cached {0}"
+msgstr "［Çåçĥêð {0} ···］"
+msgid "Output {0}"
+msgstr "［Õûţþûţ {0} ···］"
+msgid "Reasoning {0}"
+msgstr "［Řêåšõñîñğ {0} ···］"
+msgid "Total {0}"
+msgstr "［Ţõţåļ {0} ···］"
+msgid "Cost {0}"
+msgstr "［Çõšţ {0} ···］"
+msgid "Model and project breakdown"
+msgstr "［Mõðêļ åñð þřõĵêçţ βřêåķðõŵñ ·····］"
+msgid "In {0}"
+msgstr "［Îñ {0} ···］"
+msgid "Out {0}"
+msgstr "［Õûţ {0} ···］"
+msgid "Today's usage"
+msgstr "［Ţõðåÿ'š ûšåğê ···］"
+msgid "Today"
+msgstr "［Ţõðåÿ ···］"
+msgid "Plan Usage"
+msgstr "［Þļåñ Ûšåğê ···］"
+msgid "Banked resets {0}"
+msgstr "［βåñķêð řêšêţš {0} ···］"
+msgid "Banked resets"
+msgstr "［βåñķêð řêšêţš ···］"
+msgid "Credits {0} · Temporary {1} · Unavailable {2}"
+msgstr "［Çřêðîţš {0} · Ţêɱþõřåřÿ {1} · Ûñåṽåîļåβļê {2} ···］"
+msgid "Code Output"
+msgstr "［Çõðê Õûţþûţ ···］"
+msgid "Usage and Cost Trend"
+msgstr "［Ûšåğê åñð Çõšţ Ţřêñð ···］"
+msgid "Daily token trend"
+msgstr "［Ðåîļÿ ţõķêñ ţřêñð ···］"
+msgid "Checking local usage history…"
+msgstr "［Çĥêçķîñğ ļõçåļ ûšåğê ĥîšţõřÿ…］"
+msgid "Starting safe import…"
+msgstr "［Šţåřţîñğ šåƒê îɱþõřţ…］"
+msgid "Importing local usage history…"
+msgstr "［Îɱþõřţîñğ ļõçåļ ûšåğê ĥîšţõřÿ…］"
+msgid "TokenMaster keeps available safe data visible while it imports the rest."
+msgstr "［ŢõķêñMåšţêř ķêêþš åṽåîļåɓļê šåƒê ðåţå ṽîšîɓļê ŵĥîļê îţ îɱþõřţš ţĥê řêšţ. ···］"
+msgid "Model Usage"
+msgstr "［Mõðêļ Ûšåğê ···］"
+msgid "{0} collapsed"
+msgstr "［{0} çõļļåþšêð ···］"
+msgid "{0} (collapsed)"
+msgstr "［{0} (çõļļåþšêð) ···］"
+msgid "Section collapsed; its data remains available."
+msgstr "［Šêçţîõñ çõļļåþšêð; îţš ðåţå řêɱåîñš åṽåîļåβļê. ·····］"
+msgid "Data health and recovery"
+msgstr "［Ðåţå ĥêåļţĥ åñð řêçõṽêřÿ ·····］"
+msgid "Data & Recovery"
+msgstr "［Ðåţå åñð Řêçõṽêřÿ ····］"
+msgid "Last success {0} · Last attempt {1} · {2} successful · {3} failed · {4}"
+msgstr "［Ļåšţ šûççêšš {0} · Ļåšţ åţţêɱþţ {1} · {2} šûççêššƒûļ · {3} ƒåîļêð · {4} ·····］"
+msgid "Backup"
+msgstr "［βåçķûþ ···］"
+msgid "Create normal backup"
+msgstr "［Çřêåţê ñõřɱåļ βåçķûþ ····］"
+msgid "Compact export"
+msgstr "［Çõɱþåçţ êẋþõřţ ····］"
+msgid "Export maximum compact backup"
+msgstr "［Êẋþõřţ ɱåẋîɱûɱ çõɱþåçţ βåçķûþ ·····］"
+msgid "Verify"
+msgstr "［Ṽêřîƒÿ ···］"
+msgid "Verify all backups"
+msgstr "［Ṽêřîƒÿ åļļ βåçķûþš ····］"
+msgid "Rebuild"
+msgstr "［Řêβûîļð ···］"
+msgid "Rebuild local usage data"
+msgstr "［Řêβûîļð ļõçåļ ûšåğê ðåţå ····］"
+msgid "Encryption passphrase"
+msgstr "［Êñçřÿþţîõñ þåššþĥřåšê ····］"
+msgid "Confirm passphrase"
+msgstr "［Çõñƒîřɱ þåššþĥřåšê ····］"
+msgid "Confirm encryption passphrase"
+msgstr "［Çõñƒîřɱ êñçřÿþţîõñ þåššþĥřåšê ·····］"
+msgid "Encrypted export"
+msgstr "［Êñçřÿþţêð êẋþõřţ ····］"
+msgid "Export encrypted backup"
+msgstr "［Êẋþõřţ êñçřÿþţêð βåçķûþ ····］"
+msgid "Use 12–128 Unicode characters. Values are cleared after admission."
+msgstr "［Ûšê 12–128 Ûñîçõðê çĥåřåçţêřš. Ṽåļûêš åřê çļêåřêð åƒţêř åðɱîššîõñ. ·····］"
+msgid "Restore points"
+msgstr "［Řêšţõřê þõîñţš ····］"
+msgid "Confirm destructive restore"
+msgstr "［Çõñƒîřɱ ðêšţřûçţîṽê řêšţõřê ·····］"
+msgid "Restore review · {0}"
+msgstr "［Řêšţõřê řêṽîêŵ · {0} ····］"
+msgid "Data only"
+msgstr "［Ðåţå õñļÿ ···］"
+msgid "Confirm restore data only"
+msgstr "［Çõñƒîřɱ řêšţõřê ðåţå õñļÿ ····］"
+msgid "Data + settings"
+msgstr "［Ðåţå + šêţţîñğš ····］"
+msgid "Confirm restore data and portable settings"
+msgstr "［Çõñƒîřɱ řêšţõřê ðåţå åñð þõřţåβļê šêţţîñğš ·····］"
+msgid "Cancel restore review"
+msgstr "［Çåñçêļ řêšţõřê řêṽîêŵ ····］"
+msgid "Generation {0}"
+msgstr "［Ĝêñêřåţîõñ {0} ···］"
+msgid " · Latest failure {0}"
+msgstr "［ · Ļåţêšţ ƒåîļûřê {0} ···］"
+msgid "About and licenses. TokenMaster is Apache-2.0 licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route."
+msgstr "［Åβõûţ åñð ļîçêñšêš. TokenMaster îš Apache-2.0 ļîçêñšêð. WhereMyTokens åñð ccusage åřê þîññêð êẋţêřñåļ MIT řêƒêřêñçêš, ñõţ řûñţîɱê ðêþêñðêñçîêš. Ţĥê îñţêřƒåçê îš ɱåðê ŵîţĥ Slint ûñðêř ţĥê šêļêçţêð Royalty-free License 2.0 åţţřîβûţîõñ řõûţê. ·····］"
+msgid "About and licenses"
+msgstr "［Åβõûţ åñð ļîçêñšêš ···］"
+msgid "TokenMaster · Apache-2.0"
+msgstr "［TokenMaster · Apache-2.0 ···］"
+msgid "WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies."
+msgstr "［WhereMyTokens åñð ccusage åřê þîññêð êẋţêřñåļ MIT řêƒêřêñçêš, ñõţ řûñţîɱê ðêþêñðêñçîêš. ·····］"
+msgid "TokenMaster Help and About. Version {0}. Local-first usage intelligence with explicit data-source, privacy, health, automation, and license truth."
+msgstr "［TokenMaster Ĥêļþ åñð Åβõûţ. Ṽêřšîõñ {0}. Ļõçåļ-ƒîřšţ ûšåğê îñţêļļîğêñçê ŵîţĥ êẋþļîçîţ ðåţå-šõûřçê, þřîṽåçÿ, ĥêåļţĥ, åûţõɱåţîõñ, åñð ļîçêñšê ţřûţĥ. ·····］"
+msgid "TokenMaster version {0}. Fast local-first Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth."
+msgstr "［TokenMaster ṽêřšîõñ {0}. Ƒåšţ ļõçåļ-ƒîřšţ Çõðêẋ ûšåğê, ǫûõţå, êẋþîřÿ, åñð řêçõṽêřÿ ṽîšîβîļîţÿ ŵîţĥ βõûñðêð ɱêɱõřÿ åñð êẋþļîçîţ ûñåṽåîļåβļê ţřûţĥ. ·····］"
+msgid "Version {0} · local-first Windows desktop"
+msgstr "［Ṽêřšîõñ {0} · ļõçåļ-ƒîřšţ Ŵîñðõŵš ðêšķţõþ ···］"
+msgid "Fast Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth."
+msgstr "［Ƒåšţ Çõðêẋ ûšåğê, ǫûõţå, êẋþîřÿ, åñð řêçõṽêřÿ ṽîšîβîļîţÿ ŵîţĥ βõûñðêð ɱêɱõřÿ åñð êẋþļîçîţ ûñåṽåîļåβļê ţřûţĥ. ·····］"
+msgid "Start here"
+msgstr "［Šţåřţ ĥêřê ···］"
+msgid "Dashboard is the quota-first overview. History, Sessions, Models, Projects, and Activity explain usage. Notifications shows current expiry safety."
+msgstr "［Ðåšĥβõåřð îš ţĥê ǫûõţå-ƒîřšţ õṽêřṽîêŵ. Ĥîšţõřÿ, Šêššîõñš, Mõðêļš, Þřõĵêçţš, åñð Åçţîṽîţÿ êẋþļåîñ ûšåğê. Ñõţîƒîçåţîõñš šĥõŵš çûřřêñţ êẋþîřÿ šåƒêţÿ. ·····］"
+msgid "Data Health owns backup, verification, restore, rebuild, and recovery truth. Settings owns backup policy and portable configuration."
+msgstr "［Ðåţå Ĥêåļţĥ õŵñš βåçķûþ, ṽêřîƒîçåţîõñ, řêšţõřê, řêβûîļð, åñð řêçõṽêřÿ ţřûţĥ. Šêţţîñğš õŵñš βåçķûþ þõļîçÿ åñð þõřţåβļê çõñƒîğûřåţîõñ. ·····］"
+msgid "Every missing or stale fact stays explicit — never fabricated as zero."
+msgstr "［Êṽêřÿ ɱîššîñğ õř šţåļê ƒåçţ šţåÿš êẋþļîçîţ — ñêṽêř ƒåβřîçåţêð åš žêřõ. ····］"
+msgid "Data sources and truth"
+msgstr "［Ðåţå šõûřçêš åñð ţřûţĥ ···］"
+msgid "Usage is derived from bounded local Codex history. Plan usage is separate provider evidence from the installed official machine interface when available."
+msgstr "［Ûšåğê îš ðêřîṽêð ƒřõɱ βõûñðêð ļõçåļ Çõðêẋ ĥîšţõřÿ. Þļåñ ûšåğê îš šêþåřåţê þřõṽîðêř êṽîðêñçê ƒřõɱ ţĥê îñšţåļļêð õƒƒîçîåļ ɱåçĥîñê îñţêřƒåçê ŵĥêñ åṽåîļåβļê. ·····］"
+msgid "Local tokens never become a guessed provider allowance. Unsupported, stale, partial, or unavailable evidence remains labelled."
+msgstr "［Ļõçåļ ţõķêñš ñêṽêř βêçõɱê å ğûêššêð þřõṽîðêř åļļõŵåñçê. Ûñšûþþõřţêð, šţåļê, þåřţîåļ, õř ûñåṽåîļåβļê êṽîðêñçê řêɱåîñš ļåβêļļêð. ·····］"
+msgid "No browser session reuse or private endpoint replay."
+msgstr "［Ñõ βřõŵšêř šêššîõñ řêûšê õř þřîṽåţê êñðþõîñţ řêþļåÿ. ···］"
+msgid "Privacy by design"
+msgstr "［Þřîṽåçÿ βÿ ðêšîğñ ···］"
+msgid "No prompts, responses, reasoning, commands, source contents, credentials, or raw absolute paths are retained or exposed."
+msgstr "［Ñõ þřõɱþţš, řêšþõñšêš, řêåšõñîñğ, çõɱɱåñðš, šõûřçê çõñţêñţš, çřêðêñţîåļš, õř řåŵ åβšõļûţê þåţĥš åřê řêţåîñêð õř êẋþõšêð. ·····］"
+msgid "Frontend rows carry bounded aggregate facts and stable reason codes, not provider, account, workspace, source, session, lot, or delivery identity."
+msgstr "［Ƒřõñţêñð řõŵš çåřřÿ βõûñðêð åğğřêğåţê ƒåçţš åñð šţåβļê řêåšõñ çõðêš, ñõţ þřõṽîðêř, åççõûñţ, ŵõřķšþåçê, šõûřçê, šêššîõñ, ļõţ, õř ðêļîṽêřÿ îðêñţîţÿ. ·····］"
+msgid "Local-first archive · no listener · no telemetry surface."
+msgstr "［Ļõçåļ-ƒîřšţ åřçĥîṽê · ñõ ļîšţêñêř · ñõ ţêļêɱêţřÿ šûřƒåçê. ···］"
+msgid "Health and recovery"
+msgstr "［Ĥêåļţĥ åñð řêçõṽêřÿ ···］"
+msgid "Open Data Health for database health and every backup, verification, restore, rebuild, and recovery operation."
+msgstr "［Õþêñ Ðåţå Ĥêåļţĥ ƒõř ðåţåβåšê ĥêåļţĥ åñð êṽêřÿ βåçķûþ, ṽêřîƒîçåţîõñ, řêšţõřê, řêβûîļð, åñð řêçõṽêřÿ õþêřåţîõñ. ·····］"
+msgid "Settings owns backup policy and portable configuration import/export. Stable failure codes omit paths and raw operating-system messages."
+msgstr "［Šêţţîñğš õŵñš βåçķûþ þõļîçÿ åñð þõřţåβļê çõñƒîğûřåţîõñ îɱþõřţ/êẋþõřţ. Šţåβļê ƒåîļûřê çõðêš õɱîţ þåţĥš åñð řåŵ õþêřåţîñğ-šÿšţêɱ ɱêššåğêš. ·····］"
+msgid "Recovery is verified, bounded, and local."
+msgstr "［Řêçõṽêřÿ îš ṽêřîƒîêð, βõûñðêð, åñð ļõçåļ. ···］"
+msgid "Automation status"
+msgstr "［Åûţõɱåţîõñ šţåţûš ···］"
+msgid "CLI and stdio MCP are not available in the current build. No local server or listener is active."
+msgstr "［ÇĻÎ åñð šţðîõ MÇÞ åřê ñõţ åṽåîļåβļê îñ ţĥê çûřřêñţ βûîļð. Ñõ ļõçåļ šêřṽêř õř ļîšţêñêř îš åçţîṽê. ·····］"
+msgid "P5 will add strict bounded read-only JSON and stdio MCP for Hermes and other clients. Browser/session automation and automatic benefit activation are not implied."
+msgstr "［Þ5 ŵîļļ åðð šţřîçţ βõûñðêð řêåð-õñļÿ ĴŠÕÑ åñð šţðîõ MÇÞ ƒõř Ĥêřɱêš åñð õţĥêř çļîêñţš. βřõŵšêř/šêššîõñ åûţõɱåţîõñ åñð åûţõɱåţîç βêñêƒîţ åçţîṽåţîõñ åřê ñõţ îɱþļîêð. ·····］"
+msgid "Current automation authority: none."
+msgstr "［Çûřřêñţ åûţõɱåţîõñ åûţĥõřîţÿ: ñõñê. ···］"
+msgid "Recent activity"
+msgstr "［Řêçêñţ åçţîṽîţÿ ···］"
+msgid "Recent activity {0} {1} {2} {3}"
+msgstr "［Řêçêñţ åçţîṽîţÿ {0} {1} {2} {3} ···］"
+msgid "Newest archive events · {0}"
+msgstr "［Ñêŵêšţ åřçĥîṽê êṽêñţš · {0} ···］"
+msgid "Waiting for recent activity evidence"
+msgstr "［Ŵåîţîñğ ƒõř řêçêñţ åçţîṽîţÿ êṽîðêñçê ···］"
+msgid "Recent activity evidence unavailable"
+msgstr "［Řêçêñţ åçţîṽîţÿ êṽîðêñçê ûñåṽåîļåβļê ···］"
+msgid "No activity events in the archive"
+msgstr "［Ñõ åçţîṽîţÿ êṽêñţš îñ ţĥê åřçĥîṽê ···］"
+msgid "No activity events in the available page"
+msgstr "［Ñõ åçţîṽîţÿ êṽêñţš îñ ţĥê åṽåîļåβļê þåğê ···］"
+msgid "Newest bounded activity events with UTC timestamps"
+msgstr "［Ñêŵêšţ βõûñðêð åçţîṽîţÿ êṽêñţš ŵîţĥ ÛŢÇ ţîɱêšţåɱþš ···］"
+msgid "Latest events"
+msgstr "［Ļåţêšţ êṽêñţš ···］"
+msgid "UTC time"
+msgstr "［ÛŢÇ ţîɱê ···］"
+msgid "Model"
+msgstr "［Mõðêļ ···］"
+msgid "{0} model {1} input {2} cached {3} output {4} reasoning {5} total {6}"
+msgstr "［{0} ɱõðêļ {1} îñþûţ {2} çåçĥêð {3} õûţþûţ {4} řêåšõñîñğ {5} ţõţåļ {6} ···］"
+msgid "In {0} · Cache {1} · Out {2} · Reason {3}"
+msgstr "［Îñ {0} · Çåçĥê {1} · Õûţ {2} · Řêåšõñ {3} ···］"
+msgid "Usage by local hour"
+msgstr "［Ûšåğê βÿ ļõçåļ ĥõûř ···］"
+msgid "Usage by weekday"
+msgstr "［Ûšåğê βÿ ŵêêķðåÿ ···］"
+msgid "{0} {1} in {2} {3}"
+msgstr "［{0} {1} îñ {2} {3} ···］"
+msgid "Waiting for rhythm evidence"
+msgstr "［Ŵåîţîñğ ƒõř řĥÿţĥɱ êṽîðêñçê ···］"
+msgid "Rhythm evidence unavailable"
+msgstr "［Řĥÿţĥɱ êṽîðêñçê ûñåṽåîļåβļê ···］"
+msgid "Model usage {0} {1} {2} cost {3} {4}"
+msgstr "［Mõðêļ ûšåğê {0} {1} {2} çõšţ {3} {4} ···］"
+msgid "Models"
+msgstr "［Mõðêļš ···］"
+msgid "Total tokens"
+msgstr "［Ţõţåļ ţõķêñš ···］"
+msgid "Cost · {0}"
+msgstr "［Çõšţ · {0} ···］"
+msgid "Model usage ranked by total tokens"
+msgstr "［Mõðêļ ûšåğê řåñķêð βÿ ţõţåļ ţõķêñš ···］"
+msgid "Usage by model"
+msgstr "［Ûšåğê βÿ ɱõðêļ ···］"
+msgid "Waiting for model evidence"
+msgstr "［Ŵåîţîñğ ƒõř ɱõðêļ êṽîðêñçê ···］"
+msgid "No model usage in this range"
+msgstr "［Ñõ ɱõðêļ ûšåğê îñ ţĥîš řåñğê ···］"
+msgid "Model evidence unavailable"
+msgstr "［Mõðêļ êṽîðêñçê ûñåṽåîļåβļê ···］"
+msgid "Cost · evidence"
+msgstr "［Çõšţ · êṽîðêñçê ···］"
+msgid "{0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}"
+msgstr "［{0} îñþûţ {1} çåçĥêð {2} õûţþûţ {3} řêåšõñîñğ {4} ţõţåļ {5} çõšţ {6} {7} êṽêñţš {8} ···］"
+msgid "In {0} · Cache {1} · Out {2} · Reason {3} · {4} events"
+msgstr "［Îñ {0} · Çåçĥê {1} · Õûţ {2} · Řêåšõñ {3} · {4} êṽêñţš ···］"
+msgid "Usage history "
+msgstr "［Ûšåğê ĥîšţõřÿ ···］ "
+msgid "Usage History"
+msgstr "［Ûšåğê Ĥîšţõřÿ ···］"
+msgid "1 day"
+msgstr "［1 ðåÿ ···］"
+msgid "30 days"
+msgstr "［30 ðåÿš ···］"
+msgid "History range 1 day"
+msgstr "［Ĥîšţõřÿ řåñğê 1 ðåÿ ···］"
+msgid "History range 7 days"
+msgstr "［Ĥîšţõřÿ řåñğê 7 ðåÿš ···］"
+msgid "History range 30 days"
+msgstr "［Ĥîšţõřÿ řåñğê 30 ðåÿš ···］"
+msgid "Loading history…"
+msgstr "［Ļõåðîñğ ĥîšţõřÿ… ···］"
+msgid "Selected range"
+msgstr "［Šêļêçţêð řåñğê ···］"
+msgid "Daily token history"
+msgstr "［Ðåîļÿ ţõķêñ ĥîšţõřÿ ···］"
+msgid "Daily trend"
+msgstr "［Ðåîļÿ ţřêñð ···］"
+msgid "Waiting for history evidence"
+msgstr "［Ŵåîţîñğ ƒõř ĥîšţõřÿ êṽîðêñçê ···］"
+msgid "History evidence unavailable"
+msgstr "［Ĥîšţõřÿ êṽîðêñçê ûñåṽåîļåβļê ···］"
+msgid "Thirty day token trend"
+msgstr "［Ţĥîřţÿ ðåÿ ţõķêñ ţřêñð ···］"
+msgid "Daily usage history"
+msgstr "［Ðåîļÿ ûšåğê ĥîšţõřÿ ···］"
+msgid "Daily details"
+msgstr "［Ðåîļÿ ðêţåîļš ···］"
+msgid "Date"
+msgstr "［Ðåţê ···］"
+msgid " tokens "
+msgstr "［ ţõķêñš  ···］"
+msgid "Notifications expiry reminders {0} {1} {2}"
+msgstr "［Ñõţîƒîçåţîõñš êẋþîřÿ řêɱîñðêřš {0} {1} {2} ·····］"
+msgid "Notifications"
+msgstr "［Ñõţîƒîçåţîõñš ···］"
+msgid "Expiry reminders · effective in-app coverage"
+msgstr "［Êxþîřÿ řêɱîñðêřš · êƒƒêçţîṽê îñ-åþþ çõṽêřåğê ·····］"
+msgid "Effective reminder profiles and truthful delivery coverage"
+msgstr "［Êƒƒêçţîṽê řêɱîñðêř þřõƒîļêš åñð ţřûţĥƒûļ ðêļîṽêřÿ çõṽêřåğê ·····］"
+msgid "Reminder profiles"
+msgstr "［Řêɱîñðêř þřõƒîļêš ···］"
+msgid "Waiting for reminder profiles"
+msgstr "［Ŵåîţîñğ ƒõř řêɱîñðêř þřõƒîļêš ···］"
+msgid "No reminder profiles"
+msgstr "［Ñõ řêɱîñðêř þřõƒîļêš ···］"
+msgid "Reminder profiles unavailable"
+msgstr "［Řêɱîñðêř þřõƒîļêš ûñåṽåîļåβļê ···］"
+msgid "{0} {1} coverage {2} policy {3} leads {4} {5} {6} {7} {8} {9}"
+msgstr "［{0} {1} çõṽêřåğê {2} þõļîçÿ {3} ļêåðš {4} {5} {6} {7} {8} {9} ·····］"
+msgid "Leads · {0}"
+msgstr "［Ļêåðš · {0} ···］"
+msgid "Current separate benefit lots with expiry precision and evidence"
+msgstr "［Çûřřêñţ šêþåřåţê βêñêƒîţ ļõţš ŵîţĥ êẋþîřÿ þřêçîšîõñ åñð êṽîðêñçê ·····］"
+msgid "Current benefits"
+msgstr "［Çûřřêñţ βêñêƒîţš ···］"
+msgid "Waiting for benefit inventory"
+msgstr "［Ŵåîţîñğ ƒõř βêñêƒîţ îñṽêñţõřÿ ···］"
+msgid "No current benefits"
+msgstr "［Ñõ çûřřêñţ βêñêƒîţš ···］"
+msgid "Benefit inventory unavailable"
+msgstr "［βêñêƒîţ îñṽêñţõřÿ ûñåṽåîļåβļê ···］"
+msgid "Scope"
+msgstr "［Šçõþê ···］"
+msgid "Benefit"
+msgstr "［βêñêƒîţ ···］"
+msgid "Quantity"
+msgstr "［Ǫûåñţîţÿ ···］"
+msgid "State"
+msgstr "［Šţåţê ···］"
+msgid "Expiry"
+msgstr "［Êxþîřÿ ···］"
+msgid "Evidence"
+msgstr "［Êṽîðêñçê ···］"
+msgid "{0} {1} {2} quantity {3} state {4} {5} {6} {7}"
+msgstr "［{0} {1} {2} ǫûåñţîţÿ {3} šţåţê {4} {5} {6} {7} ·····］"
+
+msgid "{0} · {1}"
+msgstr "［{0} · {1} ···］"
+msgid "{0} {1} capacity"
+msgstr "［{0} {1} çåþåçîţÿ ···］"
+msgid "{0} {1} remaining"
+msgstr "［{0} {1} řêɱåîñîñğ ···］"
+msgid "{0} {1} used"
+msgstr "［{0} {1} ûšêð ···］"
+msgid "{0} / {1} {2}"
+msgstr "［{0} / {1} {2} ···］"
+msgid "{0} / {1} {2} remaining"
+msgstr "［{0} / {1} {2} řêɱåîñîñğ ···］"
+msgid "{0} / 100 lines"
+msgstr "［{0} / 100 ļîñêš ···］"
+msgid "{0} categories · {1} fields"
+msgstr "［{0} çåţêğõřîêš · {1} ƒîêļðš ···］"
+msgid "{0} confidence"
+msgstr "［{0} çõñƒîðêñçê ···］"
+msgid "{0} event"
+msgstr "［{0} êṽêñţ ···］"
+msgid "{0} events"
+msgstr "［{0} êṽêñţš ···］"
+msgid "{0} remaining"
+msgstr "［{0} řêɱåîñîñğ ···］"
+msgid "{0} used"
+msgstr "［{0} ûšêð ···］"
+msgid "Alerts"
+msgstr "[!! Alerts !!]"
+
+msgid "Read"
+msgstr "[!! Read !!]"
+
+msgid "Edit / Write"
+msgstr "[!! Edit / Write !!]"
+
+msgid "Search"
+msgstr "[!! Search !!]"
+
+msgid "Git"
+msgstr "[!! Git !!]"
+
+msgid "Build / Test"
+msgstr "[!! Build / Test !!]"
+
+msgid "Web"
+msgstr "[!! Web !!]"
+
+msgid "Subagents"
+msgstr "[!! Subagents !!]"
+
+msgid "Terminal"
+msgstr "[!! Terminal !!]"
+
+msgid "Activity"
+msgstr "［Åçţîṽîţÿ ···］"
+msgid "Aging"
+msgstr "［Åğîñğ ···］"
+msgid "Authoritative"
+msgstr "［Åûţĥõřîţåţîṽê ···］"
+msgid "Compact Widget"
+msgstr "［Çõɱþåçţ Ŵîðğêţ ···］"
+msgid "Complete"
+msgstr "［Çõɱþļêţê ···］"
+msgid "Conflict"
+msgstr "［Çõñƒļîçţ ···］"
+msgid "Dashboard"
+msgstr "［Ðåšhƀõåřð ···］"
+msgid "Data Health"
+msgstr "［Ðåţå Ĥêåļţĥ ···］"
+msgid "Derived"
+msgstr "［Ðêřîṽêð ···］"
+msgid "Efficiency unavailable"
+msgstr "［Êƒƒîçîêñçÿ ûñåṽåîļåβļê ···］"
+msgid "Estimated"
+msgstr "［Êšţîɱåţêð ···］"
+msgid "Evidence unavailable"
+msgstr "［Êṽîðêñçê ûñåṽåîļåβļê ···］"
+msgid "Expires {0}"
+msgstr "［Êxþîřêš {0} ···］"
+msgid "Expiry unavailable"
+msgstr "［Êxþîřÿ ûñåṽåîļåβļê ···］"
+msgid "Fresh"
+msgstr "［Fřêšh ···］"
+msgid "Help / About"
+msgstr "［Ĥêļþ / Åβõûţ ···］"
+msgid "History"
+msgstr "［Ĥîšţõřÿ ···］"
+msgid "In-app reminders"
+msgstr "［Îñ-åþþ řêɱîñðêřš ···］"
+msgid "Incomplete"
+msgstr "［Îñçõɱþļêţê ···］"
+msgid "No pending changes"
+msgstr "［Ñõ þêñðîñğ çhåñğêš ···］"
+msgid "Partial"
+msgstr "［Þåřţîåļ ···］"
+msgid "Reminder state unavailable"
+msgstr "［Řêɱîñðêř šţåţê ûñåṽåîļåβļê ···］"
+msgid "Reminders disabled"
+msgstr "［Řêɱîñðêřš ðîšåβļêð ···］"
+msgid "Reset time unavailable"
+msgstr "［Řêšêţ ţîɱê ûñåṽåîļåβļê ···］"
+msgid "Resets {0}"
+msgstr "［Řêšêţš {0} ···］"
+msgid "Schema {0}"
+msgstr "［Šçhêɱå {0} ···］"
+msgid "Schema unavailable"
+msgstr "［Šçhêɱå ûñåṽåîļåβļê ···］"
+msgid "Stale"
+msgstr "［Šţåļê ···］"
+msgid "Time unavailable"
+msgstr "［Ţîɱê ûñåṽåîļåβļê ···］"
+msgid "Unavailable"
+msgstr "［Ûñåṽåîļåβļê ···］"
+msgid "Unknown"
+msgstr "［Ûñķñõŵñ ···］"
+
+msgid "Range unavailable"
+msgstr "［Řåñğê ûñåṽåîļåβļê ···］"
+
+msgid "{0} – before {1}"
+msgstr "［{0} – βêƒõřê {1} ···］"
+
+msgid "{0} model loaded"
+msgstr "［{0} ɱõðêļ ļõåðêð ···］"
+
+msgid "{0} models loaded"
+msgstr "［{0} ɱõðêļš ļõåðêð ···］"
+
+msgid "Completeness unavailable"
+msgstr "［Çõɱþļêţêñêšš ûñåṽåîļåβļê ···］"
+
+msgid "More models available"
+msgstr "［Mõřê ɱõðêļš åṽåîļåβļê ···］"
+
+msgid "Complete range"
+msgstr "［Çõɱþļêţê řåñğê ···］"
+
+msgid "{0} project loaded"
+msgstr "［{0} þřõĵêçţ ļõåðêð ···］"
+
+msgid "{0} projects loaded"
+msgstr "［{0} þřõĵêçţš ļõåðêð ···］"
+
+msgid "More projects available"
+msgstr "［Mõřê þřõĵêçţš åṽåîļåβļê ···］"
+
+msgid "Repositories unavailable"
+msgstr "［Řêþõšîţõřîêš ûñåṽåîļåβļê ···］"
+
+msgid "{0} repository loaded"
+msgstr "［{0} řêþõšîţõřÿ ļõåðêð ···］"
+
+msgid "{0} repositories loaded"
+msgstr "［{0} řêþõšîţõřîêš ļõåðêð ···］"
+
+msgid "Code completeness unavailable"
+msgstr "［Çõðê çõɱþļêţêñêšš ûñåṽåîļåβļê ···］"
+
+msgid "Incomplete code range"
+msgstr "［Îñçõɱþļêţê çõðê řåñğê ···］"
+
+msgid "Complete code range"
+msgstr "［Çõɱþļêţê çõðê řåñğê ···］"
+
+msgid "Complete code"
+msgstr "［Çõɱþļêţê çõðê ···］"
+
+msgid "Incomplete code"
+msgstr "［Îñçõɱþļêţê çõðê ···］"
+
+msgid "Code unavailable"
+msgstr "［Çõðê ûñåṽåîļåβļê ···］"
+
+msgid "Git unavailable"
+msgstr "［Ĝîţ ûñåṽåîļåβļê ···］"
+
+msgid "Not linked"
+msgstr "［Ñõţ ļîñķêð ···］"
+
+msgid "Unassociated project"
+msgstr "［Ûñåššõçîåţêð þřõĵêçţ ···］"
+
+msgid "Known"
+msgstr "［Ķñõŵñ ···］"
+
+msgid "Zero"
+msgstr "［Žêřõ ···］"
+
+msgid "calculated"
+msgstr "［çåļçûļåţêð ···］"
+
+msgid "reported"
+msgstr "［řêþõřţêð ···］"
+
+msgid "mixed"
+msgstr "［ɱîxêð ···］"
+
+msgid "{0} / 100 added product-code lines"
+msgstr "［{0} / 100 åððêð þřõðûçţ-çõðê ļîñêš ···］"
+
+msgid "{0} repository"
+msgstr "［{0} řêþõšîţõřÿ ···］"
+
+msgid "{0} repositories"
+msgstr "［{0} řêþõšîţõřîêš ···］"
+
+msgid "{0} event loaded"
+msgstr "［{0} êṽêñţ ļõåðêð ···］"
+
+msgid "{0} events loaded"
+msgstr "［{0} êṽêñţš ļõåðêð ···］"
+
+msgid "First page complete"
+msgstr "［Fîřšţ þåğê çõɱþļêţê ···］"
+
+msgid "Friday"
+msgstr "［Fřîðåÿ ···］"
+
+msgid "Monday"
+msgstr "［Mõñðåÿ ···］"
+
+msgid "More activity available"
+msgstr "［Mõřê åçţîṽîţÿ åṽåîļåβļê ···］"
+
+msgid "Page status unavailable"
+msgstr "［Þåğê šţåţûš ûñåṽåîļåβļê ···］"
+
+msgid "Saturday"
+msgstr "［Šåţûřðåÿ ···］"
+
+msgid "Sunday"
+msgstr "［Šûñðåÿ ···］"
+
+msgid "Degraded"
+msgstr "［Ðêğřåðêð ···］"
+
+msgid "Waiting"
+msgstr "［Ŵåîţîñĝ ···］"
+
+msgid "Inventory unavailable"
+msgstr "［Îñvêñţõřÿ ûñåvåîļåƀļê ···］"
+
+msgid "Bounded inventory · more data omitted"
+msgstr "［Ɓõûñðêð îñvêñţõřÿ · ɱõřê ðåţå õɱîţţêð ···］"
+
+msgid "Current inventory · warnings present"
+msgstr "［Çûřřêñţ îñvêñţõřÿ · ŵåřñîñĝš þřêšêñţ ···］"
+
+msgid "Current inventory complete"
+msgstr "［Çûřřêñţ îñvêñţõřÿ çõɱþļêţê ···］"
+
+msgid "{0} reminder profile · {1} current benefit"
+msgstr "［{0} řêɱîñðêř þřõƒîļê · {1} çûřřêñţ ƀêñêƒîţ ···］"
+
+msgid "{0} reminder profile · {1} current benefits"
+msgstr "［{0} řêɱîñðêř þřõƒîļê · {1} çûřřêñţ ƀêñêƒîţš ···］"
+
+msgid "{0} reminder profiles · {1} current benefit"
+msgstr "［{0} řêɱîñðêř þřõƒîļêš · {1} çûřřêñţ ƀêñêƒîţ ···］"
+
+msgid "{0} reminder profiles · {1} current benefits"
+msgstr "［{0} řêɱîñðêř þřõƒîļêš · {1} çûřřêñţ ƀêñêƒîţš ···］"
+
+msgid "Scope {0}"
+msgstr "［Šçõþê {0} ···］"
+
+msgid "{0} benefit"
+msgstr "［{0} ƀêñêƒîţ ···］"
+
+msgid "{0} benefits"
+msgstr "［{0} ƀêñêƒîţš ···］"
+
+msgid "In-app only"
+msgstr "［Îñ-åþþ õñļÿ ···］"
+
+msgid "Disabled"
+msgstr "［Ðîšåƀļêð ···］"
+
+msgid "Inherited"
+msgstr "［Îñĥêřîţêð ···］"
+
+msgid "Override"
+msgstr "［Õvêřřîðê ···］"
+
+msgid "Complete quantity, partial details"
+msgstr "［Çõɱþļêţê ǫûåñţîţÿ, þåřţîåļ ðêţåîļš ···］"
+
+msgid "Next reminder unavailable"
+msgstr "［Ñêxţ řêɱîñðêř ûñåvåîļåƀļê ···］"
+
+msgid "Next reminder {0}"
+msgstr "［Ñêxţ řêɱîñðêř {0} ···］"
+
+msgid "Nearest expiry unavailable"
+msgstr "［Ñêåřêšţ êxþîřÿ ûñåvåîļåƀļê ···］"
+
+msgid "Nearest expiry {0}"
+msgstr "［Ñêåřêšţ êxþîřÿ {0} ···］"
+
+msgid "Banked rate limit reset"
+msgstr "［Ɓåñķêð řåţê ļîɱîţ řêšêţ ···］"
+
+msgid "Usage credit"
+msgstr "［Ûšåĝê çřêðîţ ···］"
+
+msgid "Temporary usage"
+msgstr "［Ţêɱþõřåřÿ ûšåĝê ···］"
+
+msgid "Available"
+msgstr "［Åvåîļåƀļê ···］"
+
+msgid "Activation pending"
+msgstr "［Åçţîvåţîõñ þêñðîñĝ ···］"
+
+msgid "Activated"
+msgstr "［Åçţîvåţêð ···］"
+
+msgid "Expired"
+msgstr "［Êxþîřêð ···］"
+
+msgid "Revoked"
+msgstr "［Řêvõķêð ···］"
+
+msgid "Ambiguous"
+msgstr "［Åɱƀîĝûõûš ···］"
+
+msgid "Expired {0}"
+msgstr "［Êxþîřêð {0} ···］"
+
+msgid "Expired between {0} and {1}"
+msgstr "［Êxþîřêð ƀêţŵêêñ {0} åñð {1} ···］"
+
+msgid "Expires between {0} and {1}"
+msgstr "［Êxþîřêš ƀêţŵêêñ {0} åñð {1} ···］"
+
+msgid "Expired {0} (provider local)"
+msgstr "［Êxþîřêð {0} (þřõvîðêř ļõçåļ) ···］"
+
+msgid "Expires {0} (provider local)"
+msgstr "［Êxþîřêš {0} (þřõvîðêř ļõçåļ) ···］"
+
+msgid "Expired {0} (provider date)"
+msgstr "［Êxþîřêð {0} (þřõvîðêř ðåţê) ···］"
+
+msgid "Expires {0} (provider date)"
+msgstr "［Êxþîřêš {0} (þřõvîðêř ðåţê) ···］"
+
+msgid "Expiry unknown"
+msgstr "［Êxþîřÿ ûñķñõŵñ ···］"
+
+msgid "Granted {0}"
+msgstr "［Ĝřåñţêð {0} ···］"
+
+msgid "Grant time unavailable"
+msgstr "［Ĝřåñţ ţîɱê ûñåvåîļåƀļê ···］"
+
+msgid "Provider official"
+msgstr "［Þřõvîðêř õƒƒîçîåļ ···］"
+
+msgid "Provider local"
+msgstr "［Þřõvîðêř ļõçåļ ···］"
+
+msgid "Manual"
+msgstr "［Måñûåļ ···］"
+
+msgid "High"
+msgstr "［Ĥîĝĥ ···］"
+
+msgid "Medium"
+msgstr "［Mêðîûɱ ···］"
+
+msgid "Low"
+msgstr "［Ļõŵ ···］"
+
+msgid "Provider detail"
+msgstr "［Þřõvîðêř ðêţåîļ ···］"
+
+msgid "Provider aggregate"
+msgstr "［Þřõvîðêř åĝĝřêĝåţê ···］"
+
+msgid "Inventory absent"
+msgstr "［Îñvêñţõřÿ åƀšêñţ ···］"
+
+msgid "Partial inventory"
+msgstr "［Þåřţîåļ îñvêñţõřÿ ···］"
+
+msgid "Quantity partial details"
+msgstr "［Ǫûåñţîţÿ þåřţîåļ ðêţåîļš ···］"
+
+msgid "Unknown expiry"
+msgstr "［Ûñķñõŵñ êxþîřÿ ···］"
+
+msgid "Unknown evidence"
+msgstr "［Ûñķñõŵñ êvîðêñçê ···］"
+
+msgid "Clock discontinuity"
+msgstr "［Çļõçķ ðîšçõñţîñûîţÿ ···］"
+
+msgid "OS scheduled unavailable"
+msgstr "［ÕŠ šçĥêðûļêð ûñåvåîļåƀļê ···］"
+
+msgid "Thursday"
+msgstr "［Ţĥûřšðåÿ ···］"
+
+msgid "Time zone unavailable"
+msgstr "［Ţîɱê žõñê ûñåṽåîļåβļê ···］"
+
+msgid "Tuesday"
+msgstr "［Ţûêšðåÿ ···］"
+
+msgid "UTC timestamps"
+msgstr "［ÛŢÇ ţîɱêšţåɱþš ···］"
+
+msgid "Wednesday"
+msgstr "［Ŵêðñêšðåÿ ···］"
+
+msgid "{0} loaded"
+msgstr "［{0} ļõåðêð ···］"
+
+msgid "Newest page · More sessions available"
+msgstr "［Ñêŵêšţ þåĝê · Mõřê šêššîõñš åṽåîļåβļê ···］"
+
+msgid "Newest page · All sessions loaded"
+msgstr "［Ñêŵêšţ þåĝê · Åļļ šêššîõñš ļõåðêð ···］"
+
+msgid "Older sessions · More sessions available"
+msgstr "［Õļðêř šêššîõñš · Mõřê šêššîõñš åṽåîļåβļê ···］"
+
+msgid "Older sessions · Oldest sessions loaded"
+msgstr "［Õļðêř šêššîõñš · Õļðêšţ šêššîõñš ļõåðêð ···］"
+
+msgid "Newest page · Status unavailable"
+msgstr "［Ñêŵêšţ þåĝê · Šţåţûš ûñåṽåîļåβļê ···］"
+
+msgid "Older sessions · Status unavailable"
+msgstr "［Õļðêř šêššîõñš · Šţåţûš ûñåṽåîļåβļê ···］"
+
+msgid "No selection"
+msgstr "［Ñõ šêļêçţîõñ ···］"
+
+msgid "Loading"
+msgstr "［Ļõåðîñĝ ···］"
+
+msgid "Ready"
+msgstr "［Řêåðÿ ···］"
+
+msgid "Ready · breakdown limited to 32 models and 32 projects"
+msgstr "［Řêåðÿ · ƀřêåķðõŵñ ļîɱîţêð ţõ 32 ɱõðêļš åñð 32 þřõĵêçţš ···］"
+
+msgid "Not found"
+msgstr "［Ñõţ ƒõûñð ···］"
+
+msgid "Unavailable · {0}"
+msgstr "［Ûñåṽåîļåβļê · {0} ···］"
+
+msgid "{0} expiry reminder"
+msgstr "［{0} êxþîřÿ řêɱîñðêř ···］"
+
+msgid "{0} expiry reminders"
+msgstr "［{0} êxþîřÿ řêɱîñðêřš ···］"
+
+msgid "Banked rate-limit reset"
+msgstr "［Ɓåñķêð řåţê-ļîɱîţ řêšêţ ···］"
+
+msgid "Banked Reset"
+msgstr "［Ɓåñķêð Řêšêţ ···］"
+
+msgid "Reminder due {0} before expiry"
+msgstr "［Řêɱîñðêř ðûê {0} βêƒõřê êxþîřÿ ···］"
+
+msgid "Due {0}"
+msgstr "［Ðûê {0} ···］"
+
+msgid "Queued {0}"
+msgstr "［Ǫûêûêð {0} ···］"
+
+msgid "{0}. {1}, quantity {2}. {3}. {4}. {5}. {6}."
+msgstr "［{0}. {1}, ǫûåñţîţÿ {2}. {3}. {4}. {5}. {6}. ···］"
+
+msgid "Views"
+msgstr "［Ṽíéẃš ···］"
+
+msgid "{0} all time"
+msgstr "[{0} åłł ţíḿé]"

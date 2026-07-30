@@ -1,10 +1,10 @@
 use tokenmaster_codex::{
     MAX_TOOL_NAME_BYTES, MAX_TOOL_NAMES, PARSER_SCHEMA_VERSION, ParseContext, ParseOutcome,
-    ParserDiagnosticCode, ParserDiagnostics, ParserResumeErrorCode, ParserResumeStateV1,
-    ParserState, parse_line,
+    ParserDiagnosticCode, ParserDiagnostics, ParserResumeErrorCode, ParserResumeState, ParserState,
+    parse_line,
 };
 use tokenmaster_domain::{
-    ActivityKind, CanonicalUsageEvent, TokenCount, UsageProfileId, UsageSessionId, UsageSourceId,
+    ActivityKind, ObservationDraft, TokenCount, UsageProfileId, UsageSessionId, UsageSourceId,
 };
 
 fn context() -> ParseContext {
@@ -25,13 +25,25 @@ fn parse(
     parse_line(context, state, diagnostics, offset, line)
 }
 
+fn metadata_line(path: &std::path::Path, session: &str, timestamp: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "timestamp": timestamp,
+        "type": "session_meta",
+        "payload": {
+            "id": session,
+            "cwd": path,
+        }
+    }))
+    .expect("metadata fixture")
+}
+
 fn emitted(
     context: &ParseContext,
     state: &mut ParserState,
     diagnostics: &mut ParserDiagnostics,
     offset: u64,
     line: &[u8],
-) -> CanonicalUsageEvent {
+) -> ObservationDraft {
     match parse(context, state, diagnostics, offset, line) {
         ParseOutcome::Emitted(event) => event,
         other => panic!("event expected, got {other:?}"),
@@ -42,7 +54,7 @@ fn seed_metadata_and_tool(
     context: &ParseContext,
     state: &mut ParserState,
     diagnostics: &mut ParserDiagnostics,
-) -> CanonicalUsageEvent {
+) -> ObservationDraft {
     let metadata = br#"{"timestamp":"2026-07-10T08:00:00Z","type":"session_meta","payload":{"id":"real-session-id","session_id":"general-session-id","requested_model":"gpt-5.6-sol","service_tier":"priority","cwd":"C:\\PRIVATE_PARENT_MARKER\\customer-api","originator":"codex_win","source":"cli","git":{"branch":"feature/usage"},"model_context_window":1050000,"prompt":"PROMPT_SECRET","reasoning":"REASONING_SECRET"},"unknown":{"response":"RESPONSE_SECRET"}}"#;
     assert!(matches!(
         parse(context, state, diagnostics, 0, metadata),
@@ -106,7 +118,7 @@ fn metadata_activity_and_privacy_follow_the_bounded_contract() {
     assert_eq!(diagnostics.metadata_lines(), 1);
     assert_eq!(diagnostics.tool_events(), 1);
 
-    let event_json = serde_json::to_string(&event).expect("event serializes");
+    let event_debug = format!("{event:?}");
     let resume_json = serde_json::to_string(&state.snapshot()).expect("resume serializes");
     for marker in [
         "PRIVATE_PARENT_MARKER",
@@ -116,12 +128,212 @@ fn metadata_activity_and_privacy_follow_the_bounded_contract() {
         "ARGUMENT_SECRET",
         "OUTPUT_SECRET",
     ] {
-        assert!(!event_json.contains(marker), "event leaked {marker}");
+        assert!(!event_debug.contains(marker), "event leaked {marker}");
         assert!(!resume_json.contains(marker), "resume leaked {marker}");
     }
     assert!(resume_json.contains("real-session-id"));
     assert!(resume_json.contains("feature/usage"));
     assert!(state.retained_text_bytes() <= ParserState::MAX_RETAINED_TEXT_BYTES);
+}
+
+#[test]
+fn repository_activity_keeps_only_latest_hint_outside_resume_state() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let first = directory
+        .path()
+        .join("PRIVATE_FIRST_PARENT")
+        .join("project-first");
+    let second = directory
+        .path()
+        .join("PRIVATE_SECOND_PARENT")
+        .join("project-second");
+    std::fs::create_dir_all(&first).expect("first repository");
+    std::fs::create_dir_all(&second).expect("second repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            0,
+            &metadata_line(&first, "session-first", "2026-07-10T08:00:00Z"),
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            1,
+            &metadata_line(&second, "session-second", "2026-07-10T08:01:00Z"),
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+
+    let resume = serde_json::to_string(&state.snapshot()).expect("resume serializes");
+    let hint = state
+        .take_latest_repository_activity_hint()
+        .expect("latest repository activity");
+    assert_eq!(hint.provider_id().as_str(), "codex");
+    assert_eq!(hint.profile_id().as_str(), "profile_fixture");
+    assert_eq!(hint.source_id().as_str(), "source_fixture");
+    assert_eq!(hint.session_id().as_str(), "session-second");
+    assert_eq!(hint.observed_at().unix_seconds(), 1_783_670_460);
+    assert_eq!(
+        hint.project().map(tokenmaster_domain::ProjectAlias::as_str),
+        Some("project-second")
+    );
+    assert_eq!(hint.candidate().as_path(), second.canonicalize().unwrap());
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    for marker in ["PRIVATE_FIRST_PARENT", "PRIVATE_SECOND_PARENT"] {
+        assert!(!resume.contains(marker));
+    }
+    assert!(!format!("{state:?}").contains("PRIVATE_SECOND_PARENT"));
+    assert!(!format!("{hint:?}").contains("PRIVATE_SECOND_PARENT"));
+    assert!(state.retained_text_bytes() <= ParserState::MAX_RETAINED_TEXT_BYTES);
+}
+
+#[test]
+fn repository_activity_ignores_invalid_and_unavailable_candidates() {
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+    let missing = if cfg!(windows) {
+        std::path::PathBuf::from(r"C:\TOKENMASTER_MISSING_PRIVATE_REPOSITORY")
+    } else {
+        std::path::PathBuf::from("/TOKENMASTER_MISSING_PRIVATE_REPOSITORY")
+    };
+
+    for (offset, path) in [std::path::Path::new("relative/escape"), missing.as_path()]
+        .into_iter()
+        .enumerate()
+    {
+        assert!(matches!(
+            parse(
+                &context,
+                &mut state,
+                &mut diagnostics,
+                offset as u64,
+                &metadata_line(path, "session-invalid", "2026-07-10T08:00:00Z"),
+            ),
+            ParseOutcome::MetadataOnly
+        ));
+        assert!(state.take_latest_repository_activity_hint().is_none());
+    }
+}
+
+#[test]
+fn explicit_invalid_cwd_clears_prior_transient_candidate() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let repository = directory.path().join("project-valid");
+    std::fs::create_dir(&repository).expect("repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            0,
+            &metadata_line(&repository, "session-valid", "2026-07-10T08:00:00Z"),
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(state.take_latest_repository_activity_hint().is_some());
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            1,
+            br#"{"timestamp":"2026-07-10T08:01:00Z","type":"turn_context","payload":{"session_id":"session-next","cwd":"relative\\invalid"}}"#,
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    let _ = emitted(
+        &context,
+        &mut state,
+        &mut diagnostics,
+        2,
+        br#"{"timestamp":"2026-07-10T08:02:00Z","model":"gpt-test","usage":{"total_tokens":1}}"#,
+    );
+    assert!(state.take_latest_repository_activity_hint().is_none());
+}
+
+#[test]
+fn untimed_turn_context_is_associated_with_next_timed_usage() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let repository = directory.path().join("project-timed");
+    std::fs::create_dir(&repository).expect("repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+    let line = serde_json::to_vec(&serde_json::json!({
+        "type": "turn_context",
+        "payload": {
+            "session_id": "session-timed",
+            "cwd": repository,
+            "model": "gpt-test",
+        }
+    }))
+    .expect("turn context");
+
+    assert!(matches!(
+        parse(&context, &mut state, &mut diagnostics, 0, &line),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    let _ = emitted(
+        &context,
+        &mut state,
+        &mut diagnostics,
+        1,
+        br#"{"timestamp":"2026-07-10T08:02:00Z","usage":{"total_tokens":1}}"#,
+    );
+    let hint = state
+        .take_latest_repository_activity_hint()
+        .expect("usage supplies activity time");
+    assert_eq!(hint.session_id().as_str(), "session-timed");
+    assert_eq!(hint.observed_at().unix_seconds(), 1_783_670_520);
+}
+
+#[test]
+fn ten_thousand_repository_updates_keep_one_bounded_latest_slot() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let repository = directory.path().join("project-burst");
+    std::fs::create_dir(&repository).expect("repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+
+    for index in 0..10_000 {
+        let session = format!("session-{index}");
+        assert!(matches!(
+            parse(
+                &context,
+                &mut state,
+                &mut diagnostics,
+                index,
+                &metadata_line(&repository, &session, "2026-07-10T08:00:00Z"),
+            ),
+            ParseOutcome::MetadataOnly
+        ));
+        assert!(state.retained_text_bytes() <= ParserState::MAX_RETAINED_TEXT_BYTES);
+    }
+
+    let hint = state
+        .take_latest_repository_activity_hint()
+        .expect("latest hint");
+    assert_eq!(hint.session_id().as_str(), "session-9999");
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    assert_eq!(diagnostics.metadata_lines(), 10_000);
 }
 
 #[test]
@@ -295,7 +507,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
     assert_eq!(first_json, second_json);
     assert!(first_json.contains(&format!("\"version\":{PARSER_SCHEMA_VERSION}")));
 
-    let decoded: ParserResumeStateV1 =
+    let decoded: ParserResumeState =
         serde_json::from_str(&first_json).expect("resume deserializes");
     let restored = ParserState::from_resume(decoded).expect("valid resume restores");
     assert_eq!(restored.snapshot(), snapshot);
@@ -319,12 +531,12 @@ fn resume_is_deterministic_strict_and_revalidated() {
         .as_object_mut()
         .expect("resume object")
         .insert("raw_tail".to_owned(), serde_json::json!("TAIL_SECRET"));
-    assert!(serde_json::from_value::<ParserResumeStateV1>(unknown).is_err());
+    assert!(serde_json::from_value::<ParserResumeState>(unknown).is_err());
 
     let mut unsupported: serde_json::Value =
         serde_json::from_str(&first_json).expect("resume json value");
     unsupported["version"] = serde_json::json!(PARSER_SCHEMA_VERSION + 1);
-    let unsupported: ParserResumeStateV1 =
+    let unsupported: ParserResumeState =
         serde_json::from_value(unsupported).expect("shape remains valid");
     let error = ParserState::from_resume(unsupported).expect_err("version must fail");
     assert_eq!(error.code(), ParserResumeErrorCode::UnsupportedVersion);
@@ -335,7 +547,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
         .as_array_mut()
         .expect("tool count array");
     tools.push(serde_json::json!({"name":"aaa","count":1}));
-    let unsorted: ParserResumeStateV1 =
+    let unsorted: ParserResumeState =
         serde_json::from_value(unsorted).expect("bounded shape deserializes");
     let error = ParserState::from_resume(unsorted).expect_err("order must fail");
     assert_eq!(error.code(), ParserResumeErrorCode::InvalidState);
@@ -343,7 +555,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
     let mut invalid_cached: serde_json::Value =
         serde_json::from_str(&first_json).expect("resume json value");
     invalid_cached["previous_totals"]["cached"] = serde_json::json!(101);
-    let invalid_cached: ParserResumeStateV1 =
+    let invalid_cached: ParserResumeState =
         serde_json::from_value(invalid_cached).expect("bounded shape deserializes");
     let error = ParserState::from_resume(invalid_cached).expect_err("cached bound must fail");
     assert_eq!(error.code(), ParserResumeErrorCode::InvalidState);
@@ -352,7 +564,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
         serde_json::from_str(&first_json).expect("resume json value");
     impossible_other["tool_counts"] = serde_json::json!([]);
     impossible_other["other_tools"] = serde_json::json!(1);
-    let impossible_other: ParserResumeStateV1 =
+    let impossible_other: ParserResumeState =
         serde_json::from_value(impossible_other).expect("bounded shape deserializes");
     let error =
         ParserState::from_resume(impossible_other).expect_err("other tools require full capacity");
@@ -362,7 +574,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
         serde_json::from_str(&first_json).expect("resume json value");
     impossible_activity["pending_activity"][0] = serde_json::json!(2);
     impossible_activity["aggregate_activity"][0] = serde_json::json!(1);
-    let impossible_activity: ParserResumeStateV1 =
+    let impossible_activity: ParserResumeState =
         serde_json::from_value(impossible_activity).expect("bounded shape deserializes");
     let error = ParserState::from_resume(impossible_activity)
         .expect_err("pending activity cannot exceed aggregate activity");
@@ -386,7 +598,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
             .collect::<Vec<_>>(),
         "other_tools": 0
     });
-    assert!(serde_json::from_value::<ParserResumeStateV1>(oversized_tools).is_err());
+    assert!(serde_json::from_value::<ParserResumeState>(oversized_tools).is_err());
 }
 
 #[test]

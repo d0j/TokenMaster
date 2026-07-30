@@ -1,0 +1,40 @@
+[package]
+name = "tokenmaster-runtime"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+notify.workspace = true
+serde_json.workspace = true
+tokenmaster-codex = { path = "../codex" }
+tokenmaster-domain = { path = "../domain" }
+tokenmaster-engine = { path = "../engine" }
+tokenmaster-git = { path = "../git" }
+tokenmaster-provider = { path = "../provider" }
+tokenmaster-platform = { path = "../platform" }
+tokenmaster-store = { path = "../store" }
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+tokenmaster-state = { path = "../state" }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows.workspace = true
+
+[[test]]
+name = "quota_runtime_resource_contract"
+path = "tests/quota_runtime_resource_contract.rs"
+harness = false
+
+[[test]]
+name = "reminder_runtime_resource_contract"
+path = "tests/reminder_runtime_resource_contract.rs"
+harness = false
+
+[[test]]
+name = "git_runtime_resource_contract"
+path = "tests/git_runtime_resource_contract.rs"
+harness = false

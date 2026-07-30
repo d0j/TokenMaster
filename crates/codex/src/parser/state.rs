@@ -6,11 +6,12 @@ use tokenmaster_domain::{
     ActivityCounts, ActivityKind, MetadataValue, ProjectAlias, TokenCount, TokenUsage,
     UsageSessionId,
 };
+use tokenmaster_provider::{RepositoryActivityHint, RepositoryCandidatePath};
 
 use super::value::{ResolvedModel, normalize_explicit_model};
 use super::{ParserDiagnosticCode, ParserDiagnostics};
 
-pub const PARSER_SCHEMA_VERSION: u16 = 1;
+pub const PARSER_SCHEMA_VERSION: u16 = 2;
 pub const MAX_TOOL_NAMES: usize = 64;
 pub const MAX_TOOL_NAME_BYTES: usize = 80;
 pub(crate) const MAX_CONTEXT_WINDOW_TOKENS: u64 = 10_000_000;
@@ -133,12 +134,18 @@ impl From<&ResolvedModel> for ResumeModel {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ParserResumeStateV1 {
+pub struct ParserResumeState {
     version: u16,
     current_model: Option<ResumeModel>,
     previous_totals: Option<TokenUsage>,
     service_tier: Option<MetadataValue>,
     session_id: Option<UsageSessionId>,
+    #[serde(default)]
+    parent_session_id: Option<UsageSessionId>,
+    #[serde(default)]
+    lineage_conflict: bool,
+    #[serde(default)]
+    next_usage_ordinal: u64,
     project: Option<ProjectAlias>,
     originator: Option<MetadataValue>,
     source_alias: Option<MetadataValue>,
@@ -235,7 +242,13 @@ pub struct ParserState {
     pub(super) previous_totals: Option<TokenUsage>,
     pub(super) service_tier: Option<MetadataValue>,
     pub(super) session_id: Option<UsageSessionId>,
+    pub(super) parent_session_id: Option<UsageSessionId>,
+    pub(super) lineage_conflict: bool,
+    pub(super) next_usage_ordinal: u64,
     pub(super) project: Option<ProjectAlias>,
+    pub(super) repository_candidate: Option<RepositoryCandidatePath>,
+    pub(super) repository_project: Option<ProjectAlias>,
+    latest_repository_activity_hint: Option<RepositoryActivityHint>,
     pub(super) originator: Option<MetadataValue>,
     pub(super) source_alias: Option<MetadataValue>,
     pub(super) git_branch: Option<MetadataValue>,
@@ -253,7 +266,7 @@ impl Default for ParserState {
 }
 
 impl ParserState {
-    pub const MAX_RETAINED_TEXT_BYTES: usize = 8_768;
+    pub const MAX_RETAINED_TEXT_BYTES: usize = 15_232;
 
     #[must_use]
     pub fn new() -> Self {
@@ -262,7 +275,13 @@ impl ParserState {
             previous_totals: None,
             service_tier: None,
             session_id: None,
+            parent_session_id: None,
+            lineage_conflict: false,
+            next_usage_ordinal: 0,
             project: None,
+            repository_candidate: None,
+            repository_project: None,
+            latest_repository_activity_hint: None,
             originator: None,
             source_alias: None,
             git_branch: None,
@@ -275,13 +294,16 @@ impl ParserState {
     }
 
     #[must_use]
-    pub fn snapshot(&self) -> ParserResumeStateV1 {
-        ParserResumeStateV1 {
+    pub fn snapshot(&self) -> ParserResumeState {
+        ParserResumeState {
             version: PARSER_SCHEMA_VERSION,
             current_model: self.current_model.as_ref().map(ResumeModel::from),
             previous_totals: self.previous_totals,
             service_tier: self.service_tier.clone(),
             session_id: self.session_id.clone(),
+            parent_session_id: self.parent_session_id.clone(),
+            lineage_conflict: self.lineage_conflict,
+            next_usage_ordinal: self.next_usage_ordinal,
             project: self.project.clone(),
             originator: self.originator.clone(),
             source_alias: self.source_alias.clone(),
@@ -294,7 +316,7 @@ impl ParserState {
         }
     }
 
-    pub fn from_resume(value: ParserResumeStateV1) -> Result<Self, ParserResumeError> {
+    pub fn from_resume(value: ParserResumeState) -> Result<Self, ParserResumeError> {
         if value.version != PARSER_SCHEMA_VERSION {
             return Err(ParserResumeError::new(
                 ParserResumeErrorCode::UnsupportedVersion,
@@ -310,6 +332,10 @@ impl ParserState {
             || !valid_tool_entries(&value.tool_counts)
             || (value.other_tools > 0 && value.tool_counts.len() < MAX_TOOL_NAMES)
             || !valid_activity_relation(&value.pending_activity, &value.aggregate_activity)
+            || value.next_usage_ordinal > i64::MAX as u64
+            || (!value.lineage_conflict
+                && value.parent_session_id.is_some()
+                && value.parent_session_id.as_ref() == value.session_id.as_ref())
         {
             return Err(ParserResumeError::new(ParserResumeErrorCode::InvalidState));
         }
@@ -324,7 +350,13 @@ impl ParserState {
             previous_totals: value.previous_totals,
             service_tier: value.service_tier,
             session_id: value.session_id,
+            parent_session_id: value.parent_session_id,
+            lineage_conflict: value.lineage_conflict,
+            next_usage_ordinal: value.next_usage_ordinal,
             project: value.project,
+            repository_candidate: None,
+            repository_project: None,
+            latest_repository_activity_hint: None,
             originator: value.originator,
             source_alias: value.source_alias,
             git_branch: value.git_branch,
@@ -406,6 +438,30 @@ impl ParserState {
         self.git_branch.as_ref().map(MetadataValue::as_str)
     }
 
+    pub(super) fn record_repository_activity_hint(&mut self, hint: RepositoryActivityHint) {
+        self.latest_repository_activity_hint = Some(hint);
+    }
+
+    #[must_use]
+    pub fn take_latest_repository_activity_hint(&mut self) -> Option<RepositoryActivityHint> {
+        self.latest_repository_activity_hint.take()
+    }
+
+    #[must_use]
+    pub fn parent_session_id(&self) -> Option<&UsageSessionId> {
+        self.parent_session_id.as_ref()
+    }
+
+    #[must_use]
+    pub const fn lineage_conflict(&self) -> bool {
+        self.lineage_conflict
+    }
+
+    #[must_use]
+    pub const fn next_usage_ordinal(&self) -> u64 {
+        self.next_usage_ordinal
+    }
+
     #[must_use]
     pub fn retained_text_bytes(&self) -> usize {
         let model_bytes = self.current_model.as_ref().map_or(0, |model| {
@@ -418,9 +474,31 @@ impl ParserState {
                 .as_ref()
                 .map_or(0, |value| value.as_str().len())
             + self
+                .parent_session_id
+                .as_ref()
+                .map_or(0, |value| value.as_str().len())
+            + self
                 .project
                 .as_ref()
                 .map_or(0, |value| value.as_str().len())
+            + self
+                .repository_candidate
+                .as_ref()
+                .map_or(0, RepositoryCandidatePath::byte_len)
+            + self
+                .repository_project
+                .as_ref()
+                .map_or(0, |value| value.as_str().len())
+            + self
+                .latest_repository_activity_hint
+                .as_ref()
+                .map_or(0, |hint| {
+                    hint.provider_id().as_str().len()
+                        + hint.profile_id().as_str().len()
+                        + hint.source_id().as_str().len()
+                        + hint.session_id().as_str().len()
+                        + hint.project().map_or(0, |value| value.as_str().len())
+                })
             + metadata_len(self.originator.as_ref())
             + metadata_len(self.source_alias.as_ref())
             + metadata_len(self.git_branch.as_ref())

@@ -1,0 +1,45 @@
+import { UiTokens } from "../tokens.slint";
+
+export component MetricValue inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> availability;
+    // "positive" | "negative" | anything else for the ordinary colour. A tone is a
+    // statement about the number's direction, not about its availability: an
+    // unavailable value keeps the muted colour whatever tone it was given, because
+    // colouring a dash green would claim a fact the evidence does not support.
+    in property <string> tone;
+
+    min-height: 54px;
+    background: transparent;
+    accessible-role: text;
+    accessible-label: root.label + " " + root.value;
+
+    VerticalLayout {
+        spacing: UiTokens.space-xs;
+        Text {
+            // Uppercased here rather than in the msgid: casing is presentation, and a
+            // translated catalog should carry the word, not a styling decision. The
+            // localization contract enumerates every msgid, so baking `COST` into one
+            // would orphan `Cost` in both catalogs and fail that contract -- which is
+            // how this was caught.
+            text: root.label.to-uppercase();
+            color: UiTokens.text-secondary;
+            font-family: UiTokens.mono;
+            font-size: UiTokens.text-caption;
+            letter-spacing: UiTokens.tracking-label;
+        }
+        Text {
+            text: root.value;
+            color: root.availability == "unavailable"
+                ? UiTokens.text-secondary
+                : (root.tone == "positive"
+                    ? UiTokens.ready
+                    : (root.tone == "negative" ? UiTokens.unavailable : UiTokens.text-primary));
+            font-family: UiTokens.mono;
+            font-size: UiTokens.text-display;
+            font-weight: UiTokens.weight-bold;
+            overflow: elide;
+        }
+    }
+}

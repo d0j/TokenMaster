@@ -1,0 +1,84 @@
+export struct UiPalette {
+    background: color,
+    surface: color,
+    surface-raised: color,
+    surface-subtle: color,
+    border: color,
+    text-primary: color,
+    text-secondary: color,
+    accent: color,
+    accent-subtle: color,
+    accent-secondary: color,
+    accent-tertiary: color,
+    ready: color,
+    waiting: color,
+    degraded: color,
+    unavailable: color,
+}
+
+export global UiTokens {
+    in-out property <UiPalette> palette: {
+        background: #0d0f13,
+        surface: #161920,
+        surface-raised: #1e2230,
+        surface-subtle: #13151a,
+        border: #252934,
+        text-primary: #e8eaf0,
+        text-secondary: #aeb4c0,
+        accent: #2dd4bf,
+        accent-subtle: #123a37,
+        accent-secondary: #38bdf8,
+        accent-tertiary: #a78bfa,
+        ready: #34d399,
+        waiting: #fbbf24,
+        degraded: #fbbf24,
+        unavailable: #f88b8b,
+    };
+    in-out property <int> density-id: 0;
+    out property <color> background: palette.background;
+    out property <color> surface: palette.surface;
+    out property <color> surface-raised: palette.surface-raised;
+    out property <color> surface-subtle: palette.surface-subtle;
+    out property <color> border: palette.border;
+    out property <color> text-primary: palette.text-primary;
+    out property <color> text-secondary: palette.text-secondary;
+    out property <color> accent: palette.accent;
+    out property <color> accent-subtle: palette.accent-subtle;
+    out property <color> accent-secondary: palette.accent-secondary;
+    out property <color> accent-tertiary: palette.accent-tertiary;
+    out property <color> ready: palette.ready;
+    out property <color> waiting: palette.waiting;
+    out property <color> degraded: palette.degraded;
+    out property <color> unavailable: palette.unavailable;
+    out property <length> space-xs: density-id == 2 ? 2px : (density-id == 1 ? 3px : 4px);
+    out property <length> space-sm: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);
+    out property <length> space: density-id == 2 ? 8px : (density-id == 1 ? 12px : 16px);
+    out property <length> space-lg: density-id == 2 ? 12px : (density-id == 1 ? 18px : 24px);
+    out property <length> radius-sm: density-id == 2 ? 3px : (density-id == 1 ? 4px : 5px);
+    out property <length> radius: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);
+    out property <length> radius-lg: density-id == 2 ? 6px : (density-id == 1 ? 9px : 12px);
+
+    // Typography. Before this existed every size was written at the call site, which is
+    // how the tree accumulated fifteen distinct values across 333 places, four of them
+    // below ten pixels. Seven steps replace them, and they scale with density like the
+    // spacing above rather than staying fixed while everything around them shrinks.
+    out property <length> text-caption: density-id == 2 ? 10px : (density-id == 1 ? 10px : 11px);
+    out property <length> text-body: density-id == 2 ? 11px : (density-id == 1 ? 12px : 13px);
+    out property <length> text-subhead: density-id == 2 ? 13px : (density-id == 1 ? 14px : 15px);
+    out property <length> text-title: density-id == 2 ? 15px : (density-id == 1 ? 17px : 18px);
+    out property <length> text-headline: density-id == 2 ? 18px : (density-id == 1 ? 20px : 22px);
+    out property <length> text-display: density-id == 2 ? 24px : (density-id == 1 ? 27px : 30px);
+    out property <length> text-hero: density-id == 2 ? 32px : (density-id == 1 ? 36px : 40px);
+
+    // Numbers and their labels are monospaced; navigation and prose are not. That split
+    // is what makes a usage tool read as an instrument rather than a page, and it is the
+    // single largest difference between this tree and the reference design. Consolas
+    // rather than a newer face because it is present on every supported Windows, and a
+    // missing family falls back silently to the proportional default.
+    out property <string> mono: "Consolas";
+    out property <int> weight-regular: 400;
+    out property <int> weight-medium: 600;
+    out property <int> weight-bold: 750;
+    // Uppercase labels need tracking or they read as a solid block at these sizes.
+    out property <length> tracking-label: 1.2px;
+}

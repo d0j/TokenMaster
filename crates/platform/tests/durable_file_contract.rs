@@ -1,0 +1,706 @@
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Command, Stdio};
+
+use sha2::{Digest, Sha256};
+use tempfile::TempDir;
+use tokenmaster_platform::{
+    DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileTarget, MAX_DURABLE_FILE_BYTES,
+    MAX_DURABLE_WRITE_CHUNK_BYTES, ValidatedLocalDirectory,
+};
+
+const OLD: &[u8] = b"old-complete-payload";
+const NEW: &[u8] = b"new-complete-payload";
+const TEST_MAX_BYTES: u64 = 1024 * 1024;
+
+fn fixture() -> (TempDir, ValidatedLocalDirectory) {
+    let root = TempDir::new().expect("temporary durable-file root");
+    let directory = ValidatedLocalDirectory::new(root.path()).expect("validated root");
+    (root, directory)
+}
+
+fn digest(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
+}
+
+fn descriptor(
+    directory: &ValidatedLocalDirectory,
+    name: &str,
+) -> Result<DurableFileTarget, DurableFileError> {
+    DurableFileTarget::exact_child(directory, name)
+}
+
+fn sealed(target: &DurableFileTarget, payload: &[u8]) -> tokenmaster_platform::DurableStagedFile {
+    let mut staged = target.create_staged(TEST_MAX_BYTES).expect("create stage");
+    staged.write_chunk(payload).expect("write stage");
+    let receipt = staged
+        .seal(
+            u64::try_from(payload.len()).expect("fixture length"),
+            digest(payload),
+        )
+        .expect("seal stage");
+    assert_eq!(receipt.len(), payload.len() as u64);
+    assert_eq!(receipt.sha256(), &digest(payload));
+    assert_eq!(format!("{receipt:?}"), "DurableFileReceipt([redacted])");
+    staged
+}
+
+#[test]
+fn exact_child_policy_rejects_traversal_separators_reserved_and_unexpected_types() {
+    let (root, directory) = fixture();
+    for invalid in [
+        "",
+        ".",
+        "..",
+        "nested/file",
+        "nested\\file",
+        "stream:ads",
+        "CON",
+        "name with space",
+    ] {
+        assert_eq!(
+            descriptor(&directory, invalid).expect_err("invalid child must fail"),
+            DurableFileError::InvalidName
+        );
+    }
+    assert_eq!(
+        descriptor(&directory, &"a".repeat(97)).expect_err("long child must fail"),
+        DurableFileError::InvalidName
+    );
+
+    fs::create_dir(root.path().join("directory.slot")).expect("directory child");
+    assert_eq!(
+        descriptor(&directory, "directory.slot").expect_err("directory must fail"),
+        DurableFileError::UnexpectedType
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn linked_child_is_rejected() {
+    use std::os::unix::fs::symlink;
+
+    let (root, directory) = fixture();
+    fs::write(root.path().join("outside.slot"), OLD).expect("link target");
+    symlink(
+        root.path().join("outside.slot"),
+        root.path().join("linked.slot"),
+    )
+    .expect("create symlink");
+    assert_eq!(
+        descriptor(&directory, "linked.slot").expect_err("link must fail"),
+        DurableFileError::UnsupportedLocation
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn linked_or_reparse_child_is_rejected() {
+    use std::os::windows::fs::symlink_file;
+
+    let (root, directory) = fixture();
+    fs::write(root.path().join("outside.slot"), OLD).expect("link target");
+    symlink_file(
+        root.path().join("outside.slot"),
+        root.path().join("linked.slot"),
+    )
+    .expect("create local symlink");
+    assert_eq!(
+        descriptor(&directory, "linked.slot").expect_err("link must fail"),
+        DurableFileError::UnsupportedLocation
+    );
+}
+
+#[test]
+fn staging_is_create_new_collision_safe_bounded_and_drop_cleaned() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "settings.a").expect("target");
+    let mut stages = Vec::new();
+    for _ in 0..DURABLE_STAGE_ATTEMPTS {
+        stages.push(
+            target
+                .create_staged(TEST_MAX_BYTES)
+                .expect("bounded distinct stage"),
+        );
+    }
+    assert_eq!(
+        target
+            .create_staged(TEST_MAX_BYTES)
+            .expect_err("all staging slots occupied"),
+        DurableFileError::CollisionLimit
+    );
+    drop(stages);
+    assert_eq!(
+        fs::read_dir(root.path()).expect("list root").count(),
+        0,
+        "ordinary drop must remove unpublished stages"
+    );
+}
+
+#[test]
+fn seal_flushes_reopens_and_rejects_wrong_length_or_digest() {
+    let (_root, directory) = fixture();
+    let target = descriptor(&directory, "settings.a").expect("target");
+
+    let mut wrong_length = target.create_staged(TEST_MAX_BYTES).expect("length stage");
+    wrong_length.write_chunk(NEW).expect("write stage");
+    assert_eq!(
+        wrong_length
+            .seal(NEW.len() as u64 + 1, digest(NEW))
+            .expect_err("wrong length"),
+        DurableFileError::Integrity
+    );
+
+    let mut wrong_digest = target.create_staged(TEST_MAX_BYTES).expect("digest stage");
+    wrong_digest.write_chunk(NEW).expect("write stage");
+    assert_eq!(
+        wrong_digest
+            .seal(NEW.len() as u64, digest(OLD))
+            .expect_err("wrong digest"),
+        DurableFileError::Integrity
+    );
+}
+
+#[test]
+fn discarded_stage_is_irreversibly_unsealable_unpublishable_and_removed() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "discarded.slot").expect("target");
+    let mut staged = target.create_staged(TEST_MAX_BYTES).expect("stage");
+    staged.write_chunk(NEW).expect("write stage");
+    staged.discard().expect("discard stage");
+    staged.discard().expect("discard is idempotent");
+    assert_eq!(staged.written_len(), NEW.len() as u64);
+    assert_eq!(
+        staged.write_chunk(b"x").expect_err("discarded write"),
+        DurableFileError::InvalidState
+    );
+    assert_eq!(
+        staged
+            .seal(NEW.len() as u64, digest(NEW))
+            .expect_err("discarded seal"),
+        DurableFileError::InvalidState
+    );
+    assert_eq!(
+        staged.publish_new(&target).expect_err("discarded publish"),
+        DurableFileError::InvalidState
+    );
+    assert_eq!(fs::read_dir(root.path()).expect("empty root").count(), 0);
+}
+
+#[test]
+fn publish_new_is_same_volume_verified_and_preserves_source_on_preflight_failure() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "settings.a").expect("target");
+    let mut staged = sealed(&target, NEW);
+    let receipt = staged.publish_new(&target).expect("publish new target");
+    assert_eq!(receipt.sha256(), &digest(NEW));
+    assert_eq!(
+        fs::read(root.path().join("settings.a")).expect("read target"),
+        NEW
+    );
+
+    let blocked = descriptor(&directory, "blocked.slot").expect("blocked target");
+    fs::write(root.path().join("blocked.slot"), OLD).expect("existing target");
+    let mut source = sealed(&blocked, NEW);
+    assert_eq!(
+        source
+            .publish_new(&blocked)
+            .expect_err("existing target must fail"),
+        DurableFileError::TargetExists
+    );
+    assert_eq!(
+        fs::read(root.path().join("blocked.slot")).expect("old target"),
+        OLD
+    );
+    assert!(
+        fs::read_dir(root.path()).expect("list stages").count() >= 3,
+        "failed publication must retain its sealed source until caller drops it"
+    );
+}
+
+#[test]
+fn bounded_read_distinguishes_missing_exact_bytes_and_capacity_excess() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "record.slot").expect("target");
+    assert_eq!(target.read_bounded(16).expect("missing read"), None);
+
+    fs::write(root.path().join("record.slot"), b"exact-record").expect("record");
+    assert_eq!(
+        target.read_bounded(12).expect("bounded read"),
+        Some(b"exact-record".to_vec())
+    );
+    assert_eq!(
+        target.read_bounded(11).expect_err("oversized exact child"),
+        DurableFileError::CapacityExceeded
+    );
+}
+
+#[test]
+fn bounded_reader_streams_exact_bytes_and_detects_short_or_appended_files() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "stream.slot").expect("target");
+    assert!(target.open_reader(16).expect("missing reader").is_none());
+    fs::write(root.path().join("stream.slot"), b"exact-record").expect("record");
+
+    let mut reader = target
+        .open_reader(12)
+        .expect("open reader")
+        .expect("present reader");
+    assert_eq!(reader.len(), 12);
+    assert!(!reader.is_empty());
+    assert_eq!(format!("{reader:?}"), "DurableFileReader([redacted])");
+    let mut observed = Vec::new();
+    let mut chunk = [0_u8; 5];
+    loop {
+        let count = reader.read_chunk(&mut chunk).expect("stream chunk");
+        if count == 0 {
+            break;
+        }
+        observed.extend_from_slice(&chunk[..count]);
+    }
+    assert_eq!(observed, b"exact-record");
+
+    let mut too_small = target
+        .open_reader(12)
+        .expect("open short reader")
+        .expect("present short reader");
+    fs::write(root.path().join("stream.slot"), b"short").expect("truncate after open");
+    let mut chunk = [0_u8; 16];
+    assert_eq!(too_small.read_chunk(&mut chunk).expect("short prefix"), 5);
+    assert_eq!(
+        too_small
+            .read_chunk(&mut chunk)
+            .expect_err("short file must fail"),
+        DurableFileError::Integrity
+    );
+
+    fs::write(root.path().join("stream.slot"), b"base").expect("base file");
+    let mut appended = target
+        .open_reader(16)
+        .expect("open append reader")
+        .expect("present append reader");
+    fs::write(root.path().join("stream.slot"), b"base-extra").expect("append after open");
+    let mut base = [0_u8; 4];
+    assert_eq!(appended.read_chunk(&mut base).expect("base chunk"), 4);
+    assert_eq!(
+        appended
+            .read_chunk(&mut base)
+            .expect_err("appended bytes must fail"),
+        DurableFileError::Integrity
+    );
+}
+
+#[test]
+fn bounded_reader_rejects_capacity_and_oversized_chunks_before_reading() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "reader-bounds.slot").expect("target");
+    fs::write(root.path().join("reader-bounds.slot"), b"bounded").expect("payload");
+    assert_eq!(
+        target
+            .open_reader(6)
+            .expect_err("file exceeds caller bound"),
+        DurableFileError::CapacityExceeded
+    );
+    assert_eq!(
+        target
+            .open_reader(MAX_DURABLE_FILE_BYTES + 1)
+            .expect_err("global limit"),
+        DurableFileError::CapacityExceeded
+    );
+    let mut reader = target
+        .open_reader(7)
+        .expect("open reader")
+        .expect("present reader");
+    let mut oversized = vec![0_u8; MAX_DURABLE_WRITE_CHUNK_BYTES + 1];
+    assert_eq!(
+        reader
+            .read_chunk(&mut oversized)
+            .expect_err("oversized chunk"),
+        DurableFileError::CapacityExceeded
+    );
+    let mut exact = [0_u8; 7];
+    assert_eq!(reader.read_chunk(&mut exact).expect("reader untouched"), 7);
+    assert_eq!(&exact, b"bounded");
+}
+
+#[test]
+fn replace_existing_saves_old_target_and_preserves_all_inputs_on_preflight_failure() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "tokenmaster.sqlite3").expect("target");
+    let backup = descriptor(&directory, "quarantine.main").expect("backup");
+    fs::write(root.path().join("tokenmaster.sqlite3"), OLD).expect("old target");
+    let mut staged = sealed(&target, NEW);
+    staged
+        .replace_existing(&target, &backup)
+        .expect("replace existing");
+    assert_eq!(
+        fs::read(root.path().join("tokenmaster.sqlite3")).expect("new target"),
+        NEW
+    );
+    assert_eq!(
+        fs::read(root.path().join("quarantine.main")).expect("old backup"),
+        OLD
+    );
+
+    let failed_target = descriptor(&directory, "failed.sqlite3").expect("failed target");
+    let occupied_backup = descriptor(&directory, "occupied.backup").expect("occupied backup");
+    fs::write(root.path().join("failed.sqlite3"), OLD).expect("failed old target");
+    fs::write(root.path().join("occupied.backup"), b"keep-backup").expect("backup blocker");
+    let mut source = sealed(&failed_target, NEW);
+    assert_eq!(
+        source
+            .replace_existing(&failed_target, &occupied_backup)
+            .expect_err("occupied backup must fail"),
+        DurableFileError::TargetExists
+    );
+    assert_eq!(
+        fs::read(root.path().join("failed.sqlite3")).expect("preserved target"),
+        OLD
+    );
+    assert_eq!(
+        fs::read(root.path().join("occupied.backup")).expect("preserved backup"),
+        b"keep-backup"
+    );
+}
+
+#[test]
+fn redundant_slot_replacement_discards_only_the_inactive_old_target() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "settings-a.tms").expect("target");
+    fs::write(root.path().join("settings-a.tms"), OLD).expect("inactive old slot");
+    let mut staged = sealed(&target, NEW);
+    let receipt = staged
+        .replace_existing_redundant(&target)
+        .expect("replace inactive slot");
+
+    assert_eq!(receipt.len(), NEW.len() as u64);
+    assert_eq!(receipt.sha256(), &digest(NEW));
+    assert_eq!(
+        fs::read(root.path().join("settings-a.tms")).expect("new inactive slot"),
+        NEW
+    );
+    assert_eq!(
+        fs::read_dir(root.path())
+            .expect("controlled children")
+            .count(),
+        1,
+        "redundant replacement must not create a third backup file"
+    );
+}
+
+#[test]
+fn public_errors_and_handles_are_path_private() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "private.slot").expect("target");
+    let staged = target.create_staged(TEST_MAX_BYTES).expect("stage");
+    assert_eq!(format!("{target:?}"), "DurableFileTarget([redacted])");
+    assert_eq!(format!("{staged:?}"), "DurableStagedFile([redacted])");
+    for error in [
+        DurableFileError::InvalidName,
+        DurableFileError::UnsupportedLocation,
+        DurableFileError::CollisionLimit,
+        DurableFileError::TargetExists,
+        DurableFileError::TargetMissing,
+        DurableFileError::UnexpectedType,
+        DurableFileError::InvalidState,
+        DurableFileError::Integrity,
+        DurableFileError::CapacityExceeded,
+        DurableFileError::Unavailable,
+        DurableFileError::RecoveryRequired,
+    ] {
+        let display = error.to_string();
+        assert!(!display.contains(root.path().to_string_lossy().as_ref()));
+        assert!(!format!("{error:?}").contains(root.path().to_string_lossy().as_ref()));
+    }
+}
+
+#[test]
+fn caller_byte_limit_global_limit_and_chunk_limit_fail_before_writing_excess() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "bounded.slot").expect("target");
+    assert_eq!(
+        target
+            .create_staged(MAX_DURABLE_FILE_BYTES + 1)
+            .expect_err("global maximum must fail"),
+        DurableFileError::CapacityExceeded
+    );
+
+    let mut staged = target.create_staged(4).expect("bounded stage");
+    staged.write_chunk(b"1234").expect("exact limit");
+    assert_eq!(
+        staged.write_chunk(b"5").expect_err("caller limit"),
+        DurableFileError::CapacityExceeded
+    );
+    staged
+        .seal(4, digest(b"1234"))
+        .expect("excess was not written");
+
+    let mut chunk_limited = target
+        .create_staged(MAX_DURABLE_FILE_BYTES)
+        .expect("chunk stage");
+    let oversized = vec![0_u8; MAX_DURABLE_WRITE_CHUNK_BYTES + 1];
+    assert_eq!(
+        chunk_limited
+            .write_chunk(&oversized)
+            .expect_err("chunk limit"),
+        DurableFileError::CapacityExceeded
+    );
+    assert!(
+        fs::read_dir(root.path()).expect("bounded files").count() <= 2,
+        "bounded failures must not create additional retained files"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn forty_pre_and_post_publication_kills_leave_exact_complete_files() {
+    let (root, _directory) = fixture();
+    let target_path = root.path().join("atomic.slot");
+    let old = vec![b'A'; 256 * 1024];
+    let new = vec![b'B'; 256 * 1024];
+    fs::write(&target_path, &old).expect("initial target");
+
+    for round in 0..40 {
+        let backup_path = root.path().join("atomic.backup");
+        if backup_path.exists() {
+            fs::remove_file(&backup_path).expect("remove prior backup");
+        }
+        let before = fs::read(&target_path).expect("read pre-round target");
+        let replacement = if before == old { &new } else { &old };
+        let mut child = Command::new(env!("CARGO_BIN_EXE_durable_file_fixture"))
+            .arg(root.path())
+            .arg("atomic.slot")
+            .arg("atomic.backup")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn durable fixture");
+        let mut stdin = child.stdin.take().expect("fixture stdin");
+        let mut stdout = BufReader::new(child.stdout.take().expect("fixture stdout"));
+        let mut boundary = String::new();
+        stdout
+            .read_line(&mut boundary)
+            .expect("fixture prepared boundary");
+        assert_eq!(boundary, "prepared\n");
+        stdin.write_all(b"publish\n").expect("arm publication");
+        stdin.flush().expect("flush publication arm");
+
+        boundary.clear();
+        stdout
+            .read_line(&mut boundary)
+            .expect("fixture publication boundary");
+        assert_eq!(boundary, "publishing\n");
+        if round % 2 == 0 {
+            child.kill().expect("kill before replacement call");
+            let _ = child.wait().expect("wait pre-publication fixture");
+            assert_eq!(fs::read(&target_path).expect("old target remains"), before);
+            assert!(!backup_path.exists(), "backup is not published early");
+        } else {
+            stdin.write_all(b"commit\n").expect("commit publication");
+            stdin.flush().expect("flush publication commit");
+            boundary.clear();
+            stdout
+                .read_line(&mut boundary)
+                .expect("fixture published boundary");
+            assert_eq!(boundary, "published\n");
+            child.kill().expect("kill after replacement call");
+            let _ = child.wait().expect("wait post-publication fixture");
+            assert_eq!(
+                fs::read(&target_path).expect("new target published"),
+                replacement.as_slice()
+            );
+            assert_eq!(
+                fs::read(&backup_path).expect("old target backed up"),
+                before
+            );
+        }
+
+        let observed = fs::read(&target_path).expect("target always exists");
+        assert!(
+            observed == old || observed == new,
+            "target was a partial mixture"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn redundant_replacement_survives_forty_boundary_kills_and_twenty_entry_races() {
+    let (root, _directory) = fixture();
+    let target_path = root.path().join("redundant.slot");
+    let unexpected_backup = root.path().join("unused.backup");
+    let old = vec![b'A'; 256 * 1024];
+    let new = vec![b'B'; 256 * 1024];
+    fs::write(&target_path, &old).expect("initial redundant target");
+
+    for round in 0..40 {
+        let before = fs::read(&target_path).expect("read redundant pre-round target");
+        let replacement = if before == old { &new } else { &old };
+        let mut child = Command::new(env!("CARGO_BIN_EXE_durable_file_fixture"))
+            .arg(root.path())
+            .arg("redundant.slot")
+            .arg("unused.backup")
+            .arg("redundant")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn redundant fixture");
+        let mut stdin = child.stdin.take().expect("fixture stdin");
+        let mut stdout = BufReader::new(child.stdout.take().expect("fixture stdout"));
+        let mut boundary = String::new();
+        stdout.read_line(&mut boundary).expect("prepared boundary");
+        assert_eq!(boundary, "prepared\n");
+        stdin.write_all(b"publish\n").expect("arm publication");
+        stdin.flush().expect("flush publication arm");
+        boundary.clear();
+        stdout
+            .read_line(&mut boundary)
+            .expect("publishing boundary");
+        assert_eq!(boundary, "publishing\n");
+        if round % 2 == 0 {
+            child.kill().expect("kill before redundant replacement");
+            child.wait().expect("reap pre-publication fixture");
+            assert_eq!(fs::read(&target_path).expect("old target"), before);
+        } else {
+            stdin.write_all(b"commit\n").expect("commit publication");
+            stdin.flush().expect("flush commit");
+            boundary.clear();
+            stdout.read_line(&mut boundary).expect("published boundary");
+            assert_eq!(boundary, "published\n");
+            child.kill().expect("kill after redundant replacement");
+            child.wait().expect("reap post-publication fixture");
+            assert_eq!(
+                fs::read(&target_path).expect("new target"),
+                replacement.as_slice()
+            );
+        }
+        assert!(
+            !unexpected_backup.exists(),
+            "redundant slot created a backup"
+        );
+        let observed = fs::read(&target_path).expect("redundant target always exists");
+        assert!(
+            observed == old || observed == new,
+            "target was a partial mixture"
+        );
+    }
+
+    let (root, _directory) = fixture();
+    let target_path = root.path().join("redundant.slot");
+    let unexpected_backup = root.path().join("unused.backup");
+    fs::write(&target_path, &old).expect("initial redundant race target");
+    for _ in 0..20 {
+        let before = fs::read(&target_path).expect("read redundant race target");
+        let replacement = if before == old { &new } else { &old };
+        let mut child = Command::new(env!("CARGO_BIN_EXE_durable_file_fixture"))
+            .arg(root.path())
+            .arg("redundant.slot")
+            .arg("unused.backup")
+            .arg("redundant")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn redundant race fixture");
+        let mut stdin = child.stdin.take().expect("fixture stdin");
+        let mut stdout = BufReader::new(child.stdout.take().expect("fixture stdout"));
+        let mut boundary = String::new();
+        stdout.read_line(&mut boundary).expect("prepared boundary");
+        assert_eq!(boundary, "prepared\n");
+        stdin.write_all(b"publish\n").expect("arm publication");
+        stdin.flush().expect("flush publication arm");
+        boundary.clear();
+        stdout
+            .read_line(&mut boundary)
+            .expect("publishing boundary");
+        assert_eq!(boundary, "publishing\n");
+        stdin.write_all(b"commit\n").expect("enter replacement");
+        stdin.flush().expect("flush replacement entry");
+        let _ = child.kill();
+        child.wait().expect("reap redundant race fixture");
+
+        let observed = fs::read(&target_path).expect("target always exists");
+        assert!(
+            observed == before || observed.as_slice() == replacement.as_slice(),
+            "redundant race produced a partial mixture"
+        );
+        assert!(
+            !unexpected_backup.exists(),
+            "redundant race created a backup"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn twenty_race_kills_at_replace_entry_leave_only_exact_old_or_new_state() {
+    let (root, _directory) = fixture();
+    let target_path = root.path().join("atomic.slot");
+    let backup_path = root.path().join("atomic.backup");
+    let old = vec![b'A'; 256 * 1024];
+    let new = vec![b'B'; 256 * 1024];
+    fs::write(&target_path, &old).expect("initial target");
+
+    for _ in 0..20 {
+        if backup_path.exists() {
+            fs::remove_file(&backup_path).expect("remove prior backup");
+        }
+        let before = fs::read(&target_path).expect("read pre-round target");
+        let replacement = if before == old { &new } else { &old };
+        let mut child = Command::new(env!("CARGO_BIN_EXE_durable_file_fixture"))
+            .arg(root.path())
+            .arg("atomic.slot")
+            .arg("atomic.backup")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn durable fixture");
+        let mut stdin = child.stdin.take().expect("fixture stdin");
+        let mut stdout = BufReader::new(child.stdout.take().expect("fixture stdout"));
+        let mut boundary = String::new();
+        stdout.read_line(&mut boundary).expect("prepared boundary");
+        assert_eq!(boundary, "prepared\n");
+        stdin.write_all(b"publish\n").expect("arm publication");
+        stdin.flush().expect("flush publication arm");
+        boundary.clear();
+        stdout
+            .read_line(&mut boundary)
+            .expect("publication boundary");
+        assert_eq!(boundary, "publishing\n");
+
+        stdin.write_all(b"commit\n").expect("enter replacement");
+        stdin.flush().expect("flush replacement entry");
+        let _ = child.kill();
+        let _ = child.wait().expect("wait race fixture");
+
+        let observed = fs::read(&target_path).expect("target always exists");
+        assert!(
+            observed == before || observed.as_slice() == replacement.as_slice(),
+            "target was a partial mixture"
+        );
+        if observed.as_slice() == replacement.as_slice() {
+            assert_eq!(
+                fs::read(&backup_path).expect("published old backup"),
+                before
+            );
+        } else if backup_path.exists() {
+            assert_eq!(
+                fs::read(&backup_path).expect("retained exact old backup"),
+                before
+            );
+        }
+    }
+}
+
+#[test]
+fn path_constructor_is_not_exposed_by_the_target_api() {
+    let (_root, directory) = fixture();
+    let _ = descriptor(&directory, "fixed.slot").expect("exact child");
+    let _no_arbitrary_path_constructor: fn(
+        &ValidatedLocalDirectory,
+        &str,
+    ) -> Result<DurableFileTarget, DurableFileError> = DurableFileTarget::exact_child;
+}

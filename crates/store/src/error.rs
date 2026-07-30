@@ -11,6 +11,28 @@ pub enum StoreErrorCode {
     CapacityExceeded,
     InvalidStoredValue,
     StaleCheckpoint,
+    RebuildRequired,
+    StaleRevision,
+    AccountingVersionMismatch,
+    IncompleteManifest,
+    UnsealedRevision,
+    PendingContinuation,
+    ScanInProgress,
+    StaleScan,
+    PendingScan,
+    ArchiveModeMismatch,
+    DeadlineExceeded,
+    Cancelled,
+    Busy,
+    BackupIo,
+    StaleBackupCandidate,
+    BackupHeaderCorrupt,
+    BackupPageCorrupt,
+    BackupIndexCorrupt,
+    BackupForeignKeyCorrupt,
+    BackupCountCorrupt,
+    BackupGenerationCorrupt,
+    BackupSemanticCorrupt,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,6 +76,28 @@ impl fmt::Display for StoreError {
             StoreErrorCode::CapacityExceeded => "store capacity was exceeded",
             StoreErrorCode::InvalidStoredValue => "stored value is invalid",
             StoreErrorCode::StaleCheckpoint => "stored checkpoint changed",
+            StoreErrorCode::RebuildRequired => "archive rebuild is required",
+            StoreErrorCode::StaleRevision => "replay revision changed",
+            StoreErrorCode::AccountingVersionMismatch => "accounting version mismatched",
+            StoreErrorCode::IncompleteManifest => "replay source manifest is incomplete",
+            StoreErrorCode::UnsealedRevision => "replay revision is not sealed",
+            StoreErrorCode::PendingContinuation => "replay continuation is pending",
+            StoreErrorCode::ScanInProgress => "a scan set is already running",
+            StoreErrorCode::StaleScan => "scan state changed",
+            StoreErrorCode::PendingScan => "scan set still has running scopes",
+            StoreErrorCode::ArchiveModeMismatch => "archive mode mismatched",
+            StoreErrorCode::DeadlineExceeded => "query deadline exceeded",
+            StoreErrorCode::Cancelled => "store operation was cancelled",
+            StoreErrorCode::Busy => "database remained busy",
+            StoreErrorCode::BackupIo => "backup I/O operation failed",
+            StoreErrorCode::StaleBackupCandidate => "verified backup candidate changed",
+            StoreErrorCode::BackupHeaderCorrupt => "backup header is corrupt",
+            StoreErrorCode::BackupPageCorrupt => "backup page structure is corrupt",
+            StoreErrorCode::BackupIndexCorrupt => "backup index structure is corrupt",
+            StoreErrorCode::BackupForeignKeyCorrupt => "backup foreign keys are corrupt",
+            StoreErrorCode::BackupCountCorrupt => "backup stored counts are corrupt",
+            StoreErrorCode::BackupGenerationCorrupt => "backup generations are corrupt",
+            StoreErrorCode::BackupSemanticCorrupt => "backup semantics are corrupt",
         };
         formatter.write_str(message)
     }
@@ -62,7 +106,22 @@ impl fmt::Display for StoreError {
 impl std::error::Error for StoreError {}
 
 impl From<rusqlite::Error> for StoreError {
-    fn from(_error: rusqlite::Error) -> Self {
-        Self::new(StoreErrorCode::Database)
+    fn from(error: rusqlite::Error) -> Self {
+        match error {
+            rusqlite::Error::SqliteFailure(details, _)
+                if details.code == rusqlite::ErrorCode::OperationInterrupted =>
+            {
+                Self::new(StoreErrorCode::DeadlineExceeded)
+            }
+            rusqlite::Error::SqliteFailure(details, _)
+                if matches!(
+                    details.code,
+                    rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+                ) =>
+            {
+                Self::new(StoreErrorCode::Busy)
+            }
+            _ => Self::new(StoreErrorCode::Database),
+        }
     }
 }

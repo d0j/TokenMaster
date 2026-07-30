@@ -1,0 +1,37 @@
+import { UiTokens } from "../tokens.slint";
+
+export component SectionState inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    out property <color> state-color:
+        root.state == "ready" ? UiTokens.ready :
+        root.state == "degraded" ? UiTokens.degraded :
+        root.state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
+    // The state key is a stable contract owned by Rust. Only its presentation is
+    // translated, so the chip stops reading as lowercase English in every locale
+    // while the key itself stays comparable.
+    out property <string> state-label:
+        root.state == "ready" ? @tr("Ready") :
+        root.state == "degraded" ? @tr("Degraded") :
+        root.state == "waiting" ? @tr("Waiting") : @tr("Unavailable");
+
+    height: 24px;
+    min-width: 82px;
+    background: root.state-color.with-alpha(0.12);
+    border-color: root.state-color.with-alpha(0.45);
+    border-width: 1px;
+    border-radius: 12px;
+    accessible-role: text;
+    accessible-label: root.reasons == ""
+        ? root.state-label
+        : root.state-label + @tr(": ") + root.reasons;
+
+    Text {
+        text: root.state-label;
+        color: root.state-color;
+        font-size: UiTokens.text-body;
+        font-weight: UiTokens.weight-medium;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

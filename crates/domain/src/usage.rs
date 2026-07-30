@@ -1,6 +1,9 @@
+use std::fmt;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const MAX_USAGE_ID_BYTES: usize = 128;
+pub const MAX_PROVIDER_ID_BYTES: usize = 64;
 pub const MAX_SESSION_ID_BYTES: usize = 512;
 pub const MAX_MODEL_KEY_BYTES: usize = 64;
 pub const MAX_METADATA_BYTES: usize = 512;
@@ -16,6 +19,8 @@ pub enum UsageError {
     InvalidCharacters { field: &'static str },
     #[error("timestamp nanoseconds must be below one billion")]
     InvalidTimestamp,
+    #[error("usage lineage is internally inconsistent")]
+    InvalidLineage,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -23,6 +28,22 @@ pub enum TokenCount {
     Available(u64),
     #[default]
     Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ReportedCostUsdMicros(u64);
+
+impl ReportedCostUsdMicros {
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
 }
 
 impl Serialize for TokenCount {
@@ -54,6 +75,13 @@ pub struct TokenUsage {
     output: TokenCount,
     reasoning: TokenCount,
     total: TokenCount,
+    /// Tokens written into a provider's prompt cache, split by the lifetime the
+    /// provider bills them at. These are disjoint from `input`: a provider that
+    /// reports them charges the write separately from the prompt it caches.
+    /// Providers that do not report cache writes leave both `Unavailable`, which
+    /// is the default, so a missing value never reads as a legitimate zero.
+    cache_write_5m: TokenCount,
+    cache_write_1h: TokenCount,
 }
 
 impl TokenUsage {
@@ -71,7 +99,25 @@ impl TokenUsage {
             output,
             reasoning,
             total,
+            cache_write_5m: TokenCount::Unavailable,
+            cache_write_1h: TokenCount::Unavailable,
         }
+    }
+
+    /// Records provider-reported cache-write tokens.
+    ///
+    /// Separate from [`Self::new`] because no provider is required to report them
+    /// and the vast majority of call sites never do; folding them into the
+    /// constructor would make every one of them state a value it does not have.
+    #[must_use]
+    pub const fn with_cache_writes(
+        mut self,
+        cache_write_5m: TokenCount,
+        cache_write_1h: TokenCount,
+    ) -> Self {
+        self.cache_write_5m = cache_write_5m;
+        self.cache_write_1h = cache_write_1h;
+        self
     }
 
     #[must_use]
@@ -97,6 +143,16 @@ impl TokenUsage {
     #[must_use]
     pub const fn total(&self) -> TokenCount {
         self.total
+    }
+
+    #[must_use]
+    pub const fn cache_write_5m(&self) -> TokenCount {
+        self.cache_write_5m
+    }
+
+    #[must_use]
+    pub const fn cache_write_1h(&self) -> TokenCount {
+        self.cache_write_1h
     }
 }
 
@@ -293,6 +349,12 @@ macro_rules! trimmed_value {
 }
 
 ascii_value!(
+    UsageProviderId,
+    "provider_id",
+    MAX_PROVIDER_ID_BYTES,
+    is_usage_id_byte
+);
+ascii_value!(
     UsageProfileId,
     "profile_id",
     MAX_USAGE_ID_BYTES,
@@ -337,89 +399,40 @@ impl<'de> Deserialize<'de> for ProjectAlias {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CanonicalUsageEventParts {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationVerification {
+    Incremental,
+    FullPrefix,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct SessionRelationDraftParts {
+    pub provider_id: UsageProviderId,
     pub profile_id: UsageProfileId,
     pub session_id: UsageSessionId,
+    pub parent_session_id: UsageSessionId,
+    pub declared_conflict: bool,
     pub source_id: UsageSourceId,
     pub source_offset: u64,
-    pub timestamp: UtcTimestamp,
-    pub model: ModelKey,
-    pub raw_model: Option<MetadataValue>,
-    pub usage: TokenUsage,
-    pub fallback_model: bool,
-    pub long_context: LongContextState,
-    pub service_tier: Option<MetadataValue>,
-    pub project: Option<ProjectAlias>,
-    pub originator: Option<MetadataValue>,
-    pub activity: ActivityCounts,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct EventFingerprint([u8; 32]);
+#[derive(Clone, Eq, PartialEq)]
+pub struct SessionRelationDraft {
+    parts: SessionRelationDraftParts,
+}
 
-impl EventFingerprint {
-    #[must_use]
-    pub const fn new(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-
-    #[must_use]
-    pub fn to_hex(&self) -> String {
-        let mut output = String::with_capacity(64);
-        for byte in self.0 {
-            push_hex_byte(&mut output, byte);
+impl SessionRelationDraft {
+    pub fn new(parts: SessionRelationDraftParts) -> Result<Self, UsageError> {
+        if !parts.declared_conflict && parts.parent_session_id == parts.session_id {
+            return Err(UsageError::InvalidLineage);
         }
-        output
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize)]
-#[serde(transparent)]
-pub struct EventId(Box<str>);
-
-impl EventId {
-    fn from_fingerprint(fingerprint: EventFingerprint) -> Self {
-        let mut value = String::with_capacity(26);
-        value.push_str("event_");
-        for byte in fingerprint.0.into_iter().take(10) {
-            push_hex_byte(&mut value, byte);
-        }
-        Self(value.into_boxed_str())
+        Ok(Self { parts })
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-fn push_hex_byte(output: &mut String, byte: u8) {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    output.push(char::from(HEX[usize::from(byte >> 4)]));
-    output.push(char::from(HEX[usize::from(byte & 0x0f)]));
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CanonicalUsageEvent {
-    parts: CanonicalUsageEventParts,
-    fingerprint: EventFingerprint,
-    id: EventId,
-}
-
-impl CanonicalUsageEvent {
-    #[must_use]
-    pub fn new(parts: CanonicalUsageEventParts, fingerprint: EventFingerprint) -> Self {
-        Self {
-            parts,
-            fingerprint,
-            id: EventId::from_fingerprint(fingerprint),
-        }
+    pub const fn provider_id(&self) -> &UsageProviderId {
+        &self.parts.provider_id
     }
 
     #[must_use]
@@ -433,6 +446,16 @@ impl CanonicalUsageEvent {
     }
 
     #[must_use]
+    pub const fn parent_session_id(&self) -> &UsageSessionId {
+        &self.parts.parent_session_id
+    }
+
+    #[must_use]
+    pub const fn declared_conflict(&self) -> bool {
+        self.parts.declared_conflict
+    }
+
+    #[must_use]
     pub const fn source_id(&self) -> &UsageSourceId {
         &self.parts.source_id
     }
@@ -440,6 +463,104 @@ impl CanonicalUsageEvent {
     #[must_use]
     pub const fn source_offset(&self) -> u64 {
         self.parts.source_offset
+    }
+}
+
+impl fmt::Debug for SessionRelationDraft {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SessionRelationDraft")
+            .field("provider_id", &self.parts.provider_id)
+            .field("profile_id", &self.parts.profile_id)
+            .field("session_id", &self.parts.session_id)
+            .field("parent_session_id", &self.parts.parent_session_id)
+            .field("declared_conflict", &self.parts.declared_conflict)
+            .field("source", &"[redacted]")
+            .finish()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ObservationDraftParts {
+    pub provider_id: UsageProviderId,
+    pub profile_id: UsageProfileId,
+    pub session_id: UsageSessionId,
+    pub parent_session_id: Option<UsageSessionId>,
+    pub session_ordinal: u64,
+    pub lineage_conflict: bool,
+    pub source_id: UsageSourceId,
+    pub source_offset: u64,
+    pub source_verification: ObservationVerification,
+    pub timestamp: UtcTimestamp,
+    pub model: ModelKey,
+    pub raw_model: Option<MetadataValue>,
+    pub delta_usage: TokenUsage,
+    pub cumulative_usage: Option<TokenUsage>,
+    pub fallback_model: bool,
+    pub long_context: LongContextState,
+    pub service_tier: Option<MetadataValue>,
+    pub reported_cost: Option<ReportedCostUsdMicros>,
+    pub project: Option<ProjectAlias>,
+    pub originator: Option<MetadataValue>,
+    pub activity: ActivityCounts,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ObservationDraft {
+    parts: ObservationDraftParts,
+}
+
+impl ObservationDraft {
+    pub fn new(parts: ObservationDraftParts) -> Result<Self, UsageError> {
+        if !parts.lineage_conflict && parts.parent_session_id.as_ref() == Some(&parts.session_id) {
+            return Err(UsageError::InvalidLineage);
+        }
+        Ok(Self { parts })
+    }
+
+    #[must_use]
+    pub const fn provider_id(&self) -> &UsageProviderId {
+        &self.parts.provider_id
+    }
+
+    #[must_use]
+    pub const fn profile_id(&self) -> &UsageProfileId {
+        &self.parts.profile_id
+    }
+
+    #[must_use]
+    pub const fn session_id(&self) -> &UsageSessionId {
+        &self.parts.session_id
+    }
+
+    #[must_use]
+    pub const fn parent_session_id(&self) -> Option<&UsageSessionId> {
+        self.parts.parent_session_id.as_ref()
+    }
+
+    #[must_use]
+    pub const fn session_ordinal(&self) -> u64 {
+        self.parts.session_ordinal
+    }
+
+    #[must_use]
+    pub const fn lineage_conflict(&self) -> bool {
+        self.parts.lineage_conflict
+    }
+
+    #[must_use]
+    pub const fn source_id(&self) -> &UsageSourceId {
+        &self.parts.source_id
+    }
+
+    #[must_use]
+    pub const fn source_offset(&self) -> u64 {
+        self.parts.source_offset
+    }
+
+    #[must_use]
+    pub const fn source_verification(&self) -> ObservationVerification {
+        self.parts.source_verification
     }
 
     #[must_use]
@@ -458,8 +579,19 @@ impl CanonicalUsageEvent {
     }
 
     #[must_use]
+    pub const fn delta_usage(&self) -> &TokenUsage {
+        &self.parts.delta_usage
+    }
+
+    /// Compatibility accessor for consumers that treat draft usage as the emitted delta.
+    #[must_use]
     pub const fn usage(&self) -> &TokenUsage {
-        &self.parts.usage
+        self.delta_usage()
+    }
+
+    #[must_use]
+    pub const fn cumulative_usage(&self) -> Option<&TokenUsage> {
+        self.parts.cumulative_usage.as_ref()
     }
 
     #[must_use]
@@ -478,6 +610,11 @@ impl CanonicalUsageEvent {
     }
 
     #[must_use]
+    pub const fn reported_cost(&self) -> Option<ReportedCostUsdMicros> {
+        self.parts.reported_cost
+    }
+
+    #[must_use]
     pub fn project(&self) -> Option<&ProjectAlias> {
         self.parts.project.as_ref()
     }
@@ -491,14 +628,55 @@ impl CanonicalUsageEvent {
     pub const fn activity(&self) -> &ActivityCounts {
         &self.parts.activity
     }
+}
 
-    #[must_use]
-    pub const fn fingerprint(&self) -> &EventFingerprint {
-        &self.fingerprint
+impl fmt::Debug for ObservationDraft {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ObservationDraft")
+            .field("provider_id", &self.parts.provider_id)
+            .field("profile_id", &self.parts.profile_id)
+            .field("session_id", &self.parts.session_id)
+            .field("parent_session_id", &self.parts.parent_session_id)
+            .field("session_ordinal", &self.parts.session_ordinal)
+            .field("lineage_conflict", &self.parts.lineage_conflict)
+            .field("source", &"[redacted]")
+            .field("source_verification", &self.parts.source_verification)
+            .field("model", &self.parts.model)
+            .field("usage", &"[redacted]")
+            .finish()
+    }
+}
+
+#[cfg(test)]
+mod cache_write_tests {
+    use super::{TokenCount, TokenUsage};
+
+    #[test]
+    fn cache_writes_default_to_unavailable_so_a_silent_provider_never_reads_as_zero() {
+        let usage = TokenUsage::new(
+            TokenCount::Available(10),
+            TokenCount::Available(2),
+            TokenCount::Available(5),
+            TokenCount::Unavailable,
+            TokenCount::Available(17),
+        );
+        assert_eq!(usage.cache_write_5m(), TokenCount::Unavailable);
+        assert_eq!(usage.cache_write_1h(), TokenCount::Unavailable);
     }
 
-    #[must_use]
-    pub const fn id(&self) -> &EventId {
-        &self.id
+    #[test]
+    fn recorded_cache_writes_stay_disjoint_from_the_input_they_cache() {
+        let usage = TokenUsage::new(
+            TokenCount::Available(2),
+            TokenCount::Available(33_510),
+            TokenCount::Available(150),
+            TokenCount::Unavailable,
+            TokenCount::Available(152),
+        )
+        .with_cache_writes(TokenCount::Unavailable, TokenCount::Available(9_846));
+        assert_eq!(usage.input(), TokenCount::Available(2));
+        assert_eq!(usage.cache_write_1h(), TokenCount::Available(9_846));
+        assert_eq!(usage.cache_write_5m(), TokenCount::Unavailable);
     }
 }

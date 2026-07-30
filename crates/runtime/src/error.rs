@@ -1,0 +1,111 @@
+use tokenmaster_engine::{PortError, PortErrorCode};
+use tokenmaster_provider::{ProviderError, ProviderErrorCode};
+use tokenmaster_store::{StoreError, StoreErrorCode};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeErrorCode {
+    InvalidConfiguration,
+    ProviderUnavailable,
+    StoreUnavailable,
+    Busy,
+    Closed,
+    Faulted,
+    Internal,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RuntimeError {
+    code: RuntimeErrorCode,
+}
+
+impl RuntimeError {
+    pub(crate) const fn new(code: RuntimeErrorCode) -> Self {
+        Self { code }
+    }
+
+    #[must_use]
+    pub const fn code(self) -> RuntimeErrorCode {
+        self.code
+    }
+}
+
+impl core::fmt::Display for RuntimeError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str(match self.code {
+            RuntimeErrorCode::InvalidConfiguration => "invalid runtime configuration",
+            RuntimeErrorCode::ProviderUnavailable => "runtime provider is unavailable",
+            RuntimeErrorCode::StoreUnavailable => "runtime store is unavailable",
+            RuntimeErrorCode::Busy => "runtime is busy",
+            RuntimeErrorCode::Closed => "runtime is closed",
+            RuntimeErrorCode::Faulted => "runtime is faulted",
+            RuntimeErrorCode::Internal => "runtime internal failure",
+        })
+    }
+}
+
+impl std::error::Error for RuntimeError {}
+
+pub(crate) fn provider_port_error(error: &ProviderError) -> PortError {
+    let code = match error.code() {
+        ProviderErrorCode::CapacityExceeded | ProviderErrorCode::TooManyRoots => {
+            PortErrorCode::CapacityExceeded
+        }
+        ProviderErrorCode::InvalidId
+        | ProviderErrorCode::InvalidDisplayName
+        | ProviderErrorCode::InvalidPath => PortErrorCode::InvalidData,
+        ProviderErrorCode::Io => PortErrorCode::Unavailable,
+    };
+    PortError::new(code)
+}
+
+pub(crate) fn store_port_error(error: &StoreError) -> PortError {
+    PortError::new(store_port_error_code(error.code()))
+}
+
+const fn store_port_error_code(code: StoreErrorCode) -> PortErrorCode {
+    match code {
+        StoreErrorCode::CapacityExceeded => PortErrorCode::CapacityExceeded,
+        StoreErrorCode::DeadlineExceeded => PortErrorCode::DeadlineExceeded,
+        StoreErrorCode::RebuildRequired => PortErrorCode::RebuildRequired,
+        StoreErrorCode::StaleCheckpoint
+        | StoreErrorCode::StaleRevision
+        | StoreErrorCode::StaleScan
+        | StoreErrorCode::PendingScan
+        | StoreErrorCode::PendingContinuation
+        | StoreErrorCode::StaleBackupCandidate => PortErrorCode::StaleState,
+        StoreErrorCode::ScanInProgress | StoreErrorCode::Busy => PortErrorCode::Busy,
+        StoreErrorCode::Cancelled => PortErrorCode::Cancelled,
+        StoreErrorCode::Database
+        | StoreErrorCode::BackupIo
+        | StoreErrorCode::VersionMismatch
+        | StoreErrorCode::SchemaTooNew
+        | StoreErrorCode::SchemaMismatch
+        | StoreErrorCode::PolicyMismatch => PortErrorCode::Unavailable,
+        StoreErrorCode::InvalidValue
+        | StoreErrorCode::InvalidStoredValue
+        | StoreErrorCode::AccountingVersionMismatch
+        | StoreErrorCode::IncompleteManifest
+        | StoreErrorCode::UnsealedRevision
+        | StoreErrorCode::ArchiveModeMismatch
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => PortErrorCode::InvalidData,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_deadline_remains_a_deadline_across_the_store_port() {
+        assert_eq!(
+            store_port_error_code(StoreErrorCode::DeadlineExceeded),
+            PortErrorCode::DeadlineExceeded
+        );
+    }
+}

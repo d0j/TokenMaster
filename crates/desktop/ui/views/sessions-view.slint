@@ -1,0 +1,409 @@
+import { SessionListRow, SessionDetailBreakdownRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { SectionState } from "../components/section-state.slint";
+import { Button, ScrollView } from "std-widgets.slint";
+
+component SessionsHeaderCard inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> evidence-label;
+    in property <string> loaded-label;
+    in property <string> page-status-label;
+    in property <bool> navigation-pending;
+    in property <bool> next-enabled;
+    in property <bool> back-to-newest-enabled;
+    callback request-next-page();
+    callback request-back-to-newest();
+
+    min-height: 146px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: @tr("Sessions {0} {1}", root.loaded-label, root.page-status-label);
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                horizontal-stretch: 1;
+                Text { text: @tr("Sessions"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
+                Text { text: @tr("All-time session summaries"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            }
+            SectionState { state: root.state; reasons: root.reasons; }
+        }
+        HorizontalLayout {
+            spacing: UiTokens.space;
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.page-status-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+        }
+        next-navigation-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: root.next-enabled;
+            forward-focus: next-page-button;
+        }
+        back-navigation-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.next-enabled && root.back-to-newest-enabled;
+            forward-focus: back-to-newest-button;
+        }
+        navigation-controls := Rectangle {
+            height: 32px;
+            HorizontalLayout {
+                spacing: UiTokens.space-sm;
+                next-page-button := Button {
+                    text: @tr("Next page");
+                    accessible-label: @tr("Next page");
+                    enabled: root.next-enabled;
+                    clicked => {
+                        next-page-button.focus();
+                        root.request-next-page();
+                    }
+                }
+                back-to-newest-button := Button {
+                    text: @tr("Back to newest");
+                    accessible-label: @tr("Back to newest");
+                    enabled: root.back-to-newest-enabled;
+                    clicked => {
+                        back-to-newest-button.focus();
+                        root.request-back-to-newest();
+                    }
+                }
+                Text {
+                    text: root.navigation-pending ? @tr("Loading sessions…") : root.page-status-label;
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-body;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+}
+
+component SessionsTableCard inherits Rectangle {
+    in property <[SessionListRow]> rows;
+    in property <bool> narrow;
+    in property <string> state;
+    in property <int> selected-row;
+    in property <bool> selection-enabled;
+    callback select-row(int);
+
+    min-height: max(96px, 64px + root.rows.length * 38px);
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: table;
+    accessible-label: @tr("Session summaries");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 0px;
+        Text { text: @tr("Session summaries"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
+        if root.rows.length == 0: Text {
+            text: root.state == "waiting" ? @tr("Waiting for session evidence") : @tr("Session evidence unavailable");
+            color: UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+            height: 32px;
+        }
+        if root.narrow && root.rows.length > 0: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: @tr("Last activity"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 52px; horizontal-alignment: right; }
+            Text { text: @tr("Tokens"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 70px; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 78px; horizontal-alignment: right; }
+        }
+        if !root.narrow && root.rows.length > 0: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: @tr("Last activity"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 150px; }
+            Text { text: @tr("Duration"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 62px; horizontal-alignment: right; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 48px; horizontal-alignment: right; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 78px; horizontal-alignment: right; }
+        }
+        for session[i] in root.rows: Rectangle {
+            height: 38px;
+            background: root.selected-row == session.row-index || row-focus.has-focus ? UiTokens.accent-subtle : (row-touch.has-hover ? UiTokens.surface-raised : (mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent));
+            border-color: root.selected-row == session.row-index || row-focus.has-focus ? UiTokens.accent : transparent;
+            border-width: root.selected-row == session.row-index || row-focus.has-focus ? 1px : 0px;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: button;
+            accessible-label: @tr("From {0} to {1} {2} events {3} tokens {4}", session.first-label, session.last-label, session.event-label, session.total-label, session.cost-label);
+            accessible-action-default => {
+                if root.selection-enabled {
+                    row-focus.focus();
+                    root.select-row(session.row-index);
+                }
+            }
+            if root.narrow: HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: session.last-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; overflow: elide; }
+                Text { text: session.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 52px; horizontal-alignment: right; }
+                Text { text: session.total-label; color: session.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 70px; horizontal-alignment: right; }
+                Text { text: session.cost-label; color: session.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 78px; horizontal-alignment: right; }
+            }
+            if !root.narrow: HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: session.last-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; width: 150px; overflow: elide; }
+                Text { text: session.duration-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 62px; horizontal-alignment: right; }
+                Text { text: session.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 48px; horizontal-alignment: right; }
+                Text { text: session.input-label; color: session.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: session.cached-label; color: session.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: session.output-label; color: session.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: session.reasoning-label; color: session.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: session.total-label; color: session.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: session.cost-label; color: session.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 78px; horizontal-alignment: right; }
+            }
+            row-touch := TouchArea {
+                clicked => {
+                    if root.selection-enabled {
+                        row-focus.focus();
+                        root.select-row(session.row-index);
+                    }
+                }
+                enabled: root.selection-enabled;
+            }
+            row-focus := FocusScope {
+                x: 0px;
+                width: 0px;
+                focus-on-tab-navigation: root.selection-enabled;
+                key-pressed(event) => {
+                    if root.selection-enabled && (event.text == " " || event.text == "\n") {
+                        root.select-row(session.row-index);
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+        }
+    }
+}
+
+component SessionDetailCard inherits Rectangle {
+    in property <string> state;
+    in property <string> status-label;
+    in property <string> evidence-label;
+    in property <string> period-label;
+    in property <string> duration-label;
+    in property <string> event-label;
+    in property <string> input-availability;
+    in property <string> input-label;
+    in property <string> cached-availability;
+    in property <string> cached-label;
+    in property <string> output-availability;
+    in property <string> output-label;
+    in property <string> reasoning-availability;
+    in property <string> reasoning-label;
+    in property <string> total-availability;
+    in property <string> total-label;
+    in property <string> cost-availability;
+    in property <string> cost-label;
+    in property <[SessionDetailBreakdownRow]> breakdown-rows;
+    in property <bool> narrow;
+
+    min-height: root.state == "ready" ? 172px + root.breakdown-rows.length * (root.narrow ? 62px : 34px) : 92px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: @tr("Selected session detail {0}", root.status-label);
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            Text { text: @tr("Selected session"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.status-label; color: root.state == "unavailable" ? UiTokens.unavailable : UiTokens.text-secondary; font-size: UiTokens.text-body; }
+        }
+        if root.state != "ready": Text {
+            text: root.state == "idle" ? @tr("Select a session summary to inspect its exact totals and breakdown.") :
+                  root.state == "loading" ? @tr("Loading exact session detail…") :
+                  root.state == "missing" ? @tr("This session is no longer present in the current archive snapshot.") :
+                  @tr("Session detail is unavailable. Select the row again to retry.");
+            color: UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+            wrap: word-wrap;
+            min-height: 38px;
+        }
+        if root.state == "ready": VerticalLayout {
+            spacing: UiTokens.space-sm;
+            Text { text: root.period-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            if !root.narrow: HorizontalLayout {
+                spacing: UiTokens.space;
+                Text { text: @tr("Duration {0}", root.duration-label); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+                Text { text: @tr("Events {0}", root.event-label); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+                Text { text: @tr("Input {0}", root.input-label); color: root.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                Text { text: @tr("Cached {0}", root.cached-label); color: root.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                Text { text: @tr("Output {0}", root.output-label); color: root.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                Text { text: @tr("Reasoning {0}", root.reasoning-label); color: root.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                Text { text: @tr("Total {0}", root.total-label); color: root.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                Text { text: @tr("Cost {0}", root.cost-label); color: root.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+            }
+            if root.narrow: VerticalLayout {
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space;
+                    Text { text: @tr("Duration {0}", root.duration-label); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+                    Text { text: @tr("Events {0}", root.event-label); color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+                    Text { text: @tr("Cost {0}", root.cost-label); color: root.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space;
+                    Text { text: @tr("Input {0}", root.input-label); color: root.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                    Text { text: @tr("Cached {0}", root.cached-label); color: root.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                    Text { text: @tr("Output {0}", root.output-label); color: root.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space;
+                    Text { text: @tr("Reasoning {0}", root.reasoning-label); color: root.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; }
+                    Text { text: @tr("Total {0}", root.total-label); color: root.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+                }
+            }
+            Text { text: @tr("Model and project breakdown"); color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; height: 24px; }
+            for item in root.breakdown-rows: Rectangle {
+                height: root.narrow ? 62px : 34px;
+                if !root.narrow: HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: item.kind; color: UiTokens.accent; font-size: UiTokens.text-caption; width: 50px; }
+                    Text { text: item.label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: item.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 42px; horizontal-alignment: right; }
+                    Text { text: item.input-label; color: item.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.cached-label; color: item.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.output-label; color: item.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.reasoning-label; color: item.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; width: 70px; horizontal-alignment: right; }
+                    Text { text: item.cost-label; color: item.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; width: 78px; horizontal-alignment: right; }
+                }
+                if root.narrow: VerticalLayout {
+                    spacing: UiTokens.space-xs;
+                    HorizontalLayout {
+                        spacing: UiTokens.space-sm;
+                        Text { text: item.kind; color: UiTokens.accent; font-size: UiTokens.text-caption; width: 50px; }
+                        Text { text: item.label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; overflow: elide; }
+                        Text { text: @tr("Events {0}", item.event-label); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; }
+                        Text { text: @tr("Cost {0}", item.cost-label); color: item.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; }
+                    }
+                    HorizontalLayout {
+                        spacing: UiTokens.space-sm;
+                        Text { text: @tr("In {0}", item.input-label); color: item.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; }
+                        Text { text: @tr("Cached {0}", item.cached-label); color: item.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; }
+                        Text { text: @tr("Out {0}", item.output-label); color: item.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; }
+                        Text { text: @tr("Reasoning {0}", item.reasoning-label); color: item.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; }
+                        Text { text: @tr("Total {0}", item.total-label); color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; horizontal-stretch: 1; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SessionsView inherits Rectangle {
+    in property <[SessionListRow]> rows;
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> evidence-label;
+    in property <string> loaded-label;
+    in property <string> page-status-label;
+    in property <bool> navigation-pending;
+    in property <bool> next-enabled;
+    in property <bool> back-to-newest-enabled;
+    in property <int> selected-row;
+    in property <string> detail-state;
+    in property <string> detail-status-label;
+    in property <string> detail-evidence-label;
+    in property <string> detail-period-label;
+    in property <string> detail-duration-label;
+    in property <string> detail-event-label;
+    in property <string> detail-input-availability;
+    in property <string> detail-input-label;
+    in property <string> detail-cached-availability;
+    in property <string> detail-cached-label;
+    in property <string> detail-output-availability;
+    in property <string> detail-output-label;
+    in property <string> detail-reasoning-availability;
+    in property <string> detail-reasoning-label;
+    in property <string> detail-total-availability;
+    in property <string> detail-total-label;
+    in property <string> detail-cost-availability;
+    in property <string> detail-cost-label;
+    in property <[SessionDetailBreakdownRow]> detail-breakdown-rows;
+    callback select-row(int);
+    callback request-next-page();
+    callback request-back-to-newest();
+    out property <bool> narrow: root.width < 944px;
+
+    background: UiTokens.background;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        content := VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            SessionsHeaderCard {
+                state: root.state;
+                reasons: root.reasons;
+                evidence-label: root.evidence-label;
+                loaded-label: root.loaded-label;
+                page-status-label: root.page-status-label;
+                navigation-pending: root.navigation-pending;
+                next-enabled: root.next-enabled;
+                back-to-newest-enabled: root.back-to-newest-enabled;
+                request-next-page => { root.request-next-page(); }
+                request-back-to-newest => { root.request-back-to-newest(); }
+            }
+            SessionsTableCard {
+                rows: root.rows;
+                narrow: root.narrow;
+                state: root.state;
+                selected-row: root.selected-row;
+                selection-enabled: !root.navigation-pending;
+                select-row(index) => { root.select-row(index); }
+            }
+            SessionDetailCard {
+                state: root.detail-state;
+                status-label: root.detail-status-label;
+                evidence-label: root.detail-evidence-label;
+                period-label: root.detail-period-label;
+                duration-label: root.detail-duration-label;
+                event-label: root.detail-event-label;
+                input-availability: root.detail-input-availability;
+                input-label: root.detail-input-label;
+                cached-availability: root.detail-cached-availability;
+                cached-label: root.detail-cached-label;
+                output-availability: root.detail-output-availability;
+                output-label: root.detail-output-label;
+                reasoning-availability: root.detail-reasoning-availability;
+                reasoning-label: root.detail-reasoning-label;
+                total-availability: root.detail-total-availability;
+                total-label: root.detail-total-label;
+                cost-availability: root.detail-cost-availability;
+                cost-label: root.detail-cost-label;
+                breakdown-rows: root.detail-breakdown-rows;
+                narrow: root.narrow;
+            }
+        }
+        viewport-height: max(self.height, content.min-height);
+    }
+}

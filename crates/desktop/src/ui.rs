@@ -1,0 +1,5340 @@
+use std::{
+    cell::{Cell, RefCell},
+    fmt,
+    rc::Rc,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        mpsc::{SyncSender, sync_channel},
+    },
+    time::Duration,
+};
+
+use chrono::{DateTime, Utc};
+use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use tokenmaster_product::ProductSnapshot;
+
+macro_rules! set_rows {
+    ($window:expr, $getter:ident, $setter:ident, $rows:expr) => {{
+        if let Some(replacement) = patch_rows(&$window.$getter(), $rows) {
+            $window.$setter(replacement);
+        }
+    }};
+}
+
+use crate::{
+    ActivityRhythmRow, BenefitLotRow, DashboardActivityRow, DashboardBenefitRow,
+    DashboardBoardEditorRow, DashboardBoardSlotRow, DashboardModelRow, DashboardQuotaRow,
+    DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityProjection,
+    DesktopBenefitExpiry, DesktopBoardPreferences, DesktopBoardSectionKey, DesktopCloseEffect,
+    DesktopCostComposition, DesktopCostValue, DesktopCurrentUserStartupStatus,
+    DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
+    DesktopHistoryProjection, DesktopHistoryRangeIntentAdmission, DesktopHistoryRangeIntentSink,
+    DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
+    DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
+    DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
+    DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
+    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink,
+    DesktopSessionPageDirection, DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
+    DesktopSessionsProjection, DesktopSnapshotBridge, DesktopSnapshotEpoch,
+    DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability, DesktopValueAvailability,
+    HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
+    ProjectionStrings, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
+    RouteRow, SessionDetailBreakdownRow, SessionListRow, UiPalette,
+    UnavailableDesktopHistoryRangeIntentSink, UnavailableDesktopIntentSink,
+    UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
+    in_app_notification::{NotificationEpochState, SharedInAppNotificationBatch},
+    native_tray::DesktopNativeTrayOwner,
+    presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
+};
+
+pub struct DesktopShell {
+    window: MainWindow,
+    _presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    _history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+    _session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+    tray: RefCell<Option<DesktopNativeTrayOwner>>,
+    lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
+    tray_availability: Rc<Cell<DesktopTrayAvailability>>,
+    state: SharedDesktopState,
+    reliable_state: SharedReliableState,
+    snapshot_epochs: Arc<AtomicU64>,
+    notification_epochs: Arc<NotificationEpochState>,
+    in_app_notification_batch: SharedInAppNotificationBatch,
+}
+
+pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
+type SharedReliableState = Arc<Mutex<DesktopReliableStateProjection>>;
+const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;
+const COMPACT_WINDOW_WIDTH: f32 = 420.0;
+const COMPACT_WINDOW_HEIGHT: f32 = 560.0;
+const NORMAL_WINDOW_WIDTH: f32 = 1_120.0;
+const NORMAL_WINDOW_HEIGHT: f32 = 720.0;
+/// Below this the current window is too small to be worth restoring, so the normal
+/// size falls back to the design default. Logical, like every other size here: the
+/// same physical threshold means a different apparent window on every scale factor.
+const MIN_RESTORABLE_WINDOW_WIDTH: f32 = 560.0;
+const MIN_RESTORABLE_WINDOW_HEIGHT: f32 = 480.0;
+
+#[derive(Default)]
+struct CompactWindowMode {
+    active: bool,
+    normal_size: Option<slint::LogicalSize>,
+}
+
+type SharedCompactWindowMode = Rc<RefCell<CompactWindowMode>>;
+
+struct ReliableStateDelivery {
+    id: u64,
+    projection: DesktopReliableStateProjection,
+    presentation_terminal: Option<DesktopOperationSnapshot>,
+    acknowledgement: Option<SyncSender<Result<(), DesktopUiError>>>,
+}
+
+#[derive(Clone)]
+pub struct DesktopReliableStateNotifier {
+    inner: Arc<ReliableStateNotifierInner>,
+}
+
+#[derive(Clone)]
+pub struct DesktopCurrentUserStartupPresenter {
+    window: slint::Weak<MainWindow>,
+}
+
+impl DesktopCurrentUserStartupPresenter {
+    pub fn present(&self, status: DesktopCurrentUserStartupStatus) -> Result<(), DesktopUiError> {
+        let window = self
+            .window
+            .upgrade()
+            .ok_or_else(DesktopUiError::state_unavailable)?;
+        apply_current_user_startup(&window, status);
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct DesktopBridgeFactory {
+    window: slint::Weak<MainWindow>,
+    state: SharedDesktopState,
+    snapshot_epochs: Arc<AtomicU64>,
+    notification_epochs: Arc<NotificationEpochState>,
+    in_app_notification_batch: SharedInAppNotificationBatch,
+}
+
+impl DesktopBridgeFactory {
+    pub fn snapshot_bridge(
+        &self,
+        receiver: DesktopSnapshotReceiver,
+    ) -> Result<DesktopSnapshotBridge, DesktopUiError> {
+        let raw_epoch = self
+            .snapshot_epochs
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                if current == 0 {
+                    None
+                } else {
+                    Some(current.checked_add(1).unwrap_or(0))
+                }
+            })
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let epoch =
+            DesktopSnapshotEpoch::new(raw_epoch).ok_or_else(DesktopUiError::state_unavailable)?;
+        Ok(DesktopSnapshotBridge::new(
+            epoch,
+            self.window.clone(),
+            Arc::clone(&self.state),
+            receiver,
+        ))
+    }
+
+    pub fn in_app_notification_bridge(
+        &self,
+    ) -> Result<DesktopInAppNotificationBridge, DesktopUiError> {
+        DesktopInAppNotificationBridge::new(
+            Arc::clone(&self.notification_epochs),
+            self.window.clone(),
+            Arc::clone(&self.in_app_notification_batch),
+        )
+        .map_err(|_| DesktopUiError::state_unavailable())
+    }
+}
+
+struct ReliableStateNotifierInner {
+    window: slint::Weak<MainWindow>,
+    desktop_state: SharedDesktopState,
+    state: SharedReliableState,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    in_app_notification_batch: SharedInAppNotificationBatch,
+    latest: Mutex<Option<ReliableStateDelivery>>,
+    next_delivery_id: AtomicU64,
+    scheduled: AtomicBool,
+    closed: AtomicBool,
+}
+
+impl DesktopReliableStateNotifier {
+    pub fn publish(
+        &self,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), DesktopUiError> {
+        self.publish_delivery(projection, None)
+    }
+
+    fn publish_delivery(
+        &self,
+        projection: DesktopReliableStateProjection,
+        acknowledgement: Option<SyncSender<Result<(), DesktopUiError>>>,
+    ) -> Result<(), DesktopUiError> {
+        if self.inner.closed.load(Ordering::Acquire) {
+            return Err(DesktopUiError::state_unavailable());
+        }
+        let id = self
+            .inner
+            .next_delivery_id
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let mut latest = self
+            .inner
+            .latest
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let presentation_terminal =
+            presentation_terminal_from_projection(&projection).or_else(|| {
+                latest
+                    .as_ref()
+                    .and_then(|delivery| delivery.presentation_terminal)
+            });
+        let displaced = latest.replace(ReliableStateDelivery {
+            id,
+            projection,
+            presentation_terminal,
+            acknowledgement,
+        });
+        drop(latest);
+        if let Some(acknowledgement) = displaced.and_then(|delivery| delivery.acknowledgement) {
+            let _ = acknowledgement.send(Err(DesktopUiError::state_unavailable()));
+        }
+        if let Err(error) = self.inner.request_delivery() {
+            let failed = self
+                .inner
+                .latest
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?
+                .take_if(|delivery| delivery.id == id);
+            if let Some(acknowledgement) = failed.and_then(|delivery| delivery.acknowledgement) {
+                let _ = acknowledgement.send(Err(error));
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn publish_visible_reminder_projection(
+        &self,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), DesktopUiError> {
+        let (sender, receiver) = sync_channel(1);
+        self.publish_delivery(projection, Some(sender))?;
+        receiver
+            .recv_timeout(VISIBLE_REMINDER_PUBLICATION_TIMEOUT)
+            .map_err(|_| DesktopUiError::state_unavailable())?
+    }
+
+    pub fn publish_operation(
+        &self,
+        operation: Option<DesktopOperationSnapshot>,
+    ) -> Result<(), DesktopUiError> {
+        {
+            let mut latest = self
+                .inner
+                .latest
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            if let Some(delivery) = latest.as_mut() {
+                if delivery.acknowledgement.is_some() {
+                    return Err(DesktopUiError::state_unavailable());
+                }
+                delivery.projection.set_operation(operation);
+                drop(latest);
+                return self.inner.request_delivery();
+            }
+        }
+        let projection = self
+            .inner
+            .state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?
+            .clone()
+            .with_operation(operation);
+        self.publish(projection)
+    }
+
+    pub fn publish_pending_reminder_policy(
+        &self,
+        reminder_policy: DesktopReminderPolicy,
+        operation: DesktopOperationSnapshot,
+    ) -> Result<(), DesktopUiError> {
+        let latest = self
+            .inner
+            .latest
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?
+            .as_ref()
+            .map(|delivery| delivery.projection.clone());
+        let projection = match latest {
+            Some(projection) => projection,
+            None => self
+                .inner
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?
+                .clone(),
+        }
+        .with_reminder_policy(reminder_policy)
+        .with_operation(Some(operation));
+        self.publish_visible_reminder_projection(projection)
+    }
+
+    pub fn publish_pending_reminder_operation(
+        &self,
+        operation: DesktopOperationSnapshot,
+    ) -> Result<(), DesktopUiError> {
+        let latest = self
+            .inner
+            .latest
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?
+            .as_ref()
+            .map(|delivery| delivery.projection.clone());
+        let projection = match latest {
+            Some(projection) => projection,
+            None => self
+                .inner
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?
+                .clone(),
+        };
+        let current = projection.reminder_policy();
+        let pending = DesktopReminderPolicy::new(
+            current.enabled(),
+            current.lead_seconds(),
+            crate::DesktopReminderSyncState::Pending,
+        )
+        .ok_or_else(DesktopUiError::state_unavailable)?;
+        self.publish_visible_reminder_projection(
+            projection
+                .with_reminder_policy(pending)
+                .with_operation(Some(operation)),
+        )
+    }
+}
+
+impl ReliableStateNotifierInner {
+    fn request_delivery(self: &Arc<Self>) -> Result<(), DesktopUiError> {
+        if self.scheduled.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        let inner = Arc::clone(self);
+        if slint::invoke_from_event_loop(move || inner.deliver_latest()).is_err() {
+            self.scheduled.store(false, Ordering::Release);
+            return Err(DesktopUiError::state_unavailable());
+        }
+        Ok(())
+    }
+
+    fn deliver_latest(self: &Arc<Self>) {
+        let delivery = self.latest.lock().ok().and_then(|mut latest| latest.take());
+        let delivered = delivery.as_ref().is_none_or(|delivery| {
+            let Some(window) = self.window.upgrade() else {
+                return false;
+            };
+            let Ok(style) = reconcile_presentation_style(
+                &self.presentation_style,
+                &delivery.projection,
+                delivery.presentation_terminal,
+            ) else {
+                return false;
+            };
+            let Ok(mut state) = self.state.lock() else {
+                return false;
+            };
+            *state = delivery.projection.clone();
+            drop(state);
+            let locale_changed =
+                window.get_presentation_locale_key() != style.locale().stable_key();
+            if !apply_presentation_style(&window, style) {
+                return false;
+            }
+            if locale_changed {
+                reapply_localized_projection(
+                    &window,
+                    &self.desktop_state,
+                    &self.state,
+                    &self.in_app_notification_batch,
+                );
+            } else {
+                apply_reliable_state_projection(&window, &delivery.projection);
+            }
+            true
+        });
+        if let Some(acknowledgement) = delivery.and_then(|delivery| delivery.acknowledgement) {
+            let _ = acknowledgement.send(if delivered {
+                Ok(())
+            } else {
+                Err(DesktopUiError::state_unavailable())
+            });
+        }
+        if !delivered {
+            self.closed.store(true, Ordering::Release);
+        }
+        self.scheduled.store(false, Ordering::Release);
+        if !self.closed.load(Ordering::Acquire)
+            && self.latest.lock().is_ok_and(|latest| latest.is_some())
+        {
+            let _ = self.request_delivery();
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopUiErrorCode {
+    StateUnavailable,
+}
+
+impl DesktopUiErrorCode {
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::StateUnavailable => "state_unavailable",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopUiError {
+    code: DesktopUiErrorCode,
+}
+
+impl DesktopUiError {
+    const fn state_unavailable() -> Self {
+        Self {
+            code: DesktopUiErrorCode::StateUnavailable,
+        }
+    }
+
+    #[must_use]
+    pub const fn code(self) -> DesktopUiErrorCode {
+        self.code
+    }
+
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        self.code.stable_code()
+    }
+}
+
+impl fmt::Display for DesktopUiError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.stable_code())
+    }
+}
+
+impl std::error::Error for DesktopUiError {}
+
+impl DesktopShell {
+    pub fn new(snapshot: &ProductSnapshot) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state_unbound(
+            snapshot,
+            DesktopReliableStateProjection::unavailable(),
+        )
+    }
+
+    pub fn new_with_reliable_state_unbound(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state(
+            snapshot,
+            reliable_state,
+            Rc::new(UnavailableDesktopIntentSink),
+        )
+    }
+
+    pub fn new_with_reliable_state(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state_and_session_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            Rc::new(UnavailableDesktopSessionDetailIntentSink),
+        )
+    }
+
+    pub fn new_with_reliable_state_and_session_sink(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state_and_session_sinks(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            session_sink,
+            Rc::new(UnavailableDesktopSessionPageIntentSink),
+        )
+    }
+
+    pub fn new_with_reliable_state_and_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            Rc::new(UnavailableDesktopHistoryRangeIntentSink),
+            session_sink,
+            session_page_sink,
+            None,
+        )
+    }
+
+    pub fn new_with_reliable_state_and_history_and_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            history_range_sink,
+            session_sink,
+            session_page_sink,
+            None,
+        )
+    }
+
+    pub fn new_with_reliable_state_and_all_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+        lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            Rc::new(UnavailableDesktopHistoryRangeIntentSink),
+            session_sink,
+            session_page_sink,
+            Some(lifecycle_sink),
+        )
+    }
+
+    pub fn new_with_reliable_state_and_all_history_and_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+        lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            history_range_sink,
+            session_sink,
+            session_page_sink,
+            Some(lifecycle_sink),
+        )
+    }
+
+    fn new_with_optional_lifecycle_sink(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+        lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
+    ) -> Result<Self, slint::PlatformError> {
+        let initial_presentation_style =
+            DesktopPresentationStyle::from_persisted(reliable_state.presentation().selection());
+        let window = MainWindow::new()?;
+        let presentation_style = Arc::new(Mutex::new(initial_presentation_style));
+        if !apply_presentation_style(&window, initial_presentation_style) {
+            return Err(slint::PlatformError::Other(String::from(
+                "missing bundled desktop locale",
+            )));
+        }
+        let tray_availability = Rc::new(Cell::new(DesktopTrayAvailability::Unavailable));
+        if lifecycle_sink.is_some() {
+            wire_close_to_tray(&window, Rc::clone(&tray_availability));
+        }
+        window.set_help_product_version(env!("CARGO_PKG_VERSION").into());
+        let initial_state = DesktopState::new(snapshot, DesktopRouteKey::Dashboard);
+        apply_projection(&window, initial_state.projection());
+        apply_reliable_state_projection(&window, &reliable_state);
+        let state = Arc::new(Mutex::new(initial_state));
+        let reliable_state = Arc::new(Mutex::new(reliable_state));
+        let in_app_notification_batch = Arc::new(Mutex::new(None));
+        let compact_window_mode = Rc::new(RefCell::new(CompactWindowMode::default()));
+        wire_route_selection(&window, state.clone(), compact_window_mode.clone());
+        wire_command_palette(&window, state.clone(), compact_window_mode);
+        wire_reliable_state_intents(&window, reliable_state.clone(), Rc::clone(&intent_sink));
+        wire_history_range_intents(&window, state.clone(), history_range_sink.clone());
+        wire_session_detail_intents(&window, state.clone(), session_sink);
+        wire_session_page_intents(&window, state.clone(), session_page_sink.clone());
+        wire_in_app_notification_dismissal(&window, Arc::clone(&in_app_notification_batch));
+        wire_presentation_density(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_skin(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_color_scheme(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_layout(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_locale(
+            &window,
+            Arc::clone(&presentation_style),
+            state.clone(),
+            reliable_state.clone(),
+            Arc::clone(&in_app_notification_batch),
+            intent_sink.clone(),
+        );
+        wire_dashboard_board(&window, Arc::clone(&presentation_style), intent_sink);
+        wire_system_color_scheme_observation(&window, Arc::clone(&presentation_style));
+        Ok(Self {
+            window,
+            _presentation_style: presentation_style,
+            _history_range_sink: history_range_sink,
+            _session_page_sink: session_page_sink,
+            tray: RefCell::new(None),
+            lifecycle_sink,
+            tray_availability,
+            state,
+            reliable_state,
+            snapshot_epochs: Arc::new(AtomicU64::new(1)),
+            notification_epochs: Arc::new(NotificationEpochState::new()),
+            in_app_notification_batch,
+        })
+    }
+
+    #[must_use]
+    pub const fn window(&self) -> &MainWindow {
+        &self.window
+    }
+
+    #[must_use]
+    pub fn show_lifecycle_surface(&self) -> bool {
+        let Some(lifecycle_sink) = self.lifecycle_sink.as_ref() else {
+            return false;
+        };
+        let Ok(mut tray) = self.tray.try_borrow_mut() else {
+            return false;
+        };
+        if tray.is_some() {
+            return true;
+        }
+        match DesktopNativeTrayOwner::new(
+            Rc::clone(lifecycle_sink),
+            Rc::clone(&self.tray_availability),
+        ) {
+            Ok(owner) => {
+                *tray = Some(owner);
+                true
+            }
+            Err(_) => {
+                self.tray_availability
+                    .set(DesktopTrayAvailability::Unavailable);
+                false
+            }
+        }
+    }
+
+    pub fn apply_snapshot(
+        &self,
+        snapshot: &ProductSnapshot,
+    ) -> Result<DesktopApplyOutcome, DesktopUiError> {
+        let (outcome, projection) = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            let outcome = state.apply_snapshot(snapshot);
+            let projection =
+                (outcome == DesktopApplyOutcome::Accepted).then(|| state.projection().clone());
+            (outcome, projection)
+        };
+        if let Some(projection) = projection {
+            apply_projection(&self.window, &projection);
+            refresh_command_palette_if_open(&self.window, &projection);
+        }
+        Ok(outcome)
+    }
+
+    pub fn apply_snapshot_for_epoch(
+        &self,
+        epoch: DesktopSnapshotEpoch,
+        snapshot: &ProductSnapshot,
+    ) -> Result<DesktopApplyOutcome, DesktopUiError> {
+        let (outcome, projection) = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            let outcome = state.apply_snapshot_for_epoch(epoch, snapshot);
+            let projection =
+                (outcome == DesktopApplyOutcome::Accepted).then(|| state.projection().clone());
+            (outcome, projection)
+        };
+        if let Some(projection) = projection {
+            apply_projection(&self.window, &projection);
+            refresh_command_palette_if_open(&self.window, &projection);
+        }
+        Ok(outcome)
+    }
+
+    pub fn request_history_range(
+        &self,
+        preset: crate::DesktopHistoryRangePreset,
+    ) -> Result<crate::DesktopHistoryRangeIntent, DesktopUiError> {
+        let intent = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            let intent = state
+                .request_history_range(preset)
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            apply_history_range_state(&self.window, state.projection().history());
+            intent
+        };
+        Ok(intent)
+    }
+
+    pub fn history_range_state(
+        &self,
+    ) -> Result<(crate::DesktopHistoryRangePreset, bool), DesktopUiError> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let history = state.projection().history();
+        Ok((history.range_preset(), history.range_pending()))
+    }
+
+    pub fn apply_reliable_state(
+        &self,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), DesktopUiError> {
+        let style = reconcile_presentation_style(&self._presentation_style, &projection, None)?;
+        let mut reliable_state = self
+            .reliable_state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        *reliable_state = projection.clone();
+        drop(reliable_state);
+        let locale_changed =
+            self.window.get_presentation_locale_key() != style.locale().stable_key();
+        if !apply_presentation_style(&self.window, style) {
+            return Err(DesktopUiError::state_unavailable());
+        }
+        if locale_changed {
+            reapply_localized_projection(
+                &self.window,
+                &self.state,
+                &self.reliable_state,
+                &self.in_app_notification_batch,
+            );
+        } else {
+            apply_reliable_state_projection(&self.window, &projection);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn state_handle(&self) -> SharedDesktopState {
+        self.state.clone()
+    }
+
+    #[must_use]
+    pub fn reliable_state_notifier(&self) -> DesktopReliableStateNotifier {
+        DesktopReliableStateNotifier {
+            inner: Arc::new(ReliableStateNotifierInner {
+                window: self.window.as_weak(),
+                desktop_state: Arc::clone(&self.state),
+                state: Arc::clone(&self.reliable_state),
+                presentation_style: Arc::clone(&self._presentation_style),
+                in_app_notification_batch: Arc::clone(&self.in_app_notification_batch),
+                latest: Mutex::new(None),
+                next_delivery_id: AtomicU64::new(1),
+                scheduled: AtomicBool::new(false),
+                closed: AtomicBool::new(false),
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn current_user_startup_presenter(&self) -> DesktopCurrentUserStartupPresenter {
+        DesktopCurrentUserStartupPresenter {
+            window: self.window.as_weak(),
+        }
+    }
+
+    pub fn snapshot_bridge(
+        &self,
+        receiver: DesktopSnapshotReceiver,
+    ) -> Result<DesktopSnapshotBridge, DesktopUiError> {
+        self.bridge_factory().snapshot_bridge(receiver)
+    }
+
+    #[must_use]
+    pub fn bridge_factory(&self) -> DesktopBridgeFactory {
+        DesktopBridgeFactory {
+            window: self.window.as_weak(),
+            state: self.state_handle(),
+            snapshot_epochs: Arc::clone(&self.snapshot_epochs),
+            notification_epochs: Arc::clone(&self.notification_epochs),
+            in_app_notification_batch: Arc::clone(&self.in_app_notification_batch),
+        }
+    }
+}
+
+fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) -> bool {
+    if slint::select_bundled_translation(style.locale().stable_key()).is_err() {
+        return false;
+    }
+    window.set_presentation_palette(ui_palette(style.skin(), style.effective_color_scheme()));
+    window.set_presentation_skin_id(style.skin().slint_index());
+    window.set_presentation_density_id(style.density().slint_index());
+    window.set_presentation_color_scheme_id(style.color_scheme().slint_index());
+    window.set_presentation_layout_id(style.layout().slint_index());
+    window.set_presentation_locale_id(style.locale().slint_index());
+    apply_dashboard_board_preferences(
+        window,
+        style.selection().board(),
+        style.layout().slint_index() == 2,
+    );
+    window.set_presentation_effective_color_scheme_id(style.effective_color_scheme().slint_index());
+    window.set_presentation_revision(style.revision().get().to_string().into());
+    window.set_presentation_persistence_state(style.persistence().stable_code().into());
+    true
+}
+
+fn apply_dashboard_board_preferences(
+    window: &MainWindow,
+    board: DesktopBoardPreferences,
+    workbench: bool,
+) {
+    let rows = board.rows();
+    let visible_count = rows.iter().filter(|row| row.visible()).count();
+    let editor_rows = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| DashboardBoardEditorRow {
+            key: row.key().stable_key().into(),
+            label: board_section_label(window, row.key()).into(),
+            visible: row.visible(),
+            collapsed: row.collapsed(),
+            can_move_up: index > 0,
+            can_move_down: index + 1 < rows.len(),
+            can_hide: !row.visible() || visible_count > 1,
+        })
+        .collect::<Vec<_>>();
+    let canonical_key_order = rows
+        .iter()
+        .zip(DesktopBoardSectionKey::ALL)
+        .all(|(row, key)| row.key() == key);
+    let mut visible_rows = rows.iter().filter(|row| row.visible()).collect::<Vec<_>>();
+    if workbench && canonical_key_order {
+        visible_rows.sort_by_key(|row| workbench_canonical_rank(row.key()));
+    }
+    let visible_slots = visible_rows
+        .into_iter()
+        .map(|row| DashboardBoardSlotRow {
+            key: row.key().stable_key().into(),
+            collapsed: row.collapsed(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_dashboard_board_editor_rows,
+        set_dashboard_board_editor_rows,
+        editor_rows
+    );
+    set_rows!(
+        window,
+        get_dashboard_board_visible_slots,
+        set_dashboard_board_visible_slots,
+        visible_slots
+    );
+}
+
+const fn workbench_canonical_rank(key: DesktopBoardSectionKey) -> u8 {
+    match key {
+        DesktopBoardSectionKey::PlanUsage => 0,
+        DesktopBoardSectionKey::CodeOutput => 1,
+        DesktopBoardSectionKey::Sessions => 2,
+        DesktopBoardSectionKey::Trend => 3,
+        DesktopBoardSectionKey::Models => 4,
+        DesktopBoardSectionKey::Activity => 5,
+    }
+}
+
+fn board_section_label(window: &MainWindow, key: DesktopBoardSectionKey) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_dashboard_section_label(key.stable_key().into())
+        .to_string()
+}
+
+fn ui_palette(
+    skin: crate::DesktopSkin,
+    color_scheme: crate::DesktopEffectiveColorScheme,
+) -> UiPalette {
+    let tokens = skin.color_tokens(color_scheme);
+    UiPalette {
+        background: ui_color(tokens.background()),
+        surface: ui_color(tokens.surface()),
+        surface_raised: ui_color(tokens.surface_raised()),
+        surface_subtle: ui_color(tokens.surface_subtle()),
+        border: ui_color(tokens.border()),
+        text_primary: ui_color(tokens.text_primary()),
+        text_secondary: ui_color(tokens.text_secondary()),
+        accent: ui_color(tokens.accent()),
+        accent_subtle: ui_color(tokens.accent_subtle()),
+        accent_secondary: ui_color(tokens.accent_secondary()),
+        accent_tertiary: ui_color(tokens.accent_tertiary()),
+        ready: ui_color(tokens.ready()),
+        waiting: ui_color(tokens.waiting()),
+        degraded: ui_color(tokens.degraded()),
+        unavailable: ui_color(tokens.unavailable()),
+    }
+}
+
+fn ui_color(color: DesktopRgb) -> Color {
+    Color::from_rgb_u8(color.red(), color.green(), color.blue())
+}
+
+fn reconcile_presentation_style(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    projection: &DesktopReliableStateProjection,
+    presentation_terminal: Option<DesktopOperationSnapshot>,
+) -> Result<DesktopPresentationStyle, DesktopUiError> {
+    let mut style = presentation_style
+        .lock()
+        .map_err(|_| DesktopUiError::state_unavailable())?;
+    let projected_selection = projection.presentation().selection();
+    match presentation_terminal.or_else(|| presentation_terminal_from_projection(projection)) {
+        Some(operation)
+            if matches!(
+                operation.kind(),
+                crate::DesktopOperationKind::ApplyConfig
+                    | crate::DesktopOperationKind::RestoreWithPortableSettings
+            ) && operation.phase() == crate::DesktopOperationPhase::Succeeded =>
+        {
+            style.apply_persisted_override(projected_selection);
+        }
+        Some(operation)
+            if operation.kind() == crate::DesktopOperationKind::UpdatePresentation
+                && matches!(
+                    operation.phase(),
+                    crate::DesktopOperationPhase::Failed | crate::DesktopOperationPhase::Cancelled
+                ) =>
+        {
+            style.observe_persisted_unconfirmed(projected_selection);
+            style.mark_not_saved();
+        }
+        Some(operation)
+            if operation.kind() == crate::DesktopOperationKind::UpdatePresentation
+                && operation.phase() == crate::DesktopOperationPhase::Succeeded =>
+        {
+            style.observe_persisted(projected_selection);
+        }
+        _ => {
+            style.observe_persisted_unconfirmed(projected_selection);
+        }
+    }
+    Ok(*style)
+}
+
+fn presentation_terminal_from_projection(
+    projection: &DesktopReliableStateProjection,
+) -> Option<DesktopOperationSnapshot> {
+    let operation = projection.operation()?;
+    match (operation.kind(), operation.phase()) {
+        (
+            crate::DesktopOperationKind::UpdatePresentation,
+            crate::DesktopOperationPhase::Succeeded
+            | crate::DesktopOperationPhase::Failed
+            | crate::DesktopOperationPhase::Cancelled,
+        )
+        | (crate::DesktopOperationKind::ApplyConfig, crate::DesktopOperationPhase::Succeeded)
+        | (
+            crate::DesktopOperationKind::RestoreWithPortableSettings,
+            crate::DesktopOperationPhase::Succeeded,
+        ) => Some(operation),
+        _ => None,
+    }
+}
+
+fn wire_presentation_density(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_density(move |index| {
+        let Some(next_style) =
+            select_presentation_density_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
+fn wire_presentation_skin(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_skin(move |index| {
+        let Some(next_style) =
+            select_presentation_skin_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
+fn wire_presentation_color_scheme(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_color_scheme(move |index| {
+        let Some(next_style) =
+            select_presentation_color_scheme_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
+fn wire_presentation_layout(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_layout(move |index| {
+        let Some(next_style) =
+            select_presentation_layout_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
+fn wire_presentation_locale(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    state: SharedDesktopState,
+    reliable_state: SharedReliableState,
+    in_app_notification_batch: SharedInAppNotificationBatch,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_locale(move |index| {
+        let Some(next_style) =
+            select_presentation_locale_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade()
+            && apply_presentation_style(&window, next_style)
+        {
+            reapply_localized_projection(
+                &window,
+                &state,
+                &reliable_state,
+                &in_app_notification_batch,
+            );
+        }
+    });
+}
+
+fn reapply_localized_projection(
+    window: &MainWindow,
+    state: &SharedDesktopState,
+    reliable_state: &SharedReliableState,
+    in_app_notification_batch: &SharedInAppNotificationBatch,
+) {
+    let projection = state.lock().ok().map(|state| state.projection().clone());
+    let reliable_projection = reliable_state.lock().ok().map(|state| state.clone());
+
+    if let Some(projection) = projection.as_ref() {
+        apply_projection(window, projection);
+        refresh_command_palette_if_open(window, projection);
+    }
+    if let Some(reliable_projection) = reliable_projection.as_ref() {
+        apply_reliable_state_projection(window, reliable_projection);
+    }
+    if !window.get_in_app_notification_visible() {
+        return;
+    }
+    let batch = in_app_notification_batch
+        .lock()
+        .ok()
+        .and_then(|batch| batch.clone());
+    if let Some(batch) = batch.as_ref() {
+        let _ = apply_in_app_notification_batch(window, batch);
+    }
+}
+
+fn wire_dashboard_board(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    let move_style = Arc::clone(&presentation_style);
+    let move_sink = Rc::clone(&intent_sink);
+    let move_window = weak_window.clone();
+    window.on_move_dashboard_board_row(move |index, delta| {
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(next_style) =
+            update_board_if_admitted(&move_style, &move_sink, |style, sink| {
+                style.move_board_section_if_admitted(index, delta, |selection| {
+                    presentation_admitted(sink, selection)
+                })
+            })
+            && let Some(window) = move_window.upgrade()
+        {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+
+    let visible_style = Arc::clone(&presentation_style);
+    let visible_sink = Rc::clone(&intent_sink);
+    let visible_window = weak_window.clone();
+    window.on_set_dashboard_board_row_visible(move |index, visible| {
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(next_style) =
+            update_board_if_admitted(&visible_style, &visible_sink, |style, sink| {
+                style.set_board_section_visible_if_admitted(index, visible, |selection| {
+                    presentation_admitted(sink, selection)
+                })
+            })
+            && let Some(window) = visible_window.upgrade()
+        {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+
+    let collapsed_style = Arc::clone(&presentation_style);
+    let collapsed_sink = Rc::clone(&intent_sink);
+    let collapsed_window = weak_window.clone();
+    window.on_set_dashboard_board_row_collapsed(move |index, collapsed| {
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(next_style) =
+            update_board_if_admitted(&collapsed_style, &collapsed_sink, |style, sink| {
+                style.set_board_section_collapsed_if_admitted(index, collapsed, |selection| {
+                    presentation_admitted(sink, selection)
+                })
+            })
+            && let Some(window) = collapsed_window.upgrade()
+        {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+
+    window.on_reset_dashboard_board(move || {
+        if let Some(next_style) =
+            update_board_if_admitted(&presentation_style, &intent_sink, |style, sink| {
+                style.reset_board_if_admitted(|selection| presentation_admitted(sink, selection))
+            })
+            && let Some(window) = weak_window.upgrade()
+        {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
+fn presentation_admitted(
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+    selection: crate::DesktopPresentationSelection,
+) -> bool {
+    matches!(
+        intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+        crate::DesktopIntentAdmission::Started
+            | crate::DesktopIntentAdmission::Queued
+            | crate::DesktopIntentAdmission::Coalesced
+    )
+}
+
+fn update_board_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+    update: impl FnOnce(
+        &mut DesktopPresentationStyle,
+        &Rc<dyn DesktopIntentSink>,
+    ) -> DesktopPresentationApplyOutcome,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if update(&mut selected, intent_sink) != DesktopPresentationApplyOutcome::Applied {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn wire_system_color_scheme_observation(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+) {
+    let weak_window = window.as_weak();
+    let observed_style = Arc::clone(&presentation_style);
+    window.on_system_color_scheme_observed(move |index| {
+        let Some(observed) = crate::DesktopSystemColorScheme::from_slint_index(index) else {
+            return;
+        };
+        let Ok(mut style) = observed_style.lock() else {
+            return;
+        };
+        if style.observe_system_color_scheme(observed) != DesktopPresentationApplyOutcome::Applied {
+            return;
+        }
+        let next_style = *style;
+        drop(style);
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+    window.invoke_system_color_scheme_observed(window.get_observed_system_color_scheme_id());
+}
+
+fn select_presentation_density_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_density_index_if_admitted(index, |selection| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_skin_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_skin_index_if_admitted(index, |selection| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_color_scheme_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_color_scheme_index_if_admitted(index, |selection| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_locale_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_locale_index_if_admitted(index, |selection| {
+        presentation_admitted(intent_sink, selection)
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_layout_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_layout_index_if_admitted(index, |selection| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn wire_in_app_notification_dismissal(
+    window: &MainWindow,
+    in_app_notification_batch: SharedInAppNotificationBatch,
+) {
+    let weak = window.as_weak();
+    window.on_dismiss_in_app_notifications(move || {
+        if let Some(window) = weak.upgrade() {
+            window.set_in_app_notification_visible(false);
+            window.set_in_app_notification_count_label(SharedString::default());
+            set_rows!(
+                window,
+                get_in_app_notification_rows,
+                set_in_app_notification_rows,
+                Vec::new()
+            );
+            if let Ok(mut batch) = in_app_notification_batch.lock() {
+                *batch = None;
+            }
+        }
+    });
+}
+
+fn wire_reliable_state_intents(
+    window: &MainWindow,
+    reliable_state: SharedReliableState,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let reviewed_restore_selection = Rc::new(RefCell::new(None));
+    let sink = intent_sink.clone();
+    window.on_export_config(move || {
+        let _ = sink.submit(DesktopIntent::ExportConfig);
+    });
+    let sink = intent_sink.clone();
+    window.on_import_config(move || {
+        let _ = sink.submit(DesktopIntent::ImportConfig);
+    });
+    let sink = intent_sink.clone();
+    window.on_confirm_config_import(move || {
+        let _ = sink.submit(DesktopIntent::ConfirmConfigImport);
+    });
+    let sink = intent_sink.clone();
+    window.on_cancel_config_import(move || {
+        let _ = sink.submit(DesktopIntent::CancelConfigImport);
+    });
+    let sink = intent_sink.clone();
+    window.on_backup_normal(move || {
+        let _ = sink.submit(DesktopIntent::BackupNormal);
+    });
+    let sink = intent_sink.clone();
+    window.on_backup_compact(move || {
+        let _ = sink.submit(DesktopIntent::BackupCompact);
+    });
+    let sink = intent_sink.clone();
+    window.on_backup_encrypted(move |passphrase, confirmation| {
+        if let Ok(intent) = DesktopIntent::encrypted_backup(&passphrase, &confirmation) {
+            let _ = sink.submit(intent);
+        }
+    });
+    let sink = intent_sink.clone();
+    window.on_verify_backups(move || {
+        let _ = sink.submit(DesktopIntent::VerifyBackups);
+    });
+    let sink = intent_sink.clone();
+    let state = reliable_state.clone();
+    let reviewed_selection = Rc::clone(&reviewed_restore_selection);
+    let weak = window.as_weak();
+    window.on_preview_restore(move |row| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(row) = usize::try_from(row) else {
+            return;
+        };
+        let selection_and_point = state.lock().ok().and_then(|state| {
+            Some((
+                state.restore_selection(row)?,
+                state.restore_points().get(row)?.clone(),
+            ))
+        });
+        if let Some((selection, point)) = selection_and_point {
+            let admission = sink.submit(DesktopIntent::PreviewRestore(selection));
+            if admission != crate::DesktopIntentAdmission::Rejected {
+                reviewed_selection.replace(Some(selection));
+                window.set_restore_confirmation_visible(true);
+                window.set_restore_confirmation_row(saturating_i32(row as u64));
+                window.set_restore_confirmation_detail(
+                    format!(
+                        "{} · {} · {}",
+                        format_restore_age(point.created_at_utc_ms()),
+                        format_bytes(point.size_bytes()),
+                        point.health().stable_code()
+                    )
+                    .into(),
+                );
+            }
+        }
+    });
+    let sink = intent_sink.clone();
+    let reviewed_selection = Rc::clone(&reviewed_restore_selection);
+    let weak = window.as_weak();
+    window.on_confirm_restore(move |_row, portable_settings| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let selection = *reviewed_selection.borrow();
+        if let Some(selection) = selection {
+            let admission = sink.submit(DesktopIntent::ConfirmRestore {
+                selection,
+                portable_settings,
+            });
+            if admission != crate::DesktopIntentAdmission::Rejected {
+                reviewed_selection.replace(None);
+                window.set_restore_confirmation_visible(false);
+                window.set_restore_confirmation_row(-1);
+                window.set_restore_confirmation_detail("".into());
+            }
+        }
+    });
+    let sink = intent_sink.clone();
+    let busy_window = window.as_weak();
+    window.on_request_refresh(move || {
+        // Cleared by `apply_projection` when the next snapshot lands, which is the
+        // observable end of a refresh from the shell's point of view.
+        if let Some(window) = busy_window.upgrade() {
+            window.set_refresh_in_flight(true);
+        }
+        let _ = sink.submit(DesktopIntent::RefreshData);
+    });
+    let sink = intent_sink.clone();
+    window.on_rebuild_data(move || {
+        let _ = sink.submit(DesktopIntent::RebuildData);
+    });
+    let sink = intent_sink.clone();
+    window.on_retry_operation(move || {
+        let _ = sink.submit(DesktopIntent::RetryOperation);
+    });
+    let sink = intent_sink.clone();
+    window.on_cancel_operation(move || {
+        let _ = sink.submit(DesktopIntent::CancelOperation);
+    });
+    let sink = intent_sink.clone();
+    window.on_enable_current_user_startup(move || {
+        let _ = sink.submit(DesktopIntent::EnableCurrentUserStartup);
+    });
+    let sink = intent_sink.clone();
+    window.on_repair_current_user_startup(move || {
+        let _ = sink.submit(DesktopIntent::RepairCurrentUserStartup);
+    });
+    let sink = intent_sink.clone();
+    window.on_disable_current_user_startup(move || {
+        let _ = sink.submit(DesktopIntent::DisableCurrentUserStartup);
+    });
+    let sink = intent_sink.clone();
+    window.on_update_backup_policy(move |enabled, quiet, interval, budget| {
+        let (Ok(quiet_seconds), Ok(interval_seconds), Ok(retention_budget_mib)) = (
+            u32::try_from(quiet),
+            u32::try_from(interval),
+            u32::try_from(budget),
+        ) else {
+            return;
+        };
+        let _ = sink.submit(DesktopIntent::UpdateBackupPolicy {
+            periodic_enabled: enabled,
+            quiet_seconds,
+            interval_seconds,
+            retention_budget_mib,
+        });
+    });
+    wire_reminder_policy_editor(window, intent_sink);
+}
+
+fn apply_current_user_startup(window: &MainWindow, status: DesktopCurrentUserStartupStatus) {
+    window.set_current_user_startup_status(status.stable_code().into());
+    window.set_current_user_startup_can_enable(matches!(
+        status,
+        DesktopCurrentUserStartupStatus::Disabled
+    ));
+    window.set_current_user_startup_can_disable(matches!(
+        status,
+        DesktopCurrentUserStartupStatus::EnabledVerified
+            | DesktopCurrentUserStartupStatus::StaleRelocation
+    ));
+    window.set_current_user_startup_can_repair(matches!(
+        status,
+        DesktopCurrentUserStartupStatus::StaleRelocation
+    ));
+}
+
+fn wire_reminder_policy_editor(window: &MainWindow, intent_sink: Rc<dyn DesktopIntentSink>) {
+    let weak = window.as_weak();
+    window.on_reminder_enabled_edited(move |enabled| {
+        if let Some(window) = weak.upgrade() {
+            window.set_reminder_enabled(enabled);
+            mark_reminder_draft_dirty(&window);
+        }
+    });
+    let weak = window.as_weak();
+    window.on_reminder_preset_edited(move |index, enabled| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        match index {
+            0 => window.set_reminder_preset_seven_days(enabled),
+            1 => window.set_reminder_preset_twenty_four_hours(enabled),
+            2 => window.set_reminder_preset_twelve_hours(enabled),
+            3 => window.set_reminder_preset_six_hours(enabled),
+            4 => window.set_reminder_preset_one_hour(enabled),
+            _ => return,
+        }
+        mark_reminder_draft_dirty(&window);
+    });
+    let weak = window.as_weak();
+    window.on_reminder_custom_lead_edited(move |index, enabled, value, unit_index| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        let rows = window.get_reminder_custom_lead_rows();
+        if index >= rows.row_count() {
+            return;
+        }
+        rows.set_row_data(
+            index,
+            ReminderCustomLeadRow {
+                enabled,
+                value,
+                unit_index,
+            },
+        );
+        mark_reminder_draft_dirty(&window);
+    });
+    let weak = window.as_weak();
+    window.on_reset_reminder_recommended(move || {
+        if let Some(window) = weak.upgrade() {
+            apply_recommended_reminder_draft(&window);
+        }
+    });
+    let weak = window.as_weak();
+    window.on_save_reminder_policy(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Some(intent) = reminder_policy_intent(&window) else {
+            window.set_reminder_feedback("Reminder profile is invalid".into());
+            return;
+        };
+        match intent_sink.submit(intent) {
+            crate::DesktopIntentAdmission::Rejected => {
+                window.set_reminder_feedback("Reminder service is busy".into())
+            }
+            crate::DesktopIntentAdmission::Started
+            | crate::DesktopIntentAdmission::Queued
+            | crate::DesktopIntentAdmission::Coalesced => {
+                window.set_reminder_dirty(false);
+                window.set_reminder_feedback("Reminder profile submitted".into());
+            }
+        }
+    });
+}
+
+fn mark_reminder_draft_dirty(window: &MainWindow) {
+    window.set_reminder_dirty(true);
+    window.set_reminder_feedback("Reminder draft changed".into());
+}
+
+fn apply_recommended_reminder_draft(window: &MainWindow) {
+    window.set_reminder_enabled(true);
+    window.set_reminder_preset_seven_days(true);
+    window.set_reminder_preset_twenty_four_hours(true);
+    window.set_reminder_preset_twelve_hours(true);
+    window.set_reminder_preset_six_hours(true);
+    window.set_reminder_preset_one_hour(true);
+    window.set_reminder_custom_lead_rows(reminder_custom_rows(&[]));
+    window.set_reminder_dirty(true);
+    window.set_reminder_feedback("Recommended reminder draft ready".into());
+}
+
+fn reminder_policy_intent(window: &MainWindow) -> Option<DesktopIntent> {
+    const PRESETS: [u32; 5] = [604_800, 86_400, 43_200, 21_600, 3_600];
+    let preset_enabled = [
+        window.get_reminder_preset_seven_days(),
+        window.get_reminder_preset_twenty_four_hours(),
+        window.get_reminder_preset_twelve_hours(),
+        window.get_reminder_preset_six_hours(),
+        window.get_reminder_preset_one_hour(),
+    ];
+    let mut leads = PRESETS
+        .into_iter()
+        .zip(preset_enabled)
+        .filter_map(|(lead, enabled)| enabled.then_some(lead))
+        .collect::<Vec<_>>();
+    let rows = window.get_reminder_custom_lead_rows();
+    if rows.row_count() != 8 {
+        return None;
+    }
+    for index in 0..rows.row_count() {
+        let row = rows.row_data(index)?;
+        if !row.enabled {
+            continue;
+        }
+        let unit = match row.unit_index {
+            0 => 1_u32,
+            1 => 60,
+            2 => 3_600,
+            3 => 86_400,
+            _ => return None,
+        };
+        let value = u32::try_from(row.value).ok()?;
+        let lead = value.checked_mul(unit)?;
+        leads.push(lead);
+    }
+    leads.sort_unstable_by(|left, right| right.cmp(left));
+    leads.dedup();
+    if leads.len() > 8 {
+        return None;
+    }
+    DesktopIntent::update_reminder_policy(window.get_reminder_enabled(), &leads).ok()
+}
+
+fn reminder_custom_rows(leads: &[u32]) -> ModelRc<ReminderCustomLeadRow> {
+    let mut rows = Vec::with_capacity(8);
+    for lead in leads.iter().copied().take(8) {
+        let (value, unit_index) = if lead.is_multiple_of(86_400) {
+            (lead / 86_400, 3)
+        } else if lead.is_multiple_of(3_600) {
+            (lead / 3_600, 2)
+        } else if lead.is_multiple_of(60) {
+            (lead / 60, 1)
+        } else {
+            (lead, 0)
+        };
+        rows.push(ReminderCustomLeadRow {
+            enabled: true,
+            value: saturating_i32(u64::from(value)),
+            unit_index,
+        });
+    }
+    rows.resize(
+        8,
+        ReminderCustomLeadRow {
+            enabled: false,
+            value: 1,
+            unit_index: 0,
+        },
+    );
+    model(rows)
+}
+
+fn wire_close_to_tray(window: &MainWindow, tray_availability: Rc<Cell<DesktopTrayAvailability>>) {
+    window
+        .window()
+        .on_close_requested(move || match tray_availability.get().close_effect() {
+            DesktopCloseEffect::HideToTray => slint::CloseRequestResponse::HideWindow,
+            DesktopCloseEffect::Quit => {
+                let _ = slint::quit_event_loop();
+                slint::CloseRequestResponse::HideWindow
+            }
+        });
+}
+
+fn wire_route_selection(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    compact_window_mode: SharedCompactWindowMode,
+) {
+    let weak = window.as_weak();
+    window.on_select_route(move |key| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let projection = {
+            let Ok(mut state) = state.lock() else {
+                return;
+            };
+            if state.select_stable_key(key.as_str()).is_err() {
+                return;
+            }
+            state.projection().clone()
+        };
+        apply_selected_route(&window, &projection, &compact_window_mode);
+    });
+}
+
+fn wire_command_palette(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    compact_window_mode: SharedCompactWindowMode,
+) {
+    let weak = window.as_weak();
+    let open_state = state.clone();
+    window.on_open_command_palette(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(projection) = open_state.lock().map(|state| state.projection().clone()) else {
+            return;
+        };
+        window.set_command_palette_visible(true);
+        apply_command_palette_rows(&window, &projection, "", None);
+    });
+
+    let weak = window.as_weak();
+    window.on_dismiss_command_palette(move || {
+        if let Some(window) = weak.upgrade() {
+            dismiss_command_palette(&window);
+        }
+    });
+
+    let weak = window.as_weak();
+    let query_state = state.clone();
+    window.on_command_palette_query_edited(move |query| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(projection) = query_state.lock().map(|state| state.projection().clone()) else {
+            return;
+        };
+        let query = truncate_command_palette_query(query.as_str());
+        apply_command_palette_rows(&window, &projection, &query, None);
+    });
+
+    let weak = window.as_weak();
+    window.on_move_command_palette_selection(move |delta| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        move_command_palette_selection(&window, delta);
+    });
+
+    let weak = window.as_weak();
+    let activate_state = state.clone();
+    let activate_compact_window_mode = compact_window_mode.clone();
+    window.on_activate_command_palette_selection(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let selected = window.get_command_palette_selected_ordinal();
+        let Ok(selected) = usize::try_from(selected) else {
+            return;
+        };
+        let Some(row) = window.get_command_palette_rows().row_data(selected) else {
+            return;
+        };
+        activate_command_palette_route(
+            &window,
+            &activate_state,
+            &activate_compact_window_mode,
+            row.key.as_str(),
+        );
+    });
+
+    let weak = window.as_weak();
+    window.on_activate_command_palette_route(move |key| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        activate_command_palette_route(&window, &state, &compact_window_mode, key.as_str());
+    });
+}
+
+fn truncate_command_palette_query(value: &str) -> String {
+    value
+        .chars()
+        .take(MAX_COMMAND_PALETTE_QUERY_SCALARS)
+        .collect()
+}
+
+fn apply_command_palette_rows(
+    window: &MainWindow,
+    projection: &DesktopProjection,
+    query: &str,
+    selected_key: Option<&str>,
+) {
+    let query = truncate_command_palette_query(query);
+    let normalized_query = query.to_lowercase();
+    let mut rows = projection
+        .routes()
+        .iter()
+        .filter_map(|route| {
+            let label = route_label(window, route.key());
+            (normalized_query.is_empty()
+                || route
+                    .key()
+                    .stable_key()
+                    .to_lowercase()
+                    .contains(&normalized_query)
+                || route
+                    .key()
+                    .english_label()
+                    .to_lowercase()
+                    .contains(&normalized_query)
+                || label.to_lowercase().contains(&normalized_query))
+            .then(|| RouteRow {
+                key: route.key().stable_key().into(),
+                label_key: route.key().label_key().into(),
+                label: label.into(),
+                state: route.state().stable_code().into(),
+                reasons: join_reasons(route.reason_codes().iter()).into(),
+                selected: false,
+            })
+        })
+        .collect::<Vec<_>>();
+    let selected = selected_key
+        .and_then(|key| rows.iter().position(|row| row.key.as_str() == key))
+        .unwrap_or(0);
+    if let Some(row) = rows.get_mut(selected) {
+        row.selected = true;
+    }
+    window.set_command_palette_query(query.into());
+    window.set_command_palette_selected_ordinal(if rows.is_empty() {
+        -1
+    } else {
+        saturating_i32(selected as u64)
+    });
+    set_rows!(
+        window,
+        get_command_palette_rows,
+        set_command_palette_rows,
+        rows
+    );
+}
+
+fn move_command_palette_selection(window: &MainWindow, delta: i32) {
+    let mut rows = window.get_command_palette_rows().iter().collect::<Vec<_>>();
+    let Ok(len) = i32::try_from(rows.len()) else {
+        return;
+    };
+    if len == 0 {
+        return;
+    }
+    let current = window
+        .get_command_palette_selected_ordinal()
+        .clamp(0, len - 1);
+    let selected = (current + delta).rem_euclid(len);
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.selected = index == selected as usize;
+    }
+    window.set_command_palette_selected_ordinal(selected);
+    set_rows!(
+        window,
+        get_command_palette_rows,
+        set_command_palette_rows,
+        rows
+    );
+}
+
+fn refresh_command_palette_if_open(window: &MainWindow, projection: &DesktopProjection) {
+    if !window.get_command_palette_visible() {
+        return;
+    }
+    let selected_key = usize::try_from(window.get_command_palette_selected_ordinal())
+        .ok()
+        .and_then(|index| window.get_command_palette_rows().row_data(index))
+        .map(|row| row.key.to_string());
+    let query = window.get_command_palette_query();
+    apply_command_palette_rows(window, projection, query.as_str(), selected_key.as_deref());
+}
+
+fn activate_command_palette_route(
+    window: &MainWindow,
+    state: &SharedDesktopState,
+    compact_window_mode: &SharedCompactWindowMode,
+    key: &str,
+) {
+    let projection = {
+        let Ok(mut state) = state.lock() else {
+            return;
+        };
+        if state.select_stable_key(key).is_err() {
+            return;
+        }
+        state.projection().clone()
+    };
+    apply_selected_route(window, &projection, compact_window_mode);
+    dismiss_command_palette(window);
+}
+
+fn apply_selected_route(
+    window: &MainWindow,
+    projection: &DesktopProjection,
+    compact_window_mode: &SharedCompactWindowMode,
+) {
+    apply_route_projection(window, projection);
+    update_compact_window_mode(window, projection.selected(), compact_window_mode);
+}
+
+/// Chooses the size to remember before the compact widget takes the window over.
+///
+/// Everything here is logical. The window reports physical pixels and these constants
+/// are design values in logical ones, so comparing them without converting made the
+/// threshold mean a different apparent window at every scale factor, and rebuilding
+/// the fallback as physical restored a window two thirds of the intended size on a
+/// 150% display.
+///
+/// The conversion is inside on purpose: with it outside, the unit test received an
+/// already-converted size and could not tell the corrected logic from the original.
+/// The decision lives in a function at all because the testing backend hard-codes a
+/// scale factor of 1.0 inside `set_size`, so an integration test cannot tell logical
+/// from physical either -- it would measure the harness rather than this.
+fn remembered_normal_size(current: slint::PhysicalSize, scale_factor: f32) -> slint::LogicalSize {
+    let current = current.to_logical(scale_factor);
+    if current.width >= MIN_RESTORABLE_WINDOW_WIDTH
+        && current.height >= MIN_RESTORABLE_WINDOW_HEIGHT
+    {
+        current
+    } else {
+        slint::LogicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
+    }
+}
+
+fn update_compact_window_mode(
+    window: &MainWindow,
+    selected: DesktopRouteKey,
+    compact_window_mode: &SharedCompactWindowMode,
+) {
+    let target_size = {
+        let mut mode = compact_window_mode.borrow_mut();
+        if selected == DesktopRouteKey::CompactWidget {
+            if mode.active {
+                None
+            } else {
+                // `size()` is physical and the constants are logical, so the two are
+                // only comparable after conversion.
+                mode.normal_size = Some(remembered_normal_size(
+                    window.window().size(),
+                    window.window().scale_factor(),
+                ));
+                mode.active = true;
+                Some(slint::LogicalSize::new(
+                    COMPACT_WINDOW_WIDTH,
+                    COMPACT_WINDOW_HEIGHT,
+                ))
+            }
+        } else if mode.active {
+            mode.active = false;
+            Some(mode.normal_size.take().unwrap_or_else(|| {
+                slint::LogicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
+            }))
+        } else {
+            None
+        }
+    };
+    if let Some(size) = target_size {
+        window.window().set_size(size);
+    }
+}
+
+fn dismiss_command_palette(window: &MainWindow) {
+    window.set_command_palette_visible(false);
+    window.set_command_palette_query("".into());
+    window.set_command_palette_selected_ordinal(-1);
+    set_rows!(
+        window,
+        get_command_palette_rows,
+        set_command_palette_rows,
+        Vec::new()
+    );
+}
+
+fn wire_history_range_intents(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+) {
+    let bind = |preset| {
+        let weak = window.as_weak();
+        let state = state.clone();
+        let sink = sink.clone();
+        move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let intent = {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                let Ok(intent) = state.request_history_range(preset) else {
+                    return;
+                };
+                apply_history_range_state(&window, state.projection().history());
+                intent
+            };
+            if sink.submit(intent) == DesktopHistoryRangeIntentAdmission::Rejected {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                state.reject_history_range(intent);
+                apply_history_range_state(&window, state.projection().history());
+            }
+        }
+    };
+    window.on_request_history_range_1(bind(crate::DesktopHistoryRangePreset::Recent1Day));
+    window.on_request_history_range_7(bind(crate::DesktopHistoryRangePreset::Recent7Days));
+    window.on_request_history_range_30(bind(crate::DesktopHistoryRangePreset::Recent30Days));
+}
+
+fn wire_session_detail_intents(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    sink: Rc<dyn DesktopSessionDetailIntentSink>,
+) {
+    let weak = window.as_weak();
+    window.on_select_session(move |row| {
+        let Ok(row) = usize::try_from(row) else {
+            return;
+        };
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let intent = {
+            let Ok(mut state) = state.lock() else {
+                return;
+            };
+            let Ok(intent) = state.select_session_row(row) else {
+                return;
+            };
+            apply_session_detail_projection(&window, state.projection().sessions());
+            intent
+        };
+        if sink.submit(intent) == DesktopSessionDetailIntentAdmission::Rejected {
+            let Ok(mut state) = state.lock() else {
+                return;
+            };
+            state.reject_session_detail(intent);
+            apply_session_detail_projection(&window, state.projection().sessions());
+        }
+    });
+}
+
+fn wire_session_page_intents(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    sink: Rc<dyn DesktopSessionPageIntentSink>,
+) {
+    let bind = |direction| {
+        let weak = window.as_weak();
+        let state = state.clone();
+        let sink = sink.clone();
+        move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let intent = {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                let Ok(intent) = state.request_session_page(direction) else {
+                    return;
+                };
+                apply_session_navigation_projection(&window, state.projection().sessions());
+                apply_session_detail_projection(&window, state.projection().sessions());
+                intent
+            };
+            if sink.submit(intent) == DesktopSessionPageIntentAdmission::Rejected {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                state.reject_session_page(intent);
+                apply_session_navigation_projection(&window, state.projection().sessions());
+                apply_session_detail_projection(&window, state.projection().sessions());
+            }
+        }
+    };
+    window.on_request_session_page_next(bind(DesktopSessionPageDirection::Next));
+    window.on_request_session_page_newest(bind(DesktopSessionPageDirection::Newest));
+}
+
+pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
+    window.set_refresh_in_flight(false);
+    window.set_shell_lifetime_tokens(format_tokens(projection.lifetime_tokens()).into());
+    apply_route_projection(window, projection);
+    apply_dashboard_projection(window, projection.dashboard());
+    apply_history_snapshot_projection(window, projection.history());
+    apply_models_projection(window, projection.models());
+    apply_projects_projection(window, projection.projects());
+    apply_activity_route_projection(window, projection.activity());
+    apply_notifications_projection(window, projection.notifications());
+    apply_sessions_projection(window, projection.sessions());
+}
+
+fn route_label(window: &MainWindow, key: DesktopRouteKey) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_route_label(key.stable_key().into())
+        .to_string()
+}
+
+fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
+    let rows = projection
+        .routes()
+        .iter()
+        .map(|route| RouteRow {
+            key: SharedString::from(route.key().stable_key()),
+            label_key: SharedString::from(route.key().label_key()),
+            label: SharedString::from(route_label(window, route.key())),
+            state: SharedString::from(route.state().stable_code()),
+            reasons: SharedString::from(join_reasons(route.reason_codes().iter())),
+            selected: route.key() == projection.selected(),
+        })
+        .collect::<Vec<_>>();
+    let active = projection.route(projection.selected());
+
+    set_rows!(window, get_route_rows, set_route_rows, rows);
+    window.set_active_route_key(SharedString::from(projection.selected().stable_key()));
+    window.set_active_route_label(SharedString::from(route_label(
+        window,
+        projection.selected(),
+    )));
+    window.set_active_route_state(SharedString::from(active.state().stable_code()));
+    window.set_active_route_reasons(SharedString::from(join_reasons(
+        active.reason_codes().iter(),
+    )));
+    window.set_product_generation(SharedString::from(
+        projection.generation().get().to_string(),
+    ));
+}
+
+fn apply_reliable_state_projection(
+    window: &MainWindow,
+    projection: &DesktopReliableStateProjection,
+) {
+    window.set_reliable_state_generation(projection.generation().to_string().into());
+    window.set_reliable_state_health(projection.health().stable_code().into());
+    window.set_reliable_state_safe_mode(projection.safe_mode());
+    let recovery_receipt = projection.recovery_receipt();
+    window.set_reliable_recovery_kind(
+        recovery_receipt
+            .map_or("", |receipt| receipt.kind().stable_code())
+            .into(),
+    );
+    window.set_reliable_non_reconstructible_domains_lost(
+        recovery_receipt.is_some_and(|receipt| receipt.non_reconstructible_domains_lost()),
+    );
+    window.set_settings_health(projection.settings_health_code().into());
+    let config_preview = projection.config_import_preview();
+    window.set_config_import_preview_visible(config_preview.is_some());
+    window.set_config_import_created_label(
+        config_preview
+            .map_or_else(
+                || projection_unavailable(window),
+                |preview| format_timestamp_ms(preview.created_at_utc_ms()),
+            )
+            .into(),
+    );
+    window.set_config_import_bytes_label(
+        config_preview
+            .map_or_else(
+                || "0 B".to_owned(),
+                |preview| format_bytes(preview.package_bytes()),
+            )
+            .into(),
+    );
+    window.set_config_import_changes_label(
+        config_preview
+            .map_or_else(
+                || projection_no_pending_changes(window),
+                |preview| {
+                    projection_categories_and_fields(
+                        window,
+                        u32::from(preview.changed_category_count()),
+                        u32::from(preview.changed_field_count()),
+                    )
+                },
+            )
+            .into(),
+    );
+    window.set_reliable_latest_success_label(
+        projection
+            .latest_success_at_utc_ms()
+            .map_or_else(|| projection_unavailable(window), format_timestamp_ms)
+            .into(),
+    );
+    window.set_reliable_latest_attempt_label(
+        projection
+            .latest_attempt_at_utc_ms()
+            .map_or_else(|| projection_unavailable(window), format_timestamp_ms)
+            .into(),
+    );
+    window.set_reliable_successful_count_label(
+        projection
+            .successful_count()
+            .map_or_else(|| projection_unavailable(window), |count| count.to_string())
+            .into(),
+    );
+    window.set_reliable_failure_count_label(
+        projection
+            .failure_count()
+            .map_or_else(|| projection_unavailable(window), |count| count.to_string())
+            .into(),
+    );
+    window.set_reliable_published_bytes_label(
+        projection
+            .published_bytes()
+            .map_or_else(|| projection_unavailable(window), format_bytes)
+            .into(),
+    );
+    window.set_reliable_latest_failure_code(
+        projection.latest_failure_code().unwrap_or_default().into(),
+    );
+    let operation = projection.operation();
+    window.set_reliable_operation_kind(
+        operation
+            .map_or("idle", |value| value.kind().stable_code())
+            .into(),
+    );
+    window.set_reliable_operation_phase(
+        operation
+            .map_or("idle", |value| value.phase().stable_code())
+            .into(),
+    );
+    window.set_reliable_operation_failure_code(
+        operation
+            .and_then(|value| value.failure_code())
+            .unwrap_or_default()
+            .into(),
+    );
+    window
+        .set_reliable_operation_cancel_enabled(operation.is_some_and(|value| value.cancellable()));
+
+    let policy = projection.policy();
+    window.set_backup_periodic_enabled(policy.periodic_enabled());
+    window.set_backup_quiet_seconds(saturating_i32(u64::from(policy.quiet_seconds())));
+    window.set_backup_interval_seconds(saturating_i32(u64::from(policy.interval_seconds())));
+    window.set_backup_retention_budget_mib(saturating_i32(
+        policy.retention_budget_bytes() / 1_048_576,
+    ));
+
+    let reminder = projection.reminder_policy();
+    window.set_reminder_sync_state(
+        match reminder.sync_state() {
+            crate::DesktopReminderSyncState::Pending => "Pending",
+            crate::DesktopReminderSyncState::Synchronized => "Synchronized",
+            crate::DesktopReminderSyncState::Unavailable => "Unavailable",
+        }
+        .into(),
+    );
+    if !window.get_reminder_dirty() {
+        window.set_reminder_enabled(reminder.enabled());
+        let leads = reminder.lead_seconds();
+        window.set_reminder_preset_seven_days(leads.contains(&604_800));
+        window.set_reminder_preset_twenty_four_hours(leads.contains(&86_400));
+        window.set_reminder_preset_twelve_hours(leads.contains(&43_200));
+        window.set_reminder_preset_six_hours(leads.contains(&21_600));
+        window.set_reminder_preset_one_hour(leads.contains(&3_600));
+        let custom = leads
+            .iter()
+            .copied()
+            .filter(|lead| ![604_800, 86_400, 43_200, 21_600, 3_600].contains(lead))
+            .collect::<Vec<_>>();
+        window.set_reminder_custom_lead_rows(reminder_custom_rows(&custom));
+        window.set_reminder_feedback("Ready to edit reminder profile".into());
+    }
+
+    let rows = projection
+        .restore_points()
+        .iter()
+        .enumerate()
+        .map(|(index, point)| RestorePointRow {
+            row_index: saturating_i32(index as u64),
+            created_label: point
+                .created_at_utc_ms()
+                .map_or_else(|| projection_time_unavailable(window), format_timestamp_ms)
+                .into(),
+            size_label: format_bytes(point.size_bytes()).into(),
+            health: point.health().stable_code().into(),
+            purpose_label: humanize_key(point.purpose_code()).into(),
+            schema_label: point
+                .database_schema_version()
+                .map_or_else(
+                    || projection_schema_unavailable(window),
+                    |version| projection_schema(window, u32::from(version)),
+                )
+                .into(),
+            compression_label: humanize_key(point.compression_code()).into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(window, get_restore_point_rows, set_restore_point_rows, rows);
+}
+
+fn saturating_i32(value: u64) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+fn projection_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_unavailable()
+        .to_string()
+}
+
+fn projection_time_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_time_unavailable()
+        .to_string()
+}
+
+fn projection_no_pending_changes(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_no_pending_changes()
+        .to_string()
+}
+
+fn projection_categories_and_fields(window: &MainWindow, categories: u32, fields: u32) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_categories_and_fields(categories.to_string().into(), fields.to_string().into())
+        .to_string()
+}
+
+fn projection_schema_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_schema_unavailable()
+        .to_string()
+}
+
+fn projection_schema(window: &MainWindow, version: u32) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_schema(version.to_string().into())
+        .to_string()
+}
+
+fn projection_freshness_label(window: &MainWindow, value: DesktopFreshness) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_freshness_label(freshness_label(value).into())
+        .to_string()
+}
+
+fn projection_quality_label(window: &MainWindow, value: DesktopQuality) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_quality_label(quality_label(value).into())
+        .to_string()
+}
+
+fn format_dashboard_evidence(
+    window: &MainWindow,
+    freshness: Option<DesktopFreshness>,
+    quality: Option<DesktopQuality>,
+) -> String {
+    match freshness.zip(quality) {
+        Some((freshness, quality)) => window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_label(
+                projection_freshness_label(window, freshness).into(),
+                projection_quality_label(window, quality).into(),
+            )
+            .to_string(),
+        None => window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_unavailable()
+            .to_string(),
+    }
+}
+
+fn format_dashboard_events(window: &MainWindow, value: Option<u64>) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |count| {
+            window
+                .global::<ProjectionStrings>()
+                .invoke_event_count(format_integer(count).into(), count == 1)
+                .to_string()
+        },
+    )
+}
+
+fn format_dashboard_ratio(window: &MainWindow, value: Option<u32>, remaining: bool) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |ppm| {
+            window
+                .global::<ProjectionStrings>()
+                .invoke_quota_ratio(
+                    format!("{:.1}%", f64::from(ppm) / 10_000.0).into(),
+                    remaining,
+                )
+                .to_string()
+        },
+    )
+}
+
+fn format_dashboard_quota_units(window: &MainWindow, row: &crate::DesktopQuotaRow) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    let unit = row.unit_key().map_or("units", |value| value);
+    match (
+        row.used_units(),
+        row.remaining_units(),
+        row.capacity_units(),
+    ) {
+        (Some(used), _, Some(capacity)) => strings
+            .invoke_quota_units(
+                format_integer(used).into(),
+                format_integer(capacity).into(),
+                unit.into(),
+            )
+            .to_string(),
+        (_, Some(remaining), Some(capacity)) => strings
+            .invoke_quota_units_remaining_capacity(
+                format_integer(remaining).into(),
+                format_integer(capacity).into(),
+                unit.into(),
+            )
+            .to_string(),
+        (Some(used), _, None) => strings
+            .invoke_quota_units_used(format_integer(used).into(), unit.into())
+            .to_string(),
+        (_, Some(remaining), None) => strings
+            .invoke_quota_units_remaining(format_integer(remaining).into(), unit.into())
+            .to_string(),
+        (_, _, Some(capacity)) => strings
+            .invoke_quota_units_capacity(format_integer(capacity).into(), unit.into())
+            .to_string(),
+        (None, None, None) => String::new(),
+    }
+}
+
+fn format_dashboard_quota_evidence(window: &MainWindow, row: &crate::DesktopQuotaRow) -> String {
+    let evidence = format_dashboard_evidence(window, Some(row.freshness()), Some(row.quality()));
+    format!(
+        "{} · {}",
+        evidence,
+        window
+            .global::<ProjectionStrings>()
+            .invoke_confidence(row.confidence().to_string().into())
+    )
+}
+
+fn projection_reset_time_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_reset_time_unavailable()
+        .to_string()
+}
+
+fn projection_resets(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_resets(value.into())
+        .to_string()
+}
+
+fn projection_expiry_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_expiry_unavailable()
+        .to_string()
+}
+
+fn projection_expires(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_expires(value.into())
+        .to_string()
+}
+
+fn projection_reminder_label(window: &MainWindow, value: &str) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    match value {
+        "in_app_only" => strings.invoke_in_app_reminders().to_string(),
+        "disabled" => strings.invoke_reminders_disabled().to_string(),
+        _ => strings.invoke_reminder_state_unavailable().to_string(),
+    }
+}
+
+fn projection_efficiency_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_efficiency_unavailable()
+        .to_string()
+}
+
+fn projection_per_hundred_lines(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_per_hundred_lines(value.into())
+        .to_string()
+}
+
+fn projection_range_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_range_unavailable()
+        .to_string()
+}
+
+fn projection_range_before(window: &MainWindow, start: String, end: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_range_before(start.into(), end.into())
+        .to_string()
+}
+
+fn projection_optional_events(window: &MainWindow, value: Option<u64>) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |count| {
+            window
+                .global::<ProjectionStrings>()
+                .invoke_event_count(format_integer(count).into(), count == 1)
+                .to_string()
+        },
+    )
+}
+
+fn projection_loaded_label(window: &MainWindow, count: u64, kind: &str) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_loaded_label(format_integer(count).into(), kind.into(), count == 1)
+        .to_string()
+}
+
+fn projection_repository_label(window: &MainWindow, count: u64) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_repository_label(format_integer(count).into(), count == 1)
+        .to_string()
+}
+
+fn projection_completeness_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_completeness_unavailable()
+        .to_string()
+}
+
+fn projection_more_models_available(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_more_models_available()
+        .to_string()
+}
+
+fn projection_complete_range(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_complete_range()
+        .to_string()
+}
+
+fn projection_more_projects_available(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_more_projects_available()
+        .to_string()
+}
+
+fn projection_repositories_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_repositories_unavailable()
+        .to_string()
+}
+
+fn projection_code_completeness_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_code_completeness_unavailable()
+        .to_string()
+}
+
+fn projection_incomplete_code_range(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_incomplete_code_range()
+        .to_string()
+}
+
+fn projection_complete_code_range(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_complete_code_range()
+        .to_string()
+}
+
+fn projection_complete_code(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_complete_code()
+        .to_string()
+}
+
+fn projection_incomplete_code(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_incomplete_code()
+        .to_string()
+}
+
+fn projection_code_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_code_unavailable()
+        .to_string()
+}
+
+fn projection_git_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_git_unavailable()
+        .to_string()
+}
+
+fn projection_not_linked(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_not_linked()
+        .to_string()
+}
+
+fn projection_unassociated_project(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_unassociated_project()
+        .to_string()
+}
+
+fn projection_per_hundred_added_product_code_lines(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_per_hundred_added_product_code_lines(value.into())
+        .to_string()
+}
+
+fn projection_cost_evidence(window: &MainWindow, value: DesktopCostValue) -> String {
+    let availability = match value.availability() {
+        DesktopValueAvailability::Unavailable => projection_unavailable(window),
+        DesktopValueAvailability::Known => window
+            .global::<ProjectionStrings>()
+            .invoke_value_availability_label("known".into())
+            .to_string(),
+        DesktopValueAvailability::Partial => {
+            projection_quality_label(window, DesktopQuality::Partial)
+        }
+        DesktopValueAvailability::Complete => projection_completeness(window, true),
+        DesktopValueAvailability::LegitimateZero => window
+            .global::<ProjectionStrings>()
+            .invoke_value_availability_label("zero".into())
+            .to_string(),
+    };
+    let provenance = match value.composition() {
+        None | Some(DesktopCostComposition::None) => None,
+        Some(DesktopCostComposition::Calculated) => Some("calculated"),
+        Some(DesktopCostComposition::Reported) => Some("reported"),
+        Some(DesktopCostComposition::Mixed) => Some("mixed"),
+    };
+    provenance.map_or(availability.clone(), |code| {
+        window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_label(
+                availability.into(),
+                window
+                    .global::<ProjectionStrings>()
+                    .invoke_cost_provenance_label(code.into()),
+            )
+            .to_string()
+    })
+}
+
+fn projection_completeness(window: &MainWindow, complete: bool) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_completeness(complete)
+        .to_string()
+}
+
+fn format_bytes(value: u64) -> String {
+    const MIB: u64 = 1_048_576;
+    const KIB: u64 = 1_024;
+    if value >= MIB {
+        format!("{:.1} MiB", value as f64 / MIB as f64)
+    } else if value >= KIB {
+        format!("{:.1} KiB", value as f64 / KIB as f64)
+    } else {
+        format!("{value} B")
+    }
+}
+
+fn format_restore_age(created_at_utc_ms: Option<i64>) -> String {
+    let Some(created_at_utc_ms) = created_at_utc_ms else {
+        return "Age unavailable".to_owned();
+    };
+    let now = Utc::now().timestamp_millis();
+    let elapsed = now.saturating_sub(created_at_utc_ms).max(0) as u64;
+    let hours = elapsed / 3_600_000;
+    if hours < 24 {
+        format!("{hours} h old")
+    } else {
+        format!("{} d old", hours / 24)
+    }
+}
+
+fn join_reasons(reasons: impl Iterator<Item = &'static str>) -> String {
+    reasons.collect::<Vec<_>>().join(", ")
+}
+
+fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
+    let sections = dashboard
+        .sections()
+        .iter()
+        .map(|section| DashboardSectionRow {
+            key: section.key().stable_key().into(),
+            label_key: section.key().label_key().into(),
+            label: dashboard_section_label(window, section.key()).into(),
+            state: section.state().stable_code().into(),
+            reasons: join_reasons(section.reason_codes().iter()).into(),
+            has_data: section.has_data(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_dashboard_section_rows,
+        set_dashboard_section_rows,
+        sections
+    );
+
+    let header = dashboard.header();
+    window.set_dashboard_header_tokens(format_tokens(header.tokens()).into());
+    window.set_dashboard_header_cost(format_cost(header.cost()).into());
+    window
+        .set_dashboard_header_events(format_dashboard_events(window, header.event_count()).into());
+    window.set_dashboard_header_evidence(
+        format_dashboard_evidence(window, header.freshness(), header.quality()).into(),
+    );
+    window.set_dashboard_initial_import_in_progress(dashboard.initial_import_in_progress());
+    let import_progress = dashboard.import_progress();
+    window.set_dashboard_import_progress_known(import_progress.is_some());
+    window.set_dashboard_import_progress_label(
+        import_progress
+            .map(|(completed, expected)| {
+                format!(
+                    "{} / {}",
+                    format_integer(completed),
+                    format_integer(expected)
+                )
+            })
+            .unwrap_or_default()
+            .into(),
+    );
+    window.set_dashboard_import_progress_ratio(import_progress.map_or(
+        0.0,
+        |(completed, expected)| {
+            if expected == 0 {
+                0.0
+            } else {
+                (completed as f64 / expected as f64).clamp(0.0, 1.0) as f32
+            }
+        },
+    ));
+
+    let quota_rows = dashboard
+        .quota_rows()
+        .iter()
+        .map(|row| {
+            let used_ppm = row.used_ppm().or_else(|| {
+                row.remaining_ppm()
+                    .and_then(|value| 1_000_000_u32.checked_sub(value))
+            });
+            DashboardQuotaRow {
+                ordinal: i32::from(row.ordinal()),
+                label_key: row.label_key().into(),
+                label: humanize_key(row.label_key()).into(),
+                ratio_known: used_ppm.is_some(),
+                used_ratio: used_ppm.map_or(0.0, ppm_ratio),
+                usage_label: format_dashboard_ratio(window, used_ppm, false).into(),
+                remaining_label: format_dashboard_ratio(window, row.remaining_ppm(), true).into(),
+                units_label: format_dashboard_quota_units(window, row).into(),
+                reset_label: row
+                    .advertised_reset_at_ms()
+                    .map_or_else(
+                        || projection_reset_time_unavailable(window),
+                        |value| projection_resets(window, format_timestamp_ms(value)),
+                    )
+                    .into(),
+                evidence_label: format_dashboard_quota_evidence(window, row).into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_dashboard_quota_rows,
+        set_dashboard_quota_rows,
+        quota_rows
+    );
+
+    let benefit_rows = dashboard
+        .benefit_scopes()
+        .iter()
+        .map(|scope| DashboardBenefitRow {
+            ordinal: i32::from(scope.ordinal()),
+            reset_quantity_label: format_integer(scope.available_reset_quantity()).into(),
+            credit_quantity_label: format_integer(scope.available_credit_quantity()).into(),
+            temporary_quantity_label: format_integer(scope.available_temporary_quantity()).into(),
+            other_quantity_label: format_integer(scope.available_unknown_quantity()).into(),
+            unavailable_quantity_label: format_integer(scope.non_available_quantity()).into(),
+            expiry_label: scope
+                .nearest_reset_expiry_at_ms()
+                .map_or_else(
+                    || projection_expiry_unavailable(window),
+                    |value| projection_expires(window, format_timestamp_ms(value)),
+                )
+                .into(),
+            reminder_label: projection_reminder_label(window, scope.reminder_coverage()).into(),
+            evidence_label: format_dashboard_evidence(
+                window,
+                Some(scope.freshness()),
+                Some(scope.quality()),
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_dashboard_benefit_rows,
+        set_dashboard_benefit_rows,
+        benefit_rows
+    );
+
+    apply_code_output(window, dashboard);
+    apply_trend(window, dashboard);
+    apply_sessions(window, dashboard);
+    apply_activity(window, dashboard);
+    apply_models(window, dashboard);
+}
+
+pub(crate) fn apply_history_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
+    apply_history_range_state(window, history);
+}
+
+fn apply_history_snapshot_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
+    apply_history_range_state(window, history);
+    window.set_history_state(history.state().stable_code().into());
+    window.set_history_reasons(join_reasons(history.reason_codes().iter()).into());
+    window.set_history_range_label(format_history_range(window, history).into());
+    window.set_history_time_zone_label(
+        history
+            .time_zone_id()
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
+            .into(),
+    );
+    window.set_history_evidence_label(
+        format_dashboard_evidence(window, history.freshness(), history.quality()).into(),
+    );
+    window.set_history_input_tokens(format_tokens(history.input()).into());
+    window.set_history_cached_tokens(format_tokens(history.cached()).into());
+    window.set_history_output_tokens(format_tokens(history.output()).into());
+    window.set_history_reasoning_tokens(format_tokens(history.reasoning()).into());
+    window.set_history_total_tokens(format_tokens(history.total_tokens()).into());
+    window.set_history_cost(format_cost(history.cost()).into());
+    window.set_history_events(projection_optional_events(window, history.event_count()).into());
+
+    let rows = history
+        .rows()
+        .iter()
+        .map(|row| {
+            let (year, month, day) = row.date();
+            HistoryDayRow {
+                date_label: format_date(year, month, day).into(),
+                event_label: format_integer(row.event_count()).into(),
+                input_availability: availability_code(row.input().availability()).into(),
+                input_label: format_tokens(row.input()).into(),
+                cached_availability: availability_code(row.cached().availability()).into(),
+                cached_label: format_tokens(row.cached()).into(),
+                output_availability: availability_code(row.output().availability()).into(),
+                output_label: format_tokens(row.output()).into(),
+                reasoning_availability: availability_code(row.reasoning().availability()).into(),
+                reasoning_label: format_tokens(row.reasoning()).into(),
+                total_availability: availability_code(row.total_tokens().availability()).into(),
+                total_label: format_tokens(row.total_tokens()).into(),
+                cost_availability: availability_code(row.cost().availability()).into(),
+                cost_label: format_cost(row.cost()).into(),
+                token_ratio: ratio(row.total_tokens().known_sum(), history.token_maximum()),
+                cost_ratio: ratio(row.cost().micros(), history.cost_maximum_micros()),
+            }
+        })
+        .collect::<Vec<_>>();
+    set_rows!(window, get_history_day_rows, set_history_day_rows, rows);
+}
+
+fn apply_history_range_state(window: &MainWindow, history: &DesktopHistoryProjection) {
+    window.set_history_range_preset(history.range_preset().stable_code().into());
+    window.set_history_range_pending(history.range_pending());
+}
+
+fn format_history_range(window: &MainWindow, history: &DesktopHistoryProjection) -> String {
+    if let (Some(oldest), Some(newest)) = (history.rows().last(), history.rows().first()) {
+        let (start_year, start_month, start_day) = oldest.date();
+        let (end_year, end_month, end_day) = newest.date();
+        return format!(
+            "{} – {}",
+            format_date(start_year, start_month, start_day),
+            format_date(end_year, end_month, end_day)
+        );
+    }
+    history.range().map_or_else(
+        || projection_range_unavailable(window),
+        |(start, end)| {
+            projection_range_before(
+                window,
+                format_date(start.0, start.1, start.2),
+                format_date(end.0, end.1, end.2),
+            )
+        },
+    )
+}
+
+fn format_date(year: i16, month: u8, day: u8) -> String {
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn apply_models_projection(window: &MainWindow, models: &DesktopModelsProjection) {
+    window.set_models_state(models.state().stable_code().into());
+    window.set_models_reasons(join_reasons(models.reason_codes().iter()).into());
+    window.set_models_range_label(format_models_range(window, models).into());
+    window.set_models_time_zone_label(
+        models
+            .time_zone_id()
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
+            .into(),
+    );
+    window.set_models_evidence_label(
+        format_dashboard_evidence(window, models.freshness(), models.quality()).into(),
+    );
+    window.set_models_total_tokens(format_tokens(models.total_tokens()).into());
+    window.set_models_total_availability(
+        availability_code(models.total_tokens().availability()).into(),
+    );
+    window.set_models_cost(format_cost(models.cost()).into());
+    window.set_models_cost_availability(availability_code(models.cost().availability()).into());
+    window.set_models_cost_evidence_label(projection_cost_evidence(window, models.cost()).into());
+    window.set_models_events(projection_optional_events(window, models.event_count()).into());
+    window.set_models_loaded_label(
+        models
+            .event_count()
+            .map_or_else(
+                || projection_unavailable(window),
+                |_| projection_loaded_label(window, models.rows().len() as u64, "model"),
+            )
+            .into(),
+    );
+    window.set_models_completeness_label(
+        if models.event_count().is_none() {
+            projection_completeness_unavailable(window)
+        } else if models.truncated() {
+            projection_more_models_available(window)
+        } else {
+            projection_complete_range(window)
+        }
+        .into(),
+    );
+
+    let rows = models
+        .rows()
+        .iter()
+        .map(|row| ModelUsageRow {
+            model_label: row.model().into(),
+            event_label: format_integer(row.event_count()).into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+            cost_availability: availability_code(row.cost().availability()).into(),
+            cost_label: format_cost(row.cost()).into(),
+            cost_evidence_label: projection_cost_evidence(window, row.cost()).into(),
+            token_ratio: ratio(row.total_tokens().known_sum(), models.token_maximum()),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(window, get_model_usage_rows, set_model_usage_rows, rows);
+}
+
+fn format_models_range(window: &MainWindow, models: &DesktopModelsProjection) -> String {
+    models.range().map_or_else(
+        || projection_range_unavailable(window),
+        |(start, end)| {
+            projection_range_before(
+                window,
+                format_date(start.0, start.1, start.2),
+                format_date(end.0, end.1, end.2),
+            )
+        },
+    )
+}
+
+fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProjection) {
+    window.set_projects_state(projects.state().stable_code().into());
+    window.set_projects_reasons(join_reasons(projects.reason_codes().iter()).into());
+    window.set_projects_usage_range_label(
+        format_optional_range(window, projects.usage_range()).into(),
+    );
+    window.set_projects_usage_time_zone_label(
+        projects
+            .usage_time_zone_id()
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
+            .into(),
+    );
+    window.set_projects_usage_evidence_label(
+        format_dashboard_evidence(window, projects.usage_freshness(), projects.usage_quality())
+            .into(),
+    );
+    window
+        .set_projects_code_range_label(format_optional_range(window, projects.code_range()).into());
+    window.set_projects_code_time_zone_label(
+        projects
+            .code_time_zone_id()
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
+            .into(),
+    );
+    window.set_projects_code_evidence_label(
+        format_dashboard_evidence(window, projects.code_freshness(), projects.code_quality())
+            .into(),
+    );
+    window.set_projects_total_tokens(format_tokens(projects.total_tokens()).into());
+    window.set_projects_total_availability(
+        availability_code(projects.total_tokens().availability()).into(),
+    );
+    window.set_projects_cost(format_cost(projects.cost()).into());
+    window.set_projects_cost_availability(availability_code(projects.cost().availability()).into());
+    window
+        .set_projects_cost_evidence_label(projection_cost_evidence(window, projects.cost()).into());
+    window.set_projects_events(projection_optional_events(window, projects.event_count()).into());
+    window.set_projects_loaded_label(
+        projects
+            .event_count()
+            .map_or_else(
+                || projection_unavailable(window),
+                |_| projection_loaded_label(window, projects.rows().len() as u64, "project"),
+            )
+            .into(),
+    );
+    window.set_projects_completeness_label(
+        if projects.event_count().is_none() {
+            projection_completeness_unavailable(window)
+        } else if projects.usage_truncated() {
+            projection_more_projects_available(window)
+        } else {
+            projection_complete_range(window)
+        }
+        .into(),
+    );
+    window.set_projects_code_coverage_label(
+        projects
+            .loaded_repository_count()
+            .map_or_else(
+                || projection_repositories_unavailable(window),
+                |count| projection_loaded_label(window, u64::from(count), "repository"),
+            )
+            .into(),
+    );
+    window.set_projects_code_completeness_label(
+        if projects.loaded_repository_count().is_none() {
+            projection_code_completeness_unavailable(window)
+        } else if projects.code_truncated() || !projects.code_complete() {
+            projection_incomplete_code_range(window)
+        } else {
+            projection_complete_code_range(window)
+        }
+        .into(),
+    );
+
+    let rows = projects
+        .rows()
+        .iter()
+        .map(|row| ProjectUsageRow {
+            project_label: row.project().into(),
+            unassociated: row.unassociated(),
+            event_label: format_integer(row.event_count()).into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+            cost_availability: availability_code(row.cost().availability()).into(),
+            cost_label: format_cost(row.cost()).into(),
+            cost_evidence_label: projection_cost_evidence(window, row.cost()).into(),
+            token_ratio: ratio(row.total_tokens().known_sum(), projects.token_maximum()),
+            code_available: row.code_available(),
+            code_complete: row.code_complete(),
+            code_status_label: format_project_code_status(window, row).into(),
+            repository_label: format_project_repository_label(window, row).into(),
+            commits_label: format_optional_integer(row.commits()).into(),
+            added_label: format_optional_prefixed(row.added_lines(), "+").into(),
+            removed_label: format_optional_prefixed(row.removed_lines(), "-").into(),
+            net_label: row
+                .net_lines()
+                .map_or_else(|| "—".to_owned(), format_signed)
+                .into(),
+            efficiency_label: row
+                .cost_per_100_added_lines_micros()
+                .map_or_else(
+                    || "—".to_owned(),
+                    |value| {
+                        projection_per_hundred_added_product_code_lines(
+                            window,
+                            format_usd_micros(value),
+                        )
+                    },
+                )
+                .into(),
+            efficiency_reason_label: row
+                .efficiency_unavailable_reason()
+                .map_or_else(String::new, |reason| format_project_reason(window, reason))
+                .into(),
+            code_evidence_label: format_dashboard_evidence(
+                window,
+                row.code_freshness(),
+                row.code_quality(),
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(window, get_project_usage_rows, set_project_usage_rows, rows);
+}
+
+fn format_optional_range(window: &MainWindow, range: Option<crate::DesktopHistoryRange>) -> String {
+    range.map_or_else(
+        || projection_range_unavailable(window),
+        |(start, end)| {
+            projection_range_before(
+                window,
+                format_date(start.0, start.1, start.2),
+                format_date(end.0, end.1, end.2),
+            )
+        },
+    )
+}
+
+fn format_optional_integer(value: Option<u64>) -> String {
+    value.map_or_else(|| "—".to_owned(), format_integer)
+}
+
+fn format_optional_prefixed(value: Option<u64>, prefix: &str) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |value| format!("{prefix}{}", format_integer(value)),
+    )
+}
+
+fn format_project_code_status(window: &MainWindow, row: &crate::DesktopProjectUsageRow) -> String {
+    if row.code_available() {
+        if row.code_complete() {
+            projection_complete_code(window)
+        } else {
+            projection_incomplete_code(window)
+        }
+    } else {
+        row.efficiency_unavailable_reason().map_or_else(
+            || projection_code_unavailable(window),
+            |reason| format_project_reason(window, reason),
+        )
+    }
+}
+
+fn format_project_repository_label(
+    window: &MainWindow,
+    row: &crate::DesktopProjectUsageRow,
+) -> String {
+    if row.code_available() {
+        projection_repository_label(window, u64::from(row.repository_count()))
+    } else {
+        row.efficiency_unavailable_reason().map_or_else(
+            || projection_repositories_unavailable(window),
+            |reason| format_project_reason(window, reason),
+        )
+    }
+}
+
+fn format_project_reason(window: &MainWindow, reason: &str) -> String {
+    match reason {
+        "git_unavailable" => projection_git_unavailable(window),
+        "repository_not_linked" => projection_not_linked(window),
+        "unassociated_project" => projection_unassociated_project(window),
+        _ => humanize_key(reason),
+    }
+}
+
+fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivityProjection) {
+    window.set_activity_state(activity.state().stable_code().into());
+    window.set_activity_reasons(join_reasons(activity.reason_codes().iter()).into());
+    window.set_activity_context_label(
+        window
+            .global::<ProjectionStrings>()
+            .invoke_activity_context_label(),
+    );
+    window.set_activity_page_available(activity.has_more().is_some());
+    window.set_activity_evidence_label(
+        projection_evidence_label(window, activity.freshness(), activity.quality()).into(),
+    );
+    window.set_activity_loaded_label(
+        activity
+            .has_more()
+            .map_or_else(
+                || projection_unavailable(window),
+                |_| {
+                    window
+                        .global::<ProjectionStrings>()
+                        .invoke_activity_loaded_label(
+                            (activity.rows().len() as u64).to_string().into(),
+                            activity.rows().len() == 1,
+                        )
+                        .to_string()
+                },
+            )
+            .into(),
+    );
+    window.set_activity_page_status_label(
+        window
+            .global::<ProjectionStrings>()
+            .invoke_activity_page_status_label(
+                activity
+                    .has_more()
+                    .map_or(
+                        "unavailable",
+                        |has_more| if has_more { "more" } else { "complete" },
+                    )
+                    .into(),
+            ),
+    );
+    let rhythm = activity.rhythm();
+    window.set_activity_rhythm_state(rhythm.state().stable_code().into());
+    window.set_activity_rhythm_reasons(join_reasons(rhythm.reason_codes().iter()).into());
+    window.set_activity_rhythm_evidence_label(
+        projection_evidence_label(window, rhythm.freshness(), rhythm.quality()).into(),
+    );
+    window.set_activity_rhythm_time_zone_label(
+        window
+            .global::<ProjectionStrings>()
+            .invoke_activity_time_zone_label(rhythm.time_zone_id().unwrap_or("").into()),
+    );
+    window.set_activity_rhythm_range_label(
+        rhythm
+            .range()
+            .map_or_else(
+                || projection_range_unavailable(window),
+                |(start, end)| {
+                    window
+                        .global::<ProjectionStrings>()
+                        .invoke_range_before(
+                            format!("{:04}-{:02}-{:02}", start.0, start.1, start.2).into(),
+                            format!("{:04}-{:02}-{:02}", end.0, end.1, end.2).into(),
+                        )
+                        .to_string()
+                },
+            )
+            .into(),
+    );
+    let hour_maximum = rhythm
+        .hour_rows()
+        .iter()
+        .filter_map(|row| row.total_tokens().known_sum())
+        .max();
+    let weekday_maximum = rhythm
+        .weekday_rows()
+        .iter()
+        .filter_map(|row| row.total_tokens().known_sum())
+        .max();
+    let ratio = |value: DesktopTokenValue, maximum: Option<u64>| -> f32 {
+        match (value.known_sum(), maximum) {
+            (Some(value), Some(maximum)) if maximum > 0 => value as f32 / maximum as f32,
+            _ => 0.0,
+        }
+    };
+    let hour_rows = rhythm
+        .hour_rows()
+        .iter()
+        .map(|row| ActivityRhythmRow {
+            label: format!("{:02}", row.hour()).into(),
+            tokens_label: format_tokens(row.total_tokens()).into(),
+            events_label: window.global::<ProjectionStrings>().invoke_event_count(
+                format_integer(row.event_count()).into(),
+                row.event_count() == 1,
+            ),
+            exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
+                .into(),
+            ratio: ratio(row.total_tokens(), hour_maximum),
+        })
+        .collect::<Vec<_>>();
+    let weekday_rows = rhythm
+        .weekday_rows()
+        .iter()
+        .map(|row| ActivityRhythmRow {
+            label: window
+                .global::<ProjectionStrings>()
+                .invoke_weekday_label(row.weekday().stable_code().into()),
+            tokens_label: format_tokens(row.total_tokens()).into(),
+            events_label: window.global::<ProjectionStrings>().invoke_event_count(
+                format_integer(row.event_count()).into(),
+                row.event_count() == 1,
+            ),
+            exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
+                .into(),
+            ratio: ratio(row.total_tokens(), weekday_maximum),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_activity_rhythm_hour_rows,
+        set_activity_rhythm_hour_rows,
+        hour_rows
+    );
+    set_rows!(
+        window,
+        get_activity_rhythm_weekday_rows,
+        set_activity_rhythm_weekday_rows,
+        weekday_rows
+    );
+    let rows = activity
+        .rows()
+        .iter()
+        .map(|row| RecentActivityRow {
+            time_label: format_timestamp_utc(row.timestamp_seconds(), row.timestamp_nanos()).into(),
+            model_label: row.model().into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_recent_activity_rows,
+        set_recent_activity_rows,
+        rows
+    );
+}
+
+fn apply_notifications_projection(
+    window: &MainWindow,
+    notifications: &DesktopNotificationsProjection,
+) {
+    window.set_notifications_state(notifications.state().stable_code().into());
+    window.set_notifications_reasons(join_reasons(notifications.reason_codes().iter()).into());
+    window.set_notifications_evidence_label(
+        projection_evidence_label(window, notifications.freshness(), notifications.quality())
+            .into(),
+    );
+    let state = notifications.state().stable_code();
+    let strings = window.global::<ProjectionStrings>();
+    window.set_notifications_loaded_label(
+        if matches!(state, "waiting" | "unavailable") {
+            strings
+                .invoke_notifications_loaded_state_label(state.into())
+                .to_string()
+        } else {
+            strings
+                .invoke_notifications_loaded_label(
+                    format_integer(notifications.scopes().len() as u64).into(),
+                    notifications.scopes().len() == 1,
+                    format_integer(notifications.lots().len() as u64).into(),
+                    notifications.lots().len() == 1,
+                )
+                .to_string()
+        }
+        .into(),
+    );
+    let completeness = if state == "waiting" {
+        "waiting"
+    } else if state == "unavailable" {
+        "unavailable"
+    } else if notifications.scopes_truncated() || notifications.lots_truncated() {
+        "bounded"
+    } else if !notifications.reason_codes().is_empty() {
+        "warnings"
+    } else if notifications.lots().is_empty() {
+        "empty"
+    } else {
+        "complete"
+    };
+    window.set_notifications_completeness_label(
+        strings.invoke_notifications_completeness_label(completeness.into()),
+    );
+
+    let scope_rows = notifications
+        .scopes()
+        .iter()
+        .map(|scope| ReminderScopeRow {
+            scope_label: strings
+                .invoke_notification_scope_label(scope.ordinal().to_string().into()),
+            lot_count_label: strings.invoke_notification_benefit_count(
+                format_integer(u64::from(scope.current_lot_count())).into(),
+                scope.current_lot_count() == 1,
+            ),
+            coverage_label: strings
+                .invoke_notification_coverage_label(scope.reminder_coverage().into()),
+            source_label: strings
+                .invoke_notification_profile_source_label(scope.profile_source().into()),
+            leads_label: format_reminder_leads(window, scope.lead_seconds()).into(),
+            next_due_label: scope
+                .nearest_due_at_ms()
+                .map_or_else(
+                    || {
+                        strings
+                            .invoke_notification_next_due_unavailable()
+                            .to_string()
+                    },
+                    |value| {
+                        strings
+                            .invoke_notification_next_due_label(
+                                notification_timestamp_ms(window, value).into(),
+                            )
+                            .to_string()
+                    },
+                )
+                .into(),
+            nearest_expiry_label: scope
+                .nearest_expiry_at_ms()
+                .map_or_else(
+                    || {
+                        strings
+                            .invoke_notification_nearest_expiry_unavailable()
+                            .to_string()
+                    },
+                    |value| {
+                        strings
+                            .invoke_notification_nearest_expiry_label(
+                                notification_timestamp_ms(window, value).into(),
+                            )
+                            .to_string()
+                    },
+                )
+                .into(),
+            evidence_label: projection_evidence_label(
+                window,
+                Some(scope.freshness()),
+                Some(scope.quality()),
+            )
+            .into(),
+            warning_label: join_notification_warning_codes(window, scope.warning_codes().iter())
+                .into(),
+            completeness_label: strings
+                .invoke_notification_completeness_label(scope.completeness().into()),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_reminder_scope_rows,
+        set_reminder_scope_rows,
+        scope_rows
+    );
+
+    let lot_rows = notifications
+        .lots()
+        .iter()
+        .map(|lot| BenefitLotRow {
+            scope_label: strings
+                .invoke_notification_scope_label(lot.scope_ordinal().to_string().into()),
+            benefit_label: humanize_key(lot.label_key()).into(),
+            kind_label: strings.invoke_notification_kind_label(lot.kind().into()),
+            quantity_label: format_integer(lot.quantity()).into(),
+            state_label: strings.invoke_notification_state_label(lot.state().into()),
+            expiry_label: format_benefit_expiry(window, lot.expiry(), lot.state()).into(),
+            granted_label: lot
+                .granted_at_ms()
+                .map_or_else(
+                    || strings.invoke_notification_grant_unavailable().to_string(),
+                    |value| {
+                        strings
+                            .invoke_notification_granted_label(
+                                notification_timestamp_ms(window, value).into(),
+                            )
+                            .to_string()
+                    },
+                )
+                .into(),
+            evidence_label: format!(
+                "{} · {} · {}",
+                strings.invoke_notification_evidence_source_label(lot.evidence_source().into()),
+                strings.invoke_notification_confidence_label(lot.confidence().into()),
+                strings.invoke_notification_detail_kind_label(lot.detail_kind().into()),
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(window, get_benefit_lot_rows, set_benefit_lot_rows, lot_rows);
+}
+
+pub(crate) fn apply_in_app_notification_batch(
+    window: &MainWindow,
+    batch: &DesktopInAppNotificationBatch,
+) -> bool {
+    let strings = window.global::<ProjectionStrings>();
+    let rows = batch
+        .rows()
+        .iter()
+        .map(|notification| {
+            let localized_benefit_label = strings
+                .invoke_in_app_notification_benefit_label(notification.label_key().into())
+                .to_string();
+            let benefit_label = if localized_benefit_label == notification.label_key() {
+                humanize_key(notification.label_key())
+            } else {
+                localized_benefit_label
+            };
+            let kind_label = strings
+                .invoke_in_app_notification_kind_label(notification.kind().stable_code().into())
+                .to_string();
+            let quantity_label = format_integer(notification.quantity());
+            let lead_label = strings
+                .invoke_in_app_reminder_lead_label(
+                    format_reminder_lead(notification.lead_seconds()).into(),
+                )
+                .to_string();
+            let due_label = strings
+                .invoke_in_app_reminder_due_label(
+                    notification_precise_timestamp_ms(window, notification.due_at_ms()).into(),
+                )
+                .to_string();
+            let expiry_label = strings
+                .invoke_in_app_reminder_expiry_label(
+                    notification_precise_timestamp_ms(window, notification.expiry_at_ms()).into(),
+                )
+                .to_string();
+            let delivered_label = strings
+                .invoke_in_app_reminder_queued_label(
+                    notification_precise_timestamp_ms(window, notification.delivered_at_ms())
+                        .into(),
+                )
+                .to_string();
+            let accessible_label = strings
+                .invoke_in_app_reminder_accessible_label(
+                    benefit_label.clone().into(),
+                    kind_label.clone().into(),
+                    quantity_label.clone().into(),
+                    lead_label.clone().into(),
+                    due_label.clone().into(),
+                    expiry_label.clone().into(),
+                    delivered_label.clone().into(),
+                )
+                .to_string();
+            InAppNotificationRow {
+                benefit_label: benefit_label.into(),
+                kind_label: kind_label.into(),
+                quantity_label: quantity_label.into(),
+                lead_label: lead_label.into(),
+                due_label: due_label.into(),
+                expiry_label: expiry_label.into(),
+                delivered_label: delivered_label.into(),
+                accessible_label: accessible_label.into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let count_label = strings
+        .invoke_in_app_notification_count(
+            format_integer(u64::try_from(batch.len()).unwrap_or(u64::MAX)).into(),
+            batch.len() == 1,
+        )
+        .to_string();
+    set_rows!(
+        window,
+        get_in_app_notification_rows,
+        set_in_app_notification_rows,
+        rows
+    );
+    window.set_in_app_notification_count_label(count_label.into());
+    window.set_in_app_notification_visible(true);
+    window.get_in_app_notification_visible()
+        && window.get_in_app_notification_rows().row_count() == batch.len()
+}
+
+fn format_reminder_leads(window: &MainWindow, values: &[u32]) -> String {
+    if values.is_empty() {
+        return window
+            .global::<ProjectionStrings>()
+            .invoke_reminders_disabled()
+            .to_string();
+    }
+    values
+        .iter()
+        .map(|seconds| format_reminder_lead(*seconds))
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn format_reminder_lead(seconds: u32) -> String {
+    const DAY: u32 = 86_400;
+    const HOUR: u32 = 3_600;
+    const MINUTE: u32 = 60;
+    if seconds >= 2 * DAY && seconds.is_multiple_of(DAY) {
+        format!("{}d", seconds / DAY)
+    } else if seconds.is_multiple_of(HOUR) {
+        format!("{}h", seconds / HOUR)
+    } else if seconds.is_multiple_of(MINUTE) {
+        format!("{}m", seconds / MINUTE)
+    } else {
+        format!("{seconds}s")
+    }
+}
+
+fn join_notification_warning_codes<'a>(
+    window: &MainWindow,
+    codes: impl Iterator<Item = &'a str>,
+) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    codes
+        .map(|code| {
+            strings
+                .invoke_notification_warning_label(code.into())
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn format_benefit_expiry(
+    window: &MainWindow,
+    expiry: &DesktopBenefitExpiry,
+    state: &str,
+) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    let expired = state == "expired";
+    match expiry {
+        DesktopBenefitExpiry::ExactUtc { at_ms } => strings
+            .invoke_notification_expiry_exact(
+                notification_precise_timestamp_ms(window, *at_ms).into(),
+                expired,
+            )
+            .to_string(),
+        DesktopBenefitExpiry::BoundedUtc {
+            earliest_at_ms,
+            latest_at_ms,
+        } => strings
+            .invoke_notification_expiry_between(
+                notification_precise_timestamp_ms(window, *earliest_at_ms).into(),
+                notification_precise_timestamp_ms(window, *latest_at_ms).into(),
+                expired,
+            )
+            .to_string(),
+        DesktopBenefitExpiry::ProviderLocal {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            millisecond,
+            time_zone,
+        } => strings
+            .invoke_notification_expiry_provider_local(
+                format!(
+                    "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03} {}",
+                    year, month, day, hour, minute, second, millisecond, time_zone,
+                )
+                .into(),
+                expired,
+            )
+            .to_string(),
+        DesktopBenefitExpiry::ProviderDate {
+            year,
+            month,
+            day,
+            time_zone,
+        } => strings
+            .invoke_notification_expiry_provider_date(
+                format!(
+                    "{:04}-{:02}-{:02}{}",
+                    year,
+                    month,
+                    day,
+                    time_zone
+                        .as_deref()
+                        .map_or_else(String::new, |zone| format!(" {zone}")),
+                )
+                .into(),
+                expired,
+            )
+            .to_string(),
+        DesktopBenefitExpiry::Unknown => strings.invoke_notification_expiry_unknown().to_string(),
+    }
+}
+
+fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
+    window.set_sessions_state(sessions.state().stable_code().into());
+    window.set_sessions_reasons(join_reasons(sessions.reason_codes().iter()).into());
+    window.set_sessions_evidence_label(
+        projection_evidence_label(window, sessions.freshness(), sessions.quality()).into(),
+    );
+    window.set_sessions_loaded_label(
+        sessions
+            .has_more()
+            .map_or_else(
+                || projection_unavailable(window),
+                |_| {
+                    window
+                        .global::<ProjectionStrings>()
+                        .invoke_sessions_loaded_label(
+                            format_integer(sessions.rows().len() as u64).into(),
+                        )
+                        .to_string()
+                },
+            )
+            .into(),
+    );
+    apply_session_navigation_projection(window, sessions);
+
+    let rows = sessions
+        .rows()
+        .iter()
+        .enumerate()
+        .map(|(index, session)| SessionListRow {
+            row_index: i32::try_from(index).unwrap_or(i32::MAX),
+            first_label: format_timestamp_seconds_utc(session.first_timestamp_seconds()).into(),
+            last_label: format_timestamp_seconds_utc(session.last_timestamp_seconds()).into(),
+            duration_label: format_session_duration(
+                session.first_timestamp_seconds(),
+                session.first_timestamp_nanos(),
+                session.last_timestamp_seconds(),
+                session.last_timestamp_nanos(),
+            )
+            .into(),
+            event_label: format_integer(session.event_count()).into(),
+            input_availability: availability_code(session.input().availability()).into(),
+            input_label: format_tokens(session.input()).into(),
+            cached_availability: availability_code(session.cached().availability()).into(),
+            cached_label: format_tokens(session.cached()).into(),
+            output_availability: availability_code(session.output().availability()).into(),
+            output_label: format_tokens(session.output()).into(),
+            reasoning_availability: availability_code(session.reasoning().availability()).into(),
+            reasoning_label: format_tokens(session.reasoning()).into(),
+            total_availability: availability_code(session.total_tokens().availability()).into(),
+            total_label: format_tokens(session.total_tokens()).into(),
+            cost_availability: availability_code(session.cost().availability()).into(),
+            cost_label: format_cost(session.cost()).into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(window, get_session_list_rows, set_session_list_rows, rows);
+    apply_session_detail_projection(window, sessions);
+}
+
+pub(crate) fn apply_session_navigation_projection(
+    window: &MainWindow,
+    sessions: &DesktopSessionsProjection,
+) {
+    let pending = sessions.navigation_pending();
+    let continuation = sessions.page_kind() == Some(crate::DesktopSessionPageKind::Continuation);
+    let retained_unavailable_page = sessions.state() != crate::DesktopDashboardSectionState::Ready
+        && sessions.page_kind().is_some();
+    let next_enabled = !pending
+        && sessions.state() == crate::DesktopDashboardSectionState::Ready
+        && sessions.has_more() == Some(true);
+    window.set_sessions_navigation_pending(pending);
+    window.set_sessions_next_enabled(next_enabled);
+    window.set_sessions_back_to_newest_enabled(
+        !pending && (continuation || retained_unavailable_page),
+    );
+    let status = if pending {
+        window
+            .global::<ProjectionStrings>()
+            .invoke_sessions_page_status_label("loading".into())
+            .to_string()
+    } else {
+        let code = match (sessions.page_kind(), sessions.has_more()) {
+            (Some(crate::DesktopSessionPageKind::Newest), Some(true)) => "newest_more",
+            (Some(crate::DesktopSessionPageKind::Newest), Some(false)) => "newest_complete",
+            (Some(crate::DesktopSessionPageKind::Continuation), Some(true)) => "older_more",
+            (Some(crate::DesktopSessionPageKind::Continuation), Some(false)) => "older_complete",
+            (Some(crate::DesktopSessionPageKind::Newest), None) => "newest_unavailable",
+            (Some(crate::DesktopSessionPageKind::Continuation), None) => "older_unavailable",
+            (None, _) => "unavailable",
+        };
+        window
+            .global::<ProjectionStrings>()
+            .invoke_sessions_page_status_label(code.into())
+            .to_string()
+    };
+    window.set_sessions_page_status_label(status.into());
+}
+
+pub(crate) fn apply_session_detail_projection(
+    window: &MainWindow,
+    sessions: &DesktopSessionsProjection,
+) {
+    let detail = sessions.detail();
+    let strings = window.global::<ProjectionStrings>();
+    window.set_sessions_selected_row(detail.selected_ordinal().map_or(-1, i32::from));
+    window.set_session_detail_state(detail.state().stable_code().into());
+    window.set_session_detail_evidence_label(
+        projection_evidence_label(window, detail.freshness(), detail.quality()).into(),
+    );
+    let status = match detail.failure_code() {
+        Some(code) if detail.state() == crate::DesktopSessionDetailState::Unavailable => strings
+            .invoke_session_detail_unavailable_label(humanize_key(code).into())
+            .to_string(),
+        _ => strings
+            .invoke_session_detail_status_label(
+                detail.state().stable_code().into(),
+                detail.truncated(),
+            )
+            .to_string(),
+    };
+    window.set_session_detail_status_label(status.into());
+    if let Some(summary) = detail.summary() {
+        window.set_session_detail_period_label(
+            format!(
+                "{} → {}",
+                format_timestamp_seconds_utc(summary.first_timestamp_seconds()),
+                format_timestamp_seconds_utc(summary.last_timestamp_seconds())
+            )
+            .into(),
+        );
+        window.set_session_detail_duration_label(
+            format_session_duration(
+                summary.first_timestamp_seconds(),
+                summary.first_timestamp_nanos(),
+                summary.last_timestamp_seconds(),
+                summary.last_timestamp_nanos(),
+            )
+            .into(),
+        );
+        window.set_session_detail_event_label(format_integer(summary.event_count()).into());
+        window.set_session_detail_input_availability(
+            availability_code(summary.input().availability()).into(),
+        );
+        window.set_session_detail_input_label(format_tokens(summary.input()).into());
+        window.set_session_detail_cached_availability(
+            availability_code(summary.cached().availability()).into(),
+        );
+        window.set_session_detail_cached_label(format_tokens(summary.cached()).into());
+        window.set_session_detail_output_availability(
+            availability_code(summary.output().availability()).into(),
+        );
+        window.set_session_detail_output_label(format_tokens(summary.output()).into());
+        window.set_session_detail_reasoning_availability(
+            availability_code(summary.reasoning().availability()).into(),
+        );
+        window.set_session_detail_reasoning_label(format_tokens(summary.reasoning()).into());
+        window.set_session_detail_total_availability(
+            availability_code(summary.total_tokens().availability()).into(),
+        );
+        window.set_session_detail_total_label(format_tokens(summary.total_tokens()).into());
+        window.set_session_detail_cost_availability(
+            availability_code(summary.cost().availability()).into(),
+        );
+        window.set_session_detail_cost_label(format_cost(summary.cost()).into());
+    } else {
+        window.set_session_detail_period_label("".into());
+        window.set_session_detail_duration_label("".into());
+        window.set_session_detail_event_label("".into());
+        window.set_session_detail_input_availability("unavailable".into());
+        window.set_session_detail_input_label(strings.invoke_unavailable());
+        window.set_session_detail_cached_availability("unavailable".into());
+        window.set_session_detail_cached_label(strings.invoke_unavailable());
+        window.set_session_detail_output_availability("unavailable".into());
+        window.set_session_detail_output_label(strings.invoke_unavailable());
+        window.set_session_detail_reasoning_availability("unavailable".into());
+        window.set_session_detail_reasoning_label(strings.invoke_unavailable());
+        window.set_session_detail_total_availability("unavailable".into());
+        window.set_session_detail_total_label(strings.invoke_unavailable());
+        window.set_session_detail_cost_availability("unavailable".into());
+        window.set_session_detail_cost_label(strings.invoke_unavailable());
+    }
+    let rows = detail
+        .breakdown_rows()
+        .iter()
+        .map(|row| SessionDetailBreakdownRow {
+            kind: row.kind().stable_code().into(),
+            label: row.label().into(),
+            event_label: format_integer(row.event_count()).into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+            cost_availability: availability_code(row.cost().availability()).into(),
+            cost_label: format_cost(row.cost()).into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_session_detail_breakdown_rows,
+        set_session_detail_breakdown_rows,
+        rows
+    );
+}
+
+fn format_session_duration(
+    first_seconds: i64,
+    first_nanos: u32,
+    last_seconds: i64,
+    last_nanos: u32,
+) -> String {
+    const NANOS_PER_SECOND: i128 = 1_000_000_000;
+    if first_nanos >= NANOS_PER_SECOND as u32 || last_nanos >= NANOS_PER_SECOND as u32 {
+        return "Unavailable".to_owned();
+    }
+    let duration_nanos = (i128::from(last_seconds) - i128::from(first_seconds)) * NANOS_PER_SECOND
+        + i128::from(last_nanos)
+        - i128::from(first_nanos);
+    if duration_nanos < 0 {
+        return "Unavailable".to_owned();
+    }
+    if duration_nanos == 0 {
+        return "0s".to_owned();
+    }
+    if duration_nanos < NANOS_PER_SECOND {
+        return "<1s".to_owned();
+    }
+    let seconds = u64::try_from(duration_nanos / NANOS_PER_SECOND).unwrap_or(u64::MAX);
+    let hours = seconds / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        format!("{hours}h {minutes}m")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds}s")
+    } else {
+        format!("{seconds}s")
+    }
+}
+
+fn apply_code_output(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
+    let section = dashboard.section(DesktopDashboardSectionKey::CodeOutput);
+    if !section.has_data() {
+        for setter in [
+            MainWindow::set_dashboard_code_commits,
+            MainWindow::set_dashboard_code_added,
+            MainWindow::set_dashboard_code_removed,
+            MainWindow::set_dashboard_code_net,
+            MainWindow::set_dashboard_code_efficiency,
+            MainWindow::set_dashboard_code_evidence,
+        ] {
+            setter(window, "—".into());
+        }
+        return;
+    }
+    let code = dashboard.code_output();
+    window.set_dashboard_code_commits(format_counted(code.commits(), "commit", "commits").into());
+    window.set_dashboard_code_added(format!("+{}", format_integer(code.added_lines())).into());
+    window.set_dashboard_code_removed(format!("−{}", format_integer(code.removed_lines())).into());
+    window.set_dashboard_code_net(format_signed(code.net_lines()).into());
+    window.set_dashboard_code_efficiency(
+        code.cost_per_100_added_lines_micros()
+            .map_or_else(
+                || projection_efficiency_unavailable(window),
+                |value| projection_per_hundred_lines(window, format_usd_micros(value)),
+            )
+            .into(),
+    );
+    window.set_dashboard_code_evidence(
+        format!(
+            "{} · {} · {}",
+            projection_freshness_label(window, code.freshness()),
+            projection_quality_label(window, code.quality()),
+            projection_completeness(window, code.complete())
+        )
+        .into(),
+    );
+}
+
+fn apply_trend(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
+    let max_tokens = dashboard.trend_max_tokens();
+    let max_cost = dashboard.trend_max_cost_micros();
+    let rows = dashboard
+        .trend_points()
+        .iter()
+        .map(|point| {
+            let (start_year, start_month, start_day) = point.start_date();
+            let (end_year, end_month, end_day) = point.end_date();
+            DashboardTrendPoint {
+                date_label: format!(
+                    "{start_year:04}-{start_month:02}-{start_day:02}–{end_year:04}-{end_month:02}-{end_day:02}"
+                ).into(),
+                axis_label: format!("{start_month:02}-{start_day:02}").into(),
+                tokens_availability: availability_code(point.tokens().availability()).into(),
+                tokens_label: format_tokens(point.tokens()).into(),
+                tokens_ratio: ratio(point.tokens().known_sum(), max_tokens),
+                cost_availability: availability_code(point.cost().availability()).into(),
+                cost_label: format_cost(point.cost()).into(),
+                cost_ratio: ratio(point.cost().micros(), max_cost),
+            }
+        })
+        .collect::<Vec<_>>();
+    window.set_dashboard_trend_token_geometry(dashboard_trend_path(&rows, true).into());
+    window.set_dashboard_trend_cost_geometry(dashboard_trend_path(&rows, false).into());
+    window.set_dashboard_trend_token_area(dashboard_trend_area_path(&rows, true).into());
+    window.set_dashboard_trend_cost_area(dashboard_trend_area_path(&rows, false).into());
+    window.set_dashboard_trend_token_axis(
+        dashboard_trend_axis(&rows, true).unwrap_or_default().into(),
+    );
+    window.set_dashboard_trend_cost_axis(
+        dashboard_trend_axis(&rows, false)
+            .unwrap_or_default()
+            .into(),
+    );
+    set_rows!(
+        window,
+        get_dashboard_trend_points,
+        set_dashboard_trend_points,
+        rows
+    );
+}
+
+/// The y a ratio of zero maps to in the trend viewbox, and so the foot of any shaded area.
+const TREND_ZERO_LINE: f64 = 80.0;
+
+fn dashboard_trend_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
+    if rows.len() < 2 {
+        return String::new();
+    }
+    let mut path = String::with_capacity(rows.len().saturating_mul(20));
+    let denominator = (rows.len() - 1) as f64;
+    let mut segment_started = false;
+    for (index, row) in rows.iter().enumerate() {
+        let (availability, ratio) = if tokens {
+            (&row.tokens_availability, row.tokens_ratio)
+        } else {
+            (&row.cost_availability, row.cost_ratio)
+        };
+        if availability.as_str() == "unavailable" {
+            segment_started = false;
+            continue;
+        }
+        let x = 28.0 + (index as f64 / denominator) * 944.0;
+        let y = 10.0 + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * 70.0;
+        let command = if segment_started { 'L' } else { 'M' };
+        path.push_str(&format!("{command} {x:.2} {y:.2} "));
+        segment_started = true;
+    }
+    path
+}
+
+/// Builds the closed geometry that shades the space between a trend series and its zero line.
+///
+/// The line geometry starts a fresh subpath wherever a day is unavailable, and the fill has to
+/// break with it: one polygon per run of known days, each closed down to the zero line. Filling
+/// the line geometry instead would join its last point back to its first and shade a region that
+/// corresponds to nothing. A run of one day encloses no area and is skipped, which is also what
+/// the line does with it.
+fn dashboard_trend_area_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
+    if rows.len() < 2 {
+        return String::new();
+    }
+    let denominator = (rows.len() - 1) as f64;
+    let mut path = String::with_capacity(rows.len().saturating_mul(24));
+    let mut run: Vec<(f64, f64)> = Vec::new();
+    let flush = |run: &mut Vec<(f64, f64)>, path: &mut String| {
+        if run.len() >= 2 {
+            let (first_x, _) = run[0];
+            let (last_x, _) = run[run.len() - 1];
+            path.push_str(&format!("M {first_x:.2} {TREND_ZERO_LINE:.2} "));
+            for (x, y) in run.iter() {
+                path.push_str(&format!("L {x:.2} {y:.2} "));
+            }
+            path.push_str(&format!("L {last_x:.2} {TREND_ZERO_LINE:.2} Z "));
+        }
+        run.clear();
+    };
+    for (index, row) in rows.iter().enumerate() {
+        let (availability, ratio) = if tokens {
+            (&row.tokens_availability, row.tokens_ratio)
+        } else {
+            (&row.cost_availability, row.cost_ratio)
+        };
+        if availability.as_str() == "unavailable" {
+            flush(&mut run, &mut path);
+            continue;
+        }
+        let x = 28.0 + (index as f64 / denominator) * 944.0;
+        let y = 10.0 + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * 70.0;
+        run.push((x, y));
+    }
+    flush(&mut run, &mut path);
+    path
+}
+
+fn dashboard_trend_axis(rows: &[DashboardTrendPoint], tokens: bool) -> Option<String> {
+    rows.iter()
+        .filter(|row| {
+            if tokens {
+                row.tokens_availability.as_str() != "unavailable"
+            } else {
+                row.cost_availability.as_str() != "unavailable"
+            }
+        })
+        .max_by(|left, right| {
+            let left = if tokens {
+                left.tokens_ratio
+            } else {
+                left.cost_ratio
+            };
+            let right = if tokens {
+                right.tokens_ratio
+            } else {
+                right.cost_ratio
+            };
+            left.total_cmp(&right)
+        })
+        .map(|row| {
+            if tokens {
+                row.tokens_label.to_string()
+            } else {
+                row.cost_label.to_string()
+            }
+        })
+}
+
+fn apply_sessions(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
+    let rows = dashboard
+        .sessions()
+        .iter()
+        .map(|session| DashboardSessionRow {
+            ordinal: i32::from(session.ordinal()),
+            time_label: format!(
+                "{}–{}",
+                format_timestamp_seconds(session.first_timestamp_seconds()),
+                format_timestamp_seconds(session.last_timestamp_seconds())
+            )
+            .into(),
+            tokens_availability: availability_code(session.tokens().availability()).into(),
+            tokens_label: format_tokens(session.tokens()).into(),
+            cost_availability: availability_code(session.cost().availability()).into(),
+            cost_label: format_cost(session.cost()).into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_dashboard_session_rows,
+        set_dashboard_session_rows,
+        rows
+    );
+}
+
+fn apply_activity(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
+    let has_data = dashboard
+        .section(DesktopDashboardSectionKey::Activity)
+        .has_data();
+    let maximum = has_data
+        .then(|| dashboard.activity().iter().map(|row| row.count()).max())
+        .flatten();
+    let rows = dashboard
+        .activity()
+        .iter()
+        .map(|row| DashboardActivityRow {
+            key: row.key().stable_key().into(),
+            count_label: if has_data {
+                format_integer(row.count()).into()
+            } else {
+                "—".into()
+            },
+            ratio: if has_data {
+                ratio(Some(row.count()), maximum)
+            } else {
+                0.0
+            },
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_dashboard_activity_rows,
+        set_dashboard_activity_rows,
+        rows
+    );
+}
+
+fn apply_models(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
+    let rows = dashboard
+        .models()
+        .iter()
+        .map(|row| DashboardModelRow {
+            ordinal: i32::from(row.ordinal()),
+            label: row.model().into(),
+            tokens_availability: availability_code(row.tokens().availability()).into(),
+            tokens_label: format_tokens(row.tokens()).into(),
+            // The share arrives on the snapshot rather than being recomputed here. It was
+            // computed in both places for a while, which is one implementation too many of
+            // a number the user reads: the bar on screen and the field in the snapshot
+            // could disagree, and only one of them is contracted.
+            // Absent means a bar of no width rather than a full one: a share the
+            // projection refused to state must not be drawn as certainty.
+            tokens_ratio: row.share_ppm().map_or(0.0, ppm_ratio),
+            cost_availability: availability_code(row.cost().availability()).into(),
+            cost_label: format_cost(row.cost()).into(),
+        })
+        .collect::<Vec<_>>();
+    set_rows!(
+        window,
+        get_dashboard_model_rows,
+        set_dashboard_model_rows,
+        rows
+    );
+}
+
+fn model<T: Clone + 'static>(rows: Vec<T>) -> ModelRc<T> {
+    ModelRc::new(VecModel::from(rows))
+}
+
+/// Patches the model already bound to a property instead of replacing it, and
+/// returns a replacement only when the row count changed.
+///
+/// `ModelRc`'s equality is pointer identity, so a freshly built model is never
+/// equal to the one it replaces. The repeater then discards every instance, each
+/// drop reaches `free_graphics_resources`, and that sets `force_screen_refresh`
+/// unconditionally — a full-window repaint for data that may be identical. Writing
+/// rows through the existing model keeps the instances, and a projection whose rows
+/// all compare equal emits no change notification at all, so it costs no repaint.
+fn patch_rows<T: Clone + PartialEq + 'static>(
+    bound: &ModelRc<T>,
+    rows: Vec<T>,
+) -> Option<ModelRc<T>> {
+    if bound.row_count() != rows.len() {
+        return Some(ModelRc::new(VecModel::from(rows)));
+    }
+    for (index, row) in rows.into_iter().enumerate() {
+        if bound.row_data(index).as_ref() != Some(&row) {
+            bound.set_row_data(index, row);
+        }
+    }
+    None
+}
+
+fn dashboard_section_label(window: &MainWindow, key: DesktopDashboardSectionKey) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_dashboard_section_label(key.stable_key().into())
+        .to_string()
+}
+
+const fn availability_code(value: DesktopValueAvailability) -> &'static str {
+    match value {
+        DesktopValueAvailability::Unavailable => "unavailable",
+        DesktopValueAvailability::Known => "known",
+        DesktopValueAvailability::Partial => "partial",
+        DesktopValueAvailability::Complete => "complete",
+        DesktopValueAvailability::LegitimateZero => "zero",
+    }
+}
+
+fn format_tokens(value: DesktopTokenValue) -> String {
+    match value.availability() {
+        DesktopValueAvailability::Unavailable => "—".to_owned(),
+        DesktopValueAvailability::Partial => value.known_sum().map_or_else(
+            || "—".to_owned(),
+            |known| {
+                format!(
+                    "{} ({}/{})",
+                    format_integer(known),
+                    format_integer(value.known_count()),
+                    format_integer(value.event_count())
+                )
+            },
+        ),
+        DesktopValueAvailability::Known
+        | DesktopValueAvailability::Complete
+        | DesktopValueAvailability::LegitimateZero => value
+            .known_sum()
+            .map_or_else(|| "—".to_owned(), format_integer),
+    }
+}
+
+fn format_cost(value: DesktopCostValue) -> String {
+    value
+        .micros()
+        .map_or_else(|| "—".to_owned(), format_usd_micros)
+}
+
+fn format_counted(value: u64, singular: &str, plural: &str) -> String {
+    format!(
+        "{} {}",
+        format_integer(value),
+        if value == 1 { singular } else { plural }
+    )
+}
+
+fn format_integer(value: u64) -> String {
+    format_unsigned(u128::from(value))
+}
+
+fn format_unsigned(value: u128) -> String {
+    let digits = value.to_string();
+    let mut result = String::with_capacity(digits.len().saturating_add(digits.len() / 3));
+    for (index, byte) in digits.bytes().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            result.push(',');
+        }
+        result.push(char::from(byte));
+    }
+    result
+}
+
+fn format_signed(value: i128) -> String {
+    if value > 0 {
+        format!("+{}", format_unsigned(value.unsigned_abs()))
+    } else if value < 0 {
+        format!("−{}", format_unsigned(value.unsigned_abs()))
+    } else {
+        "0".to_owned()
+    }
+}
+
+fn format_usd_micros(value: u64) -> String {
+    if value == 0 {
+        return "$0.00".to_owned();
+    }
+    // Saturating, because the rounding term overflows within 5,000 micros of the top of the
+    // range. A debug build panics there; a release build wraps and renders an enormous cost
+    // as a trivial one, which is the fabrication this formatter exists to refuse.
+    let cents = value.saturating_add(5_000) / 10_000;
+    if cents == 0 {
+        // A real cost below half a cent. Rendering it as `$0.00` would claim the work
+        // was free, which is the same fabrication the token pipeline refuses to make.
+        return "<$0.01".to_owned();
+    }
+    format!("${}.{:02}", format_integer(cents / 100), cents % 100)
+}
+
+fn ppm_ratio(value: u32) -> f32 {
+    (f64::from(value) / 1_000_000.0) as f32
+}
+
+fn ratio(value: Option<u64>, maximum: Option<u64>) -> f32 {
+    match value.zip(maximum) {
+        Some((value, maximum)) if maximum > 0 => {
+            ((value as f64) / (maximum as f64)).clamp(0.0, 1.0) as f32
+        }
+        _ => 0.0,
+    }
+}
+
+fn humanize_key(value: &str) -> String {
+    let tail = value.rsplit('.').next().map_or(value, |part| part);
+    let mut result = String::with_capacity(tail.len());
+    let mut capitalize = true;
+    for character in tail.chars() {
+        if matches!(character, '_' | '-') {
+            if !result.ends_with(' ') {
+                result.push(' ');
+            }
+            capitalize = true;
+        } else if capitalize {
+            result.extend(character.to_uppercase());
+            capitalize = false;
+        } else {
+            result.push(character);
+        }
+    }
+    if result.is_empty() {
+        "Quota window".to_owned()
+    } else {
+        result
+    }
+}
+
+fn projection_evidence_label(
+    window: &MainWindow,
+    freshness: Option<DesktopFreshness>,
+    quality: Option<DesktopQuality>,
+) -> String {
+    let Some((freshness, quality)) = freshness.zip(quality) else {
+        return window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_unavailable()
+            .to_string();
+    };
+    let freshness = match freshness {
+        DesktopFreshness::Fresh => "fresh",
+        DesktopFreshness::Aging => "aging",
+        DesktopFreshness::Stale => "stale",
+        DesktopFreshness::Unavailable => "unavailable",
+    };
+    let quality = match quality {
+        DesktopQuality::Authoritative => "authoritative",
+        DesktopQuality::Derived => "derived",
+        DesktopQuality::Estimated => "estimated",
+        DesktopQuality::Partial => "partial",
+        DesktopQuality::Conflict => "conflict",
+        DesktopQuality::Unknown => "unknown",
+    };
+    let strings = window.global::<ProjectionStrings>();
+    strings
+        .invoke_evidence_label(
+            strings.invoke_freshness_label(freshness.into()),
+            strings.invoke_quality_label(quality.into()),
+        )
+        .to_string()
+}
+
+const fn freshness_label(value: DesktopFreshness) -> &'static str {
+    match value {
+        DesktopFreshness::Fresh => "Fresh",
+        DesktopFreshness::Aging => "Aging",
+        DesktopFreshness::Stale => "Stale",
+        DesktopFreshness::Unavailable => "Unavailable",
+    }
+}
+
+const fn quality_label(value: DesktopQuality) -> &'static str {
+    match value {
+        DesktopQuality::Authoritative => "Authoritative",
+        DesktopQuality::Derived => "Derived",
+        DesktopQuality::Estimated => "Estimated",
+        DesktopQuality::Partial => "Partial",
+        DesktopQuality::Conflict => "Conflict",
+        DesktopQuality::Unknown => "Unknown",
+    }
+}
+
+fn format_timestamp_ms(value: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
+        || "at an unknown time".to_owned(),
+        |value| value.format("%Y-%m-%d %H:%M UTC").to_string(),
+    )
+}
+
+fn notification_timestamp_ms(window: &MainWindow, value: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
+        || projection_time_unavailable(window),
+        |value| value.format("%Y-%m-%d %H:%M UTC").to_string(),
+    )
+}
+
+#[cfg(test)]
+fn format_precise_timestamp_ms(value: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
+        || "at an unknown time".to_owned(),
+        |value| value.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string(),
+    )
+}
+
+fn notification_precise_timestamp_ms(window: &MainWindow, value: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
+        || projection_time_unavailable(window),
+        |value| value.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string(),
+    )
+}
+
+fn format_timestamp_seconds(value: i64) -> String {
+    DateTime::<Utc>::from_timestamp(value, 0).map_or_else(
+        || "unknown".to_owned(),
+        |value| value.format("%H:%M:%S").to_string(),
+    )
+}
+
+fn format_timestamp_seconds_utc(value: i64) -> String {
+    DateTime::<Utc>::from_timestamp(value, 0).map_or_else(
+        || "Unavailable".to_owned(),
+        |value| value.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+    )
+}
+
+fn format_timestamp_utc(seconds: i64, nanos: u32) -> String {
+    DateTime::<Utc>::from_timestamp(seconds, nanos).map_or_else(
+        || "Unavailable".to_owned(),
+        |value| {
+            let base = value.format("%Y-%m-%d %H:%M:%S");
+            if nanos == 0 {
+                format!("{base} UTC")
+            } else {
+                let fraction = format!("{nanos:09}");
+                format!("{base}.{} UTC", fraction.trim_end_matches('0'))
+            }
+        },
+    )
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use std::sync::mpsc::sync_channel;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    use super::{
+        DesktopReliableStateProjection, DesktopShell, MainWindow, apply_presentation_style,
+        format_precise_timestamp_ms, format_session_duration, format_timestamp_utc,
+        notification_timestamp_ms, wire_presentation_density,
+    };
+    use crate::{
+        DesktopBackupPolicy, DesktopColorScheme, DesktopDensity, DesktopIntent,
+        DesktopIntentAdmission, DesktopIntentSink, DesktopLayout, DesktopLocale,
+        DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
+        DesktopPresentationSelection, DesktopPresentationSettings, DesktopPresentationStyle,
+        DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateSummary,
+        DesktopReminderPolicy, DesktopReminderSyncState, DesktopSessionPageIntent,
+        DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink, DesktopSkin,
+        UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+        UnavailableDesktopSessionPageIntentSink,
+    };
+    use tokenmaster_product::ProductReducer;
+
+    struct ReentrantPresentationSink {
+        style: Arc<Mutex<DesktopPresentationStyle>>,
+        acquired_style: Cell<bool>,
+        submissions: Cell<u64>,
+    }
+
+    struct AcceptingPresentationSink;
+
+    struct RetainingSessionPageSink {
+        _token: Rc<()>,
+    }
+
+    impl DesktopSessionPageIntentSink for RetainingSessionPageSink {
+        fn submit(&self, _intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+            DesktopSessionPageIntentAdmission::Rejected
+        }
+    }
+
+    impl DesktopIntentSink for AcceptingPresentationSink {
+        fn submit(&self, _: DesktopIntent) -> DesktopIntentAdmission {
+            DesktopIntentAdmission::Started
+        }
+    }
+
+    #[test]
+    fn shell_retains_the_supplied_session_page_sink_for_its_lifetime() -> Result<(), String> {
+        i_slint_backend_testing::init_no_event_loop();
+        let token = Rc::new(());
+        let weak = Rc::downgrade(&token);
+        let page_sink: Rc<dyn DesktopSessionPageIntentSink> =
+            Rc::new(RetainingSessionPageSink { _token: token });
+        let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+            &ProductReducer::new().snapshot(),
+            DesktopReliableStateProjection::unavailable(),
+            Rc::new(UnavailableDesktopIntentSink),
+            Rc::new(UnavailableDesktopSessionDetailIntentSink),
+            Rc::clone(&page_sink),
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        drop(page_sink);
+        assert!(weak.upgrade().is_some());
+        drop(shell);
+        assert!(weak.upgrade().is_none());
+        Ok(())
+    }
+
+    fn reliable_state_with_presentation_and_operation(
+        density: DesktopDensity,
+        skin: DesktopSkin,
+        operation: Option<DesktopOperationSnapshot>,
+    ) -> DesktopReliableStateProjection {
+        reliable_state_with_presentation_locale_and_operation(
+            density,
+            skin,
+            DesktopLocale::English,
+            operation,
+        )
+    }
+
+    fn reliable_state_with_presentation_locale_and_operation(
+        density: DesktopDensity,
+        skin: DesktopSkin,
+        locale: DesktopLocale,
+        operation: Option<DesktopOperationSnapshot>,
+    ) -> DesktopReliableStateProjection {
+        let summary = DesktopReliableStateSummary::new_with_settings(
+            DesktopReliableStateHealth::Healthy,
+            false,
+            "healthy",
+            DesktopBackupPolicy::disabled(),
+            DesktopReminderPolicy::unavailable(),
+            DesktopPresentationSettings::new(
+                density,
+                skin,
+                DesktopColorScheme::System,
+                DesktopLayout::Refined,
+                locale,
+            ),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            operation,
+            None,
+        );
+        DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
+            1,
+            summary,
+            Vec::new(),
+        ))
+    }
+
+    fn publish_from_worker(
+        notifier: super::DesktopReliableStateNotifier,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), String> {
+        thread::spawn(move || notifier.publish(projection))
+            .join()
+            .map_err(|_| String::from("publisher thread"))?
+            .map_err(|_| String::from("publication"))
+    }
+
+    impl DesktopIntentSink for ReentrantPresentationSink {
+        fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
+            if matches!(intent, DesktopIntent::UpdatePresentation(_)) {
+                self.submissions.set(self.submissions.get() + 1);
+                let Ok(mut style) = self.style.try_lock() else {
+                    return DesktopIntentAdmission::Rejected;
+                };
+                self.acquired_style.set(true);
+                assert_eq!(
+                    style.select_density_index(2),
+                    crate::DesktopPresentationApplyOutcome::Applied
+                );
+            }
+            DesktopIntentAdmission::Started
+        }
+    }
+
+    #[test]
+    fn presentation_submission_does_not_hold_the_style_mutex_or_overwrite_reentry()
+    -> Result<(), String> {
+        i_slint_backend_testing::init_no_event_loop();
+        let window = MainWindow::new().map_err(|_| String::from("window"))?;
+        let style = Arc::new(Mutex::new(DesktopPresentationStyle::from_persisted(
+            DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                DesktopColorScheme::System,
+                DesktopLayout::Refined,
+                DesktopLocale::English,
+            ),
+        )));
+        let initial_style = *style.lock().map_err(|_| String::from("initial style"))?;
+        apply_presentation_style(&window, initial_style);
+        let sink = Rc::new(ReentrantPresentationSink {
+            style: Arc::clone(&style),
+            acquired_style: Cell::new(false),
+            submissions: Cell::new(0),
+        });
+        wire_presentation_density(&window, Arc::clone(&style), sink.clone());
+
+        window.invoke_select_presentation_density(1);
+
+        assert!(sink.acquired_style.get());
+        assert_eq!(sink.submissions.get(), 1);
+        let reentrant_style = *style.lock().map_err(|_| String::from("reentrant style"))?;
+        assert_eq!(reentrant_style.density(), DesktopDensity::UltraCompact);
+        assert_eq!(
+            reentrant_style.persisted_selection(),
+            DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                DesktopColorScheme::System,
+                DesktopLayout::Refined,
+                DesktopLocale::English,
+            )
+        );
+        assert_eq!(reentrant_style.revision().get(), 1);
+        assert_eq!(
+            reentrant_style.persistence(),
+            crate::DesktopPresentationPersistence::NotSaved
+        );
+        assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+        assert_eq!(window.get_presentation_revision(), "1");
+        assert_eq!(window.get_presentation_persistence_state(), "not_saved");
+        Ok(())
+    }
+
+    fn terminal_presentation_outcomes_survive_generic_replacement_until_one_delivery()
+    -> Result<(), String> {
+        for (phase, persisted_density, expected_persistence) in [
+            (
+                DesktopOperationPhase::Succeeded,
+                DesktopDensity::Compact,
+                "saved",
+            ),
+            (
+                DesktopOperationPhase::Failed,
+                DesktopDensity::Comfortable,
+                "not_saved",
+            ),
+        ] {
+            let shell = DesktopShell::new_with_reliable_state(
+                &ProductReducer::new().snapshot(),
+                reliable_state_with_presentation_and_operation(
+                    DesktopDensity::Comfortable,
+                    DesktopSkin::Refined,
+                    None,
+                ),
+                Rc::new(AcceptingPresentationSink),
+            )
+            .map_err(|_| String::from("desktop shell"))?;
+            let window = shell.window();
+            window.invoke_select_presentation_density(1);
+            let notifier = shell.reliable_state_notifier();
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_presentation_and_operation(
+                    persisted_density,
+                    DesktopSkin::Refined,
+                    Some(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::UpdatePresentation,
+                        phase,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_presentation_and_operation(
+                    persisted_density,
+                    DesktopSkin::Refined,
+                    Some(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::Backup,
+                        DesktopOperationPhase::Running,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+            notifier
+                .publish_operation(Some(DesktopOperationSnapshot::new(
+                    DesktopOperationKind::Backup,
+                    DesktopOperationPhase::Running,
+                    false,
+                    None,
+                )))
+                .map_err(|_| String::from("generic operation publication"))?;
+            assert!(
+                notifier
+                    .inner
+                    .latest
+                    .lock()
+                    .map_err(|_| String::from("latest delivery"))?
+                    .is_some(),
+                "capacity one retains exactly one pending delivery"
+            );
+
+            notifier.inner.deliver_latest();
+
+            assert_eq!(window.get_presentation_density_key(), "compact");
+            assert_eq!(
+                window.get_presentation_persistence_state(),
+                expected_persistence
+            );
+            assert_eq!(window.get_reliable_operation_kind(), "backup");
+            assert!(
+                notifier
+                    .inner
+                    .latest
+                    .lock()
+                    .map_err(|_| String::from("delivered latest"))?
+                    .is_none(),
+                "terminal marker is consumed with the sole delivery"
+            );
+        }
+        Ok(())
+    }
+
+    fn config_and_portable_restore_terminals_survive_generic_replacement() -> Result<(), String> {
+        for kind in [
+            DesktopOperationKind::ApplyConfig,
+            DesktopOperationKind::RestoreWithPortableSettings,
+        ] {
+            let shell = DesktopShell::new_with_reliable_state(
+                &ProductReducer::new().snapshot(),
+                reliable_state_with_presentation_and_operation(
+                    DesktopDensity::Comfortable,
+                    DesktopSkin::Refined,
+                    None,
+                ),
+                Rc::new(AcceptingPresentationSink),
+            )
+            .map_err(|_| String::from("desktop shell"))?;
+            let window = shell.window();
+            window.invoke_select_presentation_density(1);
+            let notifier = shell.reliable_state_notifier();
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_presentation_locale_and_operation(
+                    DesktopDensity::UltraCompact,
+                    DesktopSkin::Graphite,
+                    DesktopLocale::Russian,
+                    Some(DesktopOperationSnapshot::new(
+                        kind,
+                        DesktopOperationPhase::Succeeded,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_presentation_locale_and_operation(
+                    DesktopDensity::UltraCompact,
+                    DesktopSkin::Graphite,
+                    DesktopLocale::Russian,
+                    Some(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::Backup,
+                        DesktopOperationPhase::Running,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+
+            notifier.inner.deliver_latest();
+
+            assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+            assert_eq!(window.get_active_route_label(), "Панель управления");
+            assert_eq!(window.get_presentation_persistence_state(), "saved");
+            assert_eq!(window.get_reliable_operation_kind(), "backup");
+        }
+
+        let shell = DesktopShell::new_with_reliable_state(
+            &ProductReducer::new().snapshot(),
+            reliable_state_with_presentation_and_operation(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                None,
+            ),
+            Rc::new(AcceptingPresentationSink),
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        shell
+            .apply_reliable_state(reliable_state_with_presentation_locale_and_operation(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                DesktopLocale::Russian,
+                Some(DesktopOperationSnapshot::new(
+                    DesktopOperationKind::ApplyConfig,
+                    DesktopOperationPhase::Succeeded,
+                    false,
+                    None,
+                )),
+            ))
+            .map_err(|_| String::from("direct reliable state apply"))?;
+        assert_eq!(shell.window().get_active_route_label(), "Панель управления");
+        Ok(())
+    }
+
+    #[test]
+    fn notification_expiry_preserves_exact_millisecond_endpoints() {
+        assert_eq!(
+            format_precise_timestamp_ms(1_784_203_200_001),
+            "2026-07-16 12:00:00.001 UTC"
+        );
+        assert_eq!(
+            format_precise_timestamp_ms(1_784_203_200_002),
+            "2026-07-16 12:00:00.002 UTC"
+        );
+    }
+
+    #[test]
+    fn notification_timestamp_uses_the_localizable_unavailable_atom_for_out_of_range_values()
+    -> Result<(), String> {
+        i_slint_backend_testing::init_no_event_loop();
+        let shell = DesktopShell::new_with_reliable_state(
+            &ProductReducer::new().snapshot(),
+            reliable_state_with_presentation_and_operation(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                None,
+            ),
+            Rc::new(AcceptingPresentationSink),
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        let window = shell.window();
+
+        assert_eq!(
+            notification_timestamp_ms(window, i64::MAX),
+            "Time unavailable"
+        );
+        window.invoke_select_presentation_locale(1);
+        assert_eq!(
+            notification_timestamp_ms(window, i64::MAX),
+            "Время недоступно"
+        );
+        window.invoke_select_presentation_locale(2);
+        assert_ne!(
+            notification_timestamp_ms(window, i64::MAX),
+            "at an unknown time"
+        );
+        window.invoke_select_presentation_locale(0);
+        Ok(())
+    }
+
+    #[test]
+    fn activity_timestamp_preserves_fractional_utc_truth() {
+        assert_eq!(
+            format_timestamp_utc(1_784_163_600, 123_450_000),
+            "2026-07-16 01:00:00.12345 UTC"
+        );
+        assert_eq!(
+            format_timestamp_utc(1_784_163_600, 0),
+            "2026-07-16 01:00:00 UTC"
+        );
+        assert_eq!(
+            format_timestamp_utc(1_784_163_600, 1_000_000_000),
+            "Unavailable"
+        );
+    }
+
+    #[test]
+    fn duration_borrows_nanoseconds_across_the_second_boundary() {
+        assert_eq!(
+            format_session_duration(10, 900_000_000, 11, 100_000_000),
+            "<1s"
+        );
+        assert_eq!(
+            format_session_duration(10, 100_000_000, 11, 900_000_000),
+            "1s"
+        );
+        assert_eq!(
+            format_session_duration(10, 100_000_000, 10, 100_000_000),
+            "0s"
+        );
+        assert_eq!(
+            format_session_duration(11, 100_000_000, 10, 900_000_000),
+            "Unavailable"
+        );
+    }
+
+    fn assert_pending_reminder_publication_waits_for_visible_atomic_projection(
+        shell: &DesktopShell,
+        publish_pending: impl FnOnce(super::DesktopReliableStateNotifier) -> Result<(), String>
+        + Send
+        + 'static,
+        expected_kind: &str,
+    ) -> Result<(), String> {
+        let window = shell.window();
+        let notifier = shell.reliable_state_notifier();
+        let coalescer = notifier.clone();
+        let inner = std::sync::Arc::clone(&notifier.inner);
+        let (completed_sender, completed_receiver) = sync_channel(1);
+        let publisher = thread::spawn(move || -> Result<(), String> {
+            let result = publish_pending(notifier);
+            let _ = completed_sender.send(result);
+            Ok(())
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while inner
+            .latest
+            .lock()
+            .map_err(|_| String::from("pending delivery"))?
+            .is_none()
+        {
+            assert!(
+                Instant::now() < deadline,
+                "pending projection was not queued"
+            );
+            thread::yield_now();
+        }
+        assert!(
+            completed_receiver
+                .recv_timeout(Duration::from_millis(25))
+                .is_err(),
+            "publication returned before the visible projection"
+        );
+        assert!(
+            coalescer
+                .publish_operation(Some(DesktopOperationSnapshot::new(
+                    DesktopOperationKind::Backup,
+                    DesktopOperationPhase::AtomicPromotion,
+                    false,
+                    None,
+                )))
+                .is_err(),
+            "queued pending projection must not be coalesced with a different operation"
+        );
+
+        inner.deliver_latest();
+        completed_receiver
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| String::from("publication acknowledgement"))?
+            .map_err(|_| String::from("visible pending publication"))?;
+        publisher
+            .join()
+            .map_err(|_| String::from("publisher thread"))??;
+        assert_eq!(window.get_reminder_sync_state(), "Pending");
+        assert_eq!(window.get_reliable_operation_kind(), expected_kind);
+        assert_eq!(window.get_reliable_operation_phase(), "atomic_promotion");
+        Ok(())
+    }
+
+    fn pending_reminder_publications_wait_for_the_visible_atomic_projection() -> Result<(), String>
+    {
+        let shell = DesktopShell::new_with_optional_lifecycle_sink(
+            &ProductReducer::new().snapshot(),
+            DesktopReliableStateProjection::unavailable(),
+            Rc::new(UnavailableDesktopIntentSink),
+            Rc::new(crate::history::UnavailableDesktopHistoryRangeIntentSink),
+            Rc::new(UnavailableDesktopSessionDetailIntentSink),
+            Rc::new(UnavailableDesktopSessionPageIntentSink),
+            None,
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        assert_pending_reminder_publication_waits_for_visible_atomic_projection(
+            &shell,
+            |notifier| {
+                notifier
+                    .publish_pending_reminder_policy(
+                        DesktopReminderPolicy::new(
+                            true,
+                            &[21_600],
+                            DesktopReminderSyncState::Pending,
+                        )
+                        .ok_or_else(|| String::from("pending reminder policy"))?,
+                        DesktopOperationSnapshot::new(
+                            DesktopOperationKind::UpdatePolicy,
+                            DesktopOperationPhase::AtomicPromotion,
+                            false,
+                            None,
+                        ),
+                    )
+                    .map_err(|_| String::from("pending reminder publication"))
+            },
+            "update_policy",
+        )?;
+        assert_pending_reminder_publication_waits_for_visible_atomic_projection(
+            &shell,
+            |notifier| {
+                notifier
+                    .publish_pending_reminder_operation(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::ImportConfig,
+                        DesktopOperationPhase::AtomicPromotion,
+                        false,
+                        None,
+                    ))
+                    .map_err(|_| String::from("pending config import publication"))
+            },
+            "import_config",
+        )
+    }
+
+    #[test]
+    fn reliable_state_delivery_contracts_share_one_slint_event_loop() -> Result<(), String> {
+        i_slint_backend_testing::init_integration_test_with_system_time();
+        terminal_presentation_outcomes_survive_generic_replacement_until_one_delivery()?;
+        config_and_portable_restore_terminals_survive_generic_replacement()?;
+        pending_reminder_publications_wait_for_the_visible_atomic_projection()
+    }
+}
+
+#[cfg(test)]
+mod availability_format_tests {
+    use super::{format_cost, format_tokens};
+    use crate::dashboard::{DesktopCostValue, DesktopTokenValue, map_tokens};
+    use tokenmaster_query::AggregateTokenValue;
+
+    /// A day with no evidence and a day that really cost nothing must not read alike.
+    ///
+    /// This is a release criterion and nothing pinned it: the behaviour existed in both
+    /// formatters and could have been changed by either without a test noticing.
+    #[test]
+    fn an_absent_value_never_renders_like_a_measured_zero() {
+        let absent_tokens = format_tokens(DesktopTokenValue::UNAVAILABLE);
+        let measured_zero_tokens = format_tokens(map_tokens(AggregateTokenValue::Known(0), 0));
+        assert_eq!(absent_tokens, "—");
+        assert_eq!(measured_zero_tokens, "0");
+        assert_ne!(absent_tokens, measured_zero_tokens);
+
+        let absent_cost = format_cost(DesktopCostValue::UNAVAILABLE);
+        assert_eq!(absent_cost, "—");
+        assert_ne!(absent_cost, "$0.00");
+    }
+}
+
+#[cfg(test)]
+mod cost_format_tests {
+    use super::format_usd_micros;
+
+    #[test]
+    fn a_real_cost_below_half_a_cent_never_renders_as_free() {
+        // Every cost in the product used to render with six decimals, so a sub-cent
+        // value was legible. At two decimals it would round to `$0.00` and claim the
+        // work cost nothing, which is the fabrication the token pipeline refuses to
+        // make. It is marked instead.
+        assert_eq!(format_usd_micros(1), "<$0.01");
+        assert_eq!(format_usd_micros(4_999), "<$0.01");
+    }
+
+    #[test]
+    fn a_legitimate_zero_stays_distinct_from_a_rounded_one() {
+        assert_eq!(format_usd_micros(0), "$0.00");
+    }
+
+    /// No cost anywhere renders with three or more decimals. This is a release criterion,
+    /// and until now only the examples were pinned, never the rule they stand for.
+    ///
+    /// Swept rather than sampled: every micro value from zero to a dollar, then powers of
+    /// ten and their neighbours out past a million dollars, because a rounding bug shows at
+    /// a carry and a formatting bug shows at a magnitude.
+    #[test]
+    fn no_cost_renders_with_three_or_more_decimals() {
+        let mut values: Vec<u64> = (0..=1_000_000).collect();
+        for exponent in 0..13 {
+            let magnitude = 10_u64.pow(exponent);
+            values.extend([
+                magnitude.saturating_sub(1),
+                magnitude,
+                magnitude.saturating_add(1),
+            ]);
+        }
+        values.push(u64::MAX);
+        for micros in values {
+            let rendered = format_usd_micros(micros);
+            if let Some((_, fraction)) = rendered.split_once('.') {
+                assert!(
+                    fraction.len() <= 2,
+                    "{micros} micros rendered as {rendered}, with {} decimals",
+                    fraction.len()
+                );
+            }
+            assert!(
+                rendered.matches('.').count() <= 1,
+                "{micros} micros rendered as {rendered}"
+            );
+        }
+    }
+
+    #[test]
+    fn cents_round_half_up_and_dollars_keep_their_separators() {
+        assert_eq!(format_usd_micros(5_000), "$0.01");
+        assert_eq!(format_usd_micros(10_000), "$0.01");
+        assert_eq!(format_usd_micros(14_999), "$0.01");
+        assert_eq!(format_usd_micros(15_000), "$0.02");
+        assert_eq!(format_usd_micros(1_234_567_890), "$1,234.57");
+    }
+}
+
+#[cfg(test)]
+mod compact_window_tests {
+    use super::{
+        MIN_RESTORABLE_WINDOW_HEIGHT, MIN_RESTORABLE_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT,
+        NORMAL_WINDOW_WIDTH, remembered_normal_size,
+    };
+
+    #[test]
+    fn the_restorable_floor_is_logical_and_not_physical() {
+        let design = slint::LogicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT);
+        let logical = |size: slint::PhysicalSize, scale: f32| remembered_normal_size(size, scale);
+
+        // At 100% the physical numbers are the logical ones.
+        let roomy = slint::PhysicalSize::new(1_400, 900);
+        assert_eq!(logical(roomy, 1.0), slint::LogicalSize::new(1_400.0, 900.0));
+
+        // Exactly on the floor still counts, so the boundary is not off by one.
+        let floor = slint::PhysicalSize::new(
+            MIN_RESTORABLE_WINDOW_WIDTH as u32,
+            MIN_RESTORABLE_WINDOW_HEIGHT as u32,
+        );
+        assert_eq!(
+            logical(floor, 1.0),
+            slint::LogicalSize::new(MIN_RESTORABLE_WINDOW_WIDTH, MIN_RESTORABLE_WINDOW_HEIGHT)
+        );
+
+        // The discriminating case. 600x480 physical at 150% is 400x320 logical: a
+        // window far too small to restore. Comparing the physical numbers against the
+        // floor accepted it and handed the user a 400x320 "normal" window.
+        assert_eq!(
+            logical(slint::PhysicalSize::new(600, 480), 1.5),
+            design,
+            "the floor is logical, so a scaled-up tiny window must not pass it"
+        );
+
+        // Its mirror. 1680x1080 physical at 150% is 1120x720 logical, comfortably
+        // above the floor, and the user's own size is what must come back.
+        assert_eq!(
+            logical(slint::PhysicalSize::new(1_680, 1_080), 1.5),
+            slint::LogicalSize::new(1_120.0, 720.0)
+        );
+    }
+}
+
+#[cfg(test)]
+mod trend_area_tests {
+    use super::{DashboardTrendPoint, TREND_ZERO_LINE, dashboard_trend_area_path};
+
+    fn point(ratio: f32, available: bool) -> DashboardTrendPoint {
+        DashboardTrendPoint {
+            tokens_ratio: ratio,
+            tokens_availability: if available {
+                "available"
+            } else {
+                "unavailable"
+            }
+            .into(),
+            ..Default::default()
+        }
+    }
+
+    /// A shaded area has to be closed to the zero line, not to whatever point came first.
+    #[test]
+    fn area_closes_every_run_down_to_the_zero_line() {
+        let rows = vec![point(0.2, true), point(0.8, true), point(0.5, true)];
+
+        let path = dashboard_trend_area_path(&rows, true);
+
+        let foot = format!("{TREND_ZERO_LINE:.2}");
+        assert_eq!(path.matches('M').count(), 1, "path: {path}");
+        assert_eq!(path.matches('Z').count(), 1, "path: {path}");
+        assert!(path.starts_with(&format!("M 28.00 {foot}")), "path: {path}");
+        assert!(
+            path.ends_with(&format!("L 972.00 {foot} Z ")),
+            "path: {path}"
+        );
+    }
+
+    /// A day without evidence breaks the shading, exactly as it breaks the line.
+    ///
+    /// Shading straight through a gap would draw a quantity nobody measured, and it is the
+    /// difference between filling the line geometry and building a fill of its own.
+    #[test]
+    fn a_gap_splits_the_area_into_separate_polygons() {
+        let rows = vec![
+            point(0.2, true),
+            point(0.8, true),
+            point(0.0, false),
+            point(0.4, true),
+            point(0.6, true),
+        ];
+
+        let path = dashboard_trend_area_path(&rows, true);
+
+        assert_eq!(path.matches('M').count(), 2, "path: {path}");
+        assert_eq!(path.matches('Z').count(), 2, "path: {path}");
+    }
+
+    /// One known day encloses no area, and the line draws nothing for it either.
+    #[test]
+    fn a_lone_known_day_shades_nothing() {
+        let rows = vec![point(0.0, false), point(0.5, true), point(0.0, false)];
+
+        assert_eq!(dashboard_trend_area_path(&rows, true), "");
+        assert_eq!(dashboard_trend_area_path(&[point(0.5, true)], true), "");
+    }
+}

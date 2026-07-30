@@ -1,8 +1,8 @@
 use tempfile::TempDir;
 use tokenmaster_codex::{
     MAX_LINE_BYTES, MAX_TOOL_NAMES, PARSER_SCHEMA_VERSION, ParseContext, ParseOutcome,
-    ParserDiagnosticCode, ParserDiagnostics, ParserResumeErrorCode, ParserResumeStateV1,
-    ParserState, parse_line,
+    ParserDiagnosticCode, ParserDiagnostics, ParserResumeErrorCode, ParserResumeState, ParserState,
+    parse_line,
 };
 use tokenmaster_domain::{UsageProfileId, UsageSessionId, UsageSourceId};
 
@@ -219,7 +219,7 @@ fn serialized_and_debug_surfaces_exclude_private_input() {
         PARSER_SCHEMA_VERSION + 1
     };
     unsupported["version"] = serde_json::json!(unsupported_version);
-    let unsupported: ParserResumeStateV1 =
+    let unsupported: ParserResumeState =
         serde_json::from_value(unsupported).expect("unsupported resume shape remains valid");
     let resume_error =
         ParserState::from_resume(unsupported).expect_err("unsupported version must fail");
@@ -229,7 +229,6 @@ fn serialized_and_debug_surfaces_exclude_private_input() {
     );
 
     let rendered = [
-        serde_json::to_string(event).expect("event serializes"),
         serde_json::to_string(&snapshot).expect("resume serializes"),
         serde_json::to_string(&diagnostics).expect("diagnostics serialize"),
         serde_json::to_string(&resume_error.code()).expect("error code serializes"),

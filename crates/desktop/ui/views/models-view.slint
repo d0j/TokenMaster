@@ -1,0 +1,209 @@
+import { ModelUsageRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { MetricValue } from "../components/metric-value.slint";
+import { SectionState } from "../components/section-state.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component ModelsHeaderCard inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> range-label;
+    in property <string> time-zone-label;
+    in property <string> evidence-label;
+    in property <string> total-tokens;
+    in property <string> total-availability;
+    in property <string> cost;
+    in property <string> cost-availability;
+    in property <string> cost-evidence-label;
+    in property <string> events;
+    in property <string> loaded-label;
+    in property <string> completeness-label;
+    in property <bool> narrow;
+
+    min-height: root.narrow ? 184px : 148px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: @tr("Model usage {0} {1} {2} cost {3} {4}", root.range-label, root.loaded-label, root.completeness-label, root.cost, root.cost-evidence-label);
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                horizontal-stretch: 1;
+                Text { text: @tr("Models"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
+                Text {
+                    text: root.range-label + " · " + root.time-zone-label;
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-body;
+                    overflow: elide;
+                }
+            }
+            SectionState { state: root.state; reasons: root.reasons; }
+        }
+        if root.narrow: VerticalLayout {
+            spacing: UiTokens.space-xs;
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.loaded-label + " · " + root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; overflow: elide; }
+        }
+        if !root.narrow: HorizontalLayout {
+            spacing: UiTokens.space;
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+        }
+        HorizontalLayout {
+            spacing: UiTokens.space;
+            MetricValue { label: @tr("Total tokens"); value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Cost · {0}", root.cost-evidence-label); value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+        }
+    }
+}
+
+component ModelsTableCard inherits Rectangle {
+    in property <[ModelUsageRow]> rows;
+    in property <bool> narrow;
+    in property <string> state;
+
+    min-height: max(108px, 70px + root.rows.length * (root.narrow ? 70px : 42px));
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: table;
+    accessible-label: @tr("Model usage ranked by total tokens");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 0px;
+        Text { text: @tr("Usage by model"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
+        if root.rows.length == 0: Text {
+            text: root.state == "waiting" ? @tr("Waiting for model evidence") : (root.state == "ready" ? @tr("No model usage in this range") : @tr("Model evidence unavailable"));
+            color: UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+            height: 34px;
+        }
+        if !root.narrow && root.rows.length > 0: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: @tr("Model"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 150px; }
+            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 72px; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cost · evidence"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 140px; horizontal-alignment: right; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 54px; horizontal-alignment: right; }
+        }
+        for model[i] in root.rows: Rectangle {
+            height: root.narrow ? 70px : 42px;
+            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: list-item;
+            accessible-label: @tr("{0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}", model.model-label, model.input-label, model.cached-label, model.output-label, model.reasoning-label, model.total-label, model.cost-label, model.cost-evidence-label, model.event-label);
+            if root.narrow: VerticalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                padding-top: UiTokens.space-xs;
+                padding-bottom: UiTokens.space-xs;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: model.model-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: model.total-label; color: model.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 72px; horizontal-alignment: right; }
+                    Text { text: model.cost-label + " · " + model.cost-evidence-label; color: model.cost-availability == "unavailable" ? UiTokens.text-secondary : (model.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 140px; horizontal-alignment: right; overflow: elide; }
+                }
+                Rectangle {
+                    height: 3px;
+                    background: UiTokens.accent-subtle;
+                    border-radius: 2px;
+                    Rectangle { width: max(1px, model.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
+                }
+                Text {
+                    text: @tr("In {0} · Cache {1} · Out {2} · Reason {3} · {4} events", model.input-label, model.cached-label, model.output-label, model.reasoning-label, model.event-label);
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-caption;
+                    overflow: elide;
+                }
+            }
+            if !root.narrow: HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: model.model-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 150px; overflow: elide; }
+                Rectangle {
+                    width: 72px;
+                    height: 4px;
+                    y: (parent.height - self.height) / 2;
+                    background: UiTokens.accent-subtle;
+                    border-radius: 2px;
+                    Rectangle { width: max(1px, model.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
+                }
+                Text { text: model.input-label; color: model.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.cached-label; color: model.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.output-label; color: model.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.reasoning-label; color: model.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.total-label; color: model.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: model.cost-label + " · " + model.cost-evidence-label; color: model.cost-availability == "unavailable" ? UiTokens.text-secondary : (model.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 140px; horizontal-alignment: right; overflow: elide; }
+                Text { text: model.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 54px; horizontal-alignment: right; }
+            }
+        }
+    }
+}
+
+export component ModelsView inherits Rectangle {
+    in property <[ModelUsageRow]> rows;
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> range-label;
+    in property <string> time-zone-label;
+    in property <string> evidence-label;
+    in property <string> total-tokens;
+    in property <string> total-availability;
+    in property <string> cost;
+    in property <string> cost-availability;
+    in property <string> cost-evidence-label;
+    in property <string> events;
+    in property <string> loaded-label;
+    in property <string> completeness-label;
+    out property <bool> narrow: root.width < 984px;
+    out property <string> layout-mode: root.narrow ? "narrow" : "wide";
+
+    background: UiTokens.background;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        content := VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            ModelsHeaderCard {
+                state: root.state;
+                reasons: root.reasons;
+                range-label: root.range-label;
+                time-zone-label: root.time-zone-label;
+                evidence-label: root.evidence-label;
+                total-tokens: root.total-tokens;
+                total-availability: root.total-availability;
+                cost: root.cost;
+                cost-availability: root.cost-availability;
+                cost-evidence-label: root.cost-evidence-label;
+                events: root.events;
+                loaded-label: root.loaded-label;
+                completeness-label: root.completeness-label;
+                narrow: root.narrow;
+            }
+            ModelsTableCard { rows: root.rows; narrow: root.narrow; state: root.state; }
+        }
+        viewport-height: max(self.height, content.min-height);
+    }
+}

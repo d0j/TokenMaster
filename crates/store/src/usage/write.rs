@@ -1,5 +1,6 @@
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
-use tokenmaster_domain::{CanonicalUsageEvent, LongContextState, TokenCount};
+use tokenmaster_accounting::CanonicalUsageEvent;
+use tokenmaster_domain::{LongContextState, TokenCount};
 
 use super::{AppendBatch, SourceRegistration, StoredCheckpoint, StoredSourceChunk, UsageStore};
 use crate::{StoreError, StoreErrorCode};
@@ -7,24 +8,32 @@ use crate::{StoreError, StoreErrorCode};
 const REFRESH_CANONICAL_SQL: &str = r#"
 INSERT INTO usage_event(
   fingerprint, event_id, selected_file_key, selected_generation,
-  selected_source_offset, profile_id, session_id, source_id,
+  selected_source_offset, projection_revision_id, origin_revision_id, retained,
+  provider_id, profile_id, session_id, source_id,
   timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
   activity_read, activity_edit_write, activity_search, activity_git,
-  activity_build_test, activity_web, activity_subagents, activity_terminal
+  activity_build_test, activity_web, activity_subagents, activity_terminal,
+  reported_cost_usd_micros
 )
 SELECT
   o.fingerprint, o.event_id, o.file_key, o.generation, o.source_offset,
-  o.profile_id, o.session_id, o.source_id, o.timestamp_seconds,
+  current_revision.revision_id, current_revision.revision_id, 0,
+  source.provider_id, o.profile_id, o.session_id, o.source_id, o.timestamp_seconds,
   o.timestamp_nanos, o.model, o.raw_model, o.input_tokens, o.cached_tokens,
   o.output_tokens, o.reasoning_tokens, o.total_tokens, o.fallback_model,
   o.long_context, o.service_tier, o.project_alias, o.originator,
   o.activity_read, o.activity_edit_write, o.activity_search, o.activity_git,
-  o.activity_build_test, o.activity_web, o.activity_subagents, o.activity_terminal
+  o.activity_build_test, o.activity_web, o.activity_subagents, o.activity_terminal,
+  o.reported_cost_usd_micros
 FROM usage_observation AS o
+JOIN usage_source AS source
+  ON source.file_key = o.file_key AND source.profile_id = o.profile_id
 JOIN usage_generation AS g
   ON g.file_key = o.file_key AND g.generation = o.generation
+LEFT JOIN usage_replay_revision AS current_revision
+  ON current_revision.status = 'current'
 WHERE o.fingerprint = ?1 AND g.status = 'current'
 ORDER BY o.profile_id, o.file_key, o.generation, o.source_offset
 LIMIT 1
@@ -42,7 +51,15 @@ impl UsageStore {
                file_key, provider_id, profile_id, source_id, source_kind,
                logical_identity, physical_identity, current_generation,
                missing, verification_level, diagnostic_count
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 0, ?8, 0)",
+             ) VALUES (
+               ?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL,
+               CASE WHEN EXISTS(
+                 SELECT 1 FROM usage_scan
+                 WHERE provider_id = ?2 AND profile_id = ?3
+                   AND completion_state = 'complete'
+               ) THEN 1 ELSE 0 END,
+               ?8, 0
+             )",
             params![
                 parts.source_key.as_bytes().as_slice(),
                 parts.provider_id.as_ref(),
@@ -79,11 +96,22 @@ impl UsageStore {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let replay_current: i64 = transaction.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM usage_replay_revision WHERE status = 'current'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        if replay_current != 0 {
+            return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
+        }
         let current = transaction
             .query_row(
                 "SELECT
                    s.current_generation, g.committed_offset, g.scan_offset,
-                   g.logical_identity, g.physical_identity, s.profile_id, s.source_id
+                   g.logical_identity, g.physical_identity, s.provider_id,
+                   s.profile_id, s.source_id
                  FROM usage_source AS s
                  JOIN usage_generation AS g
                    ON g.file_key = s.file_key AND g.generation = s.current_generation
@@ -96,8 +124,9 @@ impl UsageStore {
                         scan_offset: row.get(2)?,
                         logical_identity: row.get(3)?,
                         physical_identity: row.get(4)?,
-                        profile_id: row.get(5)?,
-                        source_id: row.get(6)?,
+                        provider_id: row.get(5)?,
+                        profile_id: row.get(6)?,
+                        source_id: row.get(7)?,
                     })
                 },
             )
@@ -121,12 +150,13 @@ impl UsageStore {
         )?;
 
         for event in &parts.events {
-            if event.profile_id().as_str() != current.profile_id
+            if event.provider_id().as_str() != current.provider_id
+                || event.profile_id().as_str() != current.profile_id
                 || event.source_id().as_str() != current.source_id
             {
                 return Err(StoreError::new(StoreErrorCode::InvalidValue));
             }
-            insert_observation(
+            let _ = insert_observation(
                 &transaction,
                 parts.source_key,
                 parts.expected_generation,
@@ -153,12 +183,11 @@ impl UsageStore {
         update_source_metadata(
             &transaction,
             parts.source_key,
-            parts.last_seen_scan_id,
             parts.diagnostic_count_delta,
             &parts.next_checkpoint,
         )?;
         #[cfg(test)]
-        if _fault == ApplyFault::DeferredForeignKey {
+        if _fault == ApplyFault::ProjectionIntegrity {
             let event = parts
                 .events
                 .first()
@@ -169,16 +198,19 @@ impl UsageStore {
                 params![event.fingerprint().as_bytes().as_slice()],
             )?;
         }
+        for event in &parts.events {
+            validate_direct_projection(&transaction, event.fingerprint().as_bytes())?;
+        }
         transaction.commit()?;
         Ok(())
     }
 
     #[cfg(test)]
-    fn apply_append_batch_with_deferred_fk_failure(
+    fn apply_append_batch_with_projection_integrity_failure(
         &mut self,
         batch: &AppendBatch,
     ) -> Result<(), StoreError> {
-        self.apply_append_batch_inner(batch, ApplyFault::DeferredForeignKey)
+        self.apply_append_batch_inner(batch, ApplyFault::ProjectionIntegrity)
     }
 }
 
@@ -186,7 +218,7 @@ impl UsageStore {
 enum ApplyFault {
     None,
     #[cfg(test)]
-    DeferredForeignKey,
+    ProjectionIntegrity,
 }
 
 struct CurrentSource {
@@ -195,6 +227,7 @@ struct CurrentSource {
     scan_offset: i64,
     logical_identity: Vec<u8>,
     physical_identity: Option<Vec<u8>>,
+    provider_id: String,
     profile_id: String,
     source_id: String,
 }
@@ -222,7 +255,7 @@ impl CurrentSource {
     }
 }
 
-fn insert_generation(
+pub(super) fn insert_generation(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -262,7 +295,7 @@ fn insert_generation(
     Ok(())
 }
 
-fn verify_chunk_proof(
+pub(super) fn verify_chunk_proof(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -278,7 +311,7 @@ fn verify_chunk_proof(
     Ok(())
 }
 
-fn verify_chunk_conflicts(
+pub(super) fn verify_chunk_conflicts(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -327,78 +360,118 @@ fn read_chunk(
     .transpose()
 }
 
-fn insert_observation(
+pub(super) fn insert_observation(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
     event: &CanonicalUsageEvent,
-) -> Result<(), StoreError> {
+) -> Result<bool, StoreError> {
     let activity = event.activity().as_array();
-    transaction.execute(
+    let mut statement = transaction.prepare_cached(
         "INSERT OR IGNORE INTO usage_observation(
            file_key, generation, source_offset, fingerprint, event_id, profile_id,
            session_id, source_id, timestamp_seconds, timestamp_nanos, model, raw_model,
            input_tokens, cached_tokens, output_tokens, reasoning_tokens, total_tokens,
            fallback_model, long_context, service_tier, project_alias, originator,
            activity_read, activity_edit_write, activity_search, activity_git,
-           activity_build_test, activity_web, activity_subagents, activity_terminal
+           activity_build_test, activity_web, activity_subagents, activity_terminal,
+           reported_cost_usd_micros
          ) VALUES (
            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
            ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
-           ?27, ?28, ?29, ?30
+           ?27, ?28, ?29, ?30, ?31
          )",
-        params![
-            source_key.as_bytes().as_slice(),
-            sql_u64(generation)?,
-            sql_u64(event.source_offset())?,
-            event.fingerprint().as_bytes().as_slice(),
-            event.id().as_str(),
-            event.profile_id().as_str(),
-            event.session_id().as_str(),
-            event.source_id().as_str(),
-            event.timestamp().unix_seconds(),
-            i64::from(event.timestamp().subsec_nanos()),
-            event.model().as_str(),
-            event.raw_model().map(|value| value.as_str()),
-            sql_token(event.usage().input())?,
-            sql_token(event.usage().cached())?,
-            sql_token(event.usage().output())?,
-            sql_token(event.usage().reasoning())?,
-            sql_token(event.usage().total())?,
-            sql_bool(event.fallback_model()),
-            long_context_sql(event.long_context()),
-            event.service_tier().map(|value| value.as_str()),
-            event.project().map(|value| value.as_str()),
-            event.originator().map(|value| value.as_str()),
-            sql_u64(activity[0])?,
-            sql_u64(activity[1])?,
-            sql_u64(activity[2])?,
-            sql_u64(activity[3])?,
-            sql_u64(activity[4])?,
-            sql_u64(activity[5])?,
-            sql_u64(activity[6])?,
-            sql_u64(activity[7])?,
-        ],
     )?;
-    Ok(())
+    let changed = statement.execute(params![
+        source_key.as_bytes().as_slice(),
+        sql_u64(generation)?,
+        sql_u64(event.source_offset())?,
+        event.fingerprint().as_bytes().as_slice(),
+        event.id().as_str(),
+        event.profile_id().as_str(),
+        event.session_id().as_str(),
+        event.source_id().as_str(),
+        event.timestamp().unix_seconds(),
+        i64::from(event.timestamp().subsec_nanos()),
+        event.model().as_str(),
+        event.raw_model().map(|value| value.as_str()),
+        sql_token(event.usage().input())?,
+        sql_token(event.usage().cached())?,
+        sql_token(event.usage().output())?,
+        sql_token(event.usage().reasoning())?,
+        sql_token(event.usage().total())?,
+        sql_bool(event.fallback_model()),
+        long_context_sql(event.long_context()),
+        event.service_tier().map(|value| value.as_str()),
+        event.project().map(|value| value.as_str()),
+        event.originator().map(|value| value.as_str()),
+        sql_u64(activity[0])?,
+        sql_u64(activity[1])?,
+        sql_u64(activity[2])?,
+        sql_u64(activity[3])?,
+        sql_u64(activity[4])?,
+        sql_u64(activity[5])?,
+        sql_u64(activity[6])?,
+        sql_u64(activity[7])?,
+        event
+            .reported_cost()
+            .map(|cost| sql_u64(cost.get()))
+            .transpose()?,
+    ])?;
+    Ok(changed == 1)
 }
 
 fn refresh_canonical(
     transaction: &Transaction<'_>,
     fingerprint: &[u8; 32],
 ) -> Result<(), StoreError> {
-    transaction.execute(
-        "DELETE FROM usage_event WHERE fingerprint = ?1",
-        params![fingerprint.as_slice()],
-    )?;
-    let inserted = transaction.execute(REFRESH_CANONICAL_SQL, params![fingerprint.as_slice()])?;
+    transaction
+        .prepare_cached("DELETE FROM usage_event WHERE fingerprint = ?1")?
+        .execute(params![fingerprint.as_slice()])?;
+    let inserted = transaction
+        .prepare_cached(REFRESH_CANONICAL_SQL)?
+        .execute(params![fingerprint.as_slice()])?;
     if inserted != 1 {
         return Err(StoreError::new(StoreErrorCode::Database));
     }
     Ok(())
 }
 
-fn upsert_chunk(
+fn validate_direct_projection(
+    transaction: &Transaction<'_>,
+    fingerprint: &[u8; 32],
+) -> Result<(), StoreError> {
+    let mut statement = transaction.prepare_cached(
+        "SELECT count(*)
+         FROM usage_event AS event
+         JOIN usage_observation AS observation
+           ON observation.file_key = event.selected_file_key
+          AND observation.generation = event.selected_generation
+          AND observation.source_offset = event.selected_source_offset
+          AND observation.fingerprint = event.fingerprint
+         WHERE event.fingerprint = ?1
+           AND event.retained = 0
+           AND (
+             (event.projection_revision_id IS NULL
+              AND event.origin_revision_id IS NULL
+              AND NOT EXISTS(
+                SELECT 1 FROM usage_replay_revision WHERE status = 'current'
+              ))
+             OR
+             (event.projection_revision_id = event.origin_revision_id
+              AND event.projection_revision_id = (
+                SELECT revision_id FROM usage_replay_revision WHERE status = 'current'
+              ))
+           )",
+    )?;
+    let valid: i64 = statement.query_row([fingerprint.as_slice()], |row| row.get(0))?;
+    if valid != 1 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
+}
+
+pub(super) fn upsert_chunk(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -430,6 +503,26 @@ fn update_checkpoint(
     expected_scan_offset: u64,
     checkpoint: &StoredCheckpoint,
 ) -> Result<(), StoreError> {
+    update_checkpoint_for_status(
+        transaction,
+        source_key,
+        generation,
+        expected_committed_offset,
+        expected_scan_offset,
+        checkpoint,
+        "current",
+    )
+}
+
+pub(super) fn update_checkpoint_for_status(
+    transaction: &Transaction<'_>,
+    source_key: super::SourceKey,
+    generation: u64,
+    expected_committed_offset: u64,
+    expected_scan_offset: u64,
+    checkpoint: &StoredCheckpoint,
+    status: &str,
+) -> Result<(), StoreError> {
     let updated = transaction.execute(
         "UPDATE usage_generation SET
            parser_schema_version = ?1,
@@ -446,7 +539,7 @@ fn update_checkpoint(
            discarding_oversized_line = ?12,
            incomplete_tail = ?13,
            verification_level = ?14
-         WHERE file_key = ?15 AND generation = ?16 AND status = 'current'
+         WHERE file_key = ?15 AND generation = ?16 AND status = ?19
            AND committed_offset = ?17 AND scan_offset = ?18",
         params![
             i64::from(checkpoint.parser_schema_version()),
@@ -467,6 +560,7 @@ fn update_checkpoint(
             sql_u64(generation)?,
             sql_u64(expected_committed_offset)?,
             sql_u64(expected_scan_offset)?,
+            status,
         ],
     )?;
     if updated != 1 {
@@ -475,27 +569,23 @@ fn update_checkpoint(
     Ok(())
 }
 
-fn update_source_metadata(
+pub(super) fn update_source_metadata(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
-    last_seen_scan_id: Option<u64>,
     diagnostic_count_delta: u64,
     checkpoint: &StoredCheckpoint,
 ) -> Result<(), StoreError> {
     let delta = sql_u64(diagnostic_count_delta)?;
     let updated = transaction.execute(
         "UPDATE usage_source SET
-           last_seen_scan_id = COALESCE(?1, last_seen_scan_id),
-           missing = 0,
-           verification_level = ?2,
+           verification_level = ?1,
            diagnostic_count = CASE
-             WHEN diagnostic_count > 9223372036854775807 - ?3
+             WHEN diagnostic_count > 9223372036854775807 - ?2
                THEN 9223372036854775807
-             ELSE diagnostic_count + ?3
+             ELSE diagnostic_count + ?2
            END
-         WHERE file_key = ?4",
+         WHERE file_key = ?3",
         params![
-            last_seen_scan_id.map(sql_u64).transpose()?,
             checkpoint.verification().as_sql(),
             delta,
             source_key.as_bytes().as_slice(),
@@ -507,22 +597,22 @@ fn update_source_metadata(
     Ok(())
 }
 
-fn sql_u64(value: u64) -> Result<i64, StoreError> {
+pub(super) fn sql_u64(value: u64) -> Result<i64, StoreError> {
     i64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
 }
 
-const fn sql_bool(value: bool) -> i64 {
+pub(super) const fn sql_bool(value: bool) -> i64 {
     if value { 1 } else { 0 }
 }
 
-fn sql_token(value: TokenCount) -> Result<Option<i64>, StoreError> {
+pub(super) fn sql_token(value: TokenCount) -> Result<Option<i64>, StoreError> {
     match value {
         TokenCount::Available(value) => sql_u64(value).map(Some),
         TokenCount::Unavailable => Ok(None),
     }
 }
 
-const fn long_context_sql(value: LongContextState) -> &'static str {
+pub(super) const fn long_context_sql(value: LongContextState) -> &'static str {
     match value {
         LongContextState::Yes => "yes",
         LongContextState::No => "no",
@@ -534,15 +624,17 @@ fn stored_u64(value: i64) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
 }
 
-fn stored_digest(value: &[u8]) -> Result<[u8; 32], StoreError> {
+pub(super) fn stored_digest(value: &[u8]) -> Result<[u8; 32], StoreError> {
     <[u8; 32]>::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
 }
 
 #[cfg(test)]
 mod tests {
+    use tokenmaster_accounting::Canonicalizer;
     use tokenmaster_domain::{
-        ActivityCounts, CanonicalUsageEventParts, EventFingerprint, MetadataValue, ModelKey,
-        ProjectAlias, TokenUsage, UsageProfileId, UsageSessionId, UsageSourceId, UtcTimestamp,
+        ActivityCounts, MetadataValue, ModelKey, ObservationDraft, ObservationDraftParts,
+        ObservationVerification, ProjectAlias, TokenUsage, UsageProfileId, UsageProviderId,
+        UsageSessionId, UsageSourceId, UtcTimestamp,
     };
 
     use super::*;
@@ -587,31 +679,36 @@ mod tests {
     }
 
     fn event(fingerprint: u8) -> TestResult<CanonicalUsageEvent> {
-        Ok(CanonicalUsageEvent::new(
-            CanonicalUsageEventParts {
-                profile_id: UsageProfileId::new("default")?,
-                session_id: UsageSessionId::new("session")?,
-                source_id: UsageSourceId::new("fixture")?,
-                source_offset: 10,
-                timestamp: UtcTimestamp::new(100, 0)?,
-                model: ModelKey::new("gpt-test")?,
-                raw_model: Some(MetadataValue::new("gpt-test")?),
-                usage: TokenUsage::new(
-                    TokenCount::Available(10),
-                    TokenCount::Unavailable,
-                    TokenCount::Available(2),
-                    TokenCount::Unavailable,
-                    TokenCount::Available(12),
-                ),
-                fallback_model: false,
-                long_context: LongContextState::No,
-                service_tier: None,
-                project: Some(ProjectAlias::new("tokenmaster")?),
-                originator: None,
-                activity: ActivityCounts::default(),
-            },
-            EventFingerprint::new([fingerprint; 32]),
-        ))
+        let draft = ObservationDraft::new(ObservationDraftParts {
+            provider_id: UsageProviderId::new("codex")?,
+            profile_id: UsageProfileId::new("default")?,
+            session_id: UsageSessionId::new("session")?,
+            parent_session_id: None,
+            session_ordinal: u64::from(fingerprint),
+            lineage_conflict: false,
+            source_id: UsageSourceId::new("fixture")?,
+            source_offset: 10,
+            source_verification: ObservationVerification::Incremental,
+            timestamp: UtcTimestamp::new(100, 0)?,
+            model: ModelKey::new("gpt-test")?,
+            raw_model: Some(MetadataValue::new("gpt-test")?),
+            delta_usage: TokenUsage::new(
+                TokenCount::Available(10),
+                TokenCount::Unavailable,
+                TokenCount::Available(2),
+                TokenCount::Unavailable,
+                TokenCount::Available(12),
+            ),
+            cumulative_usage: None,
+            fallback_model: false,
+            long_context: LongContextState::No,
+            service_tier: None,
+            reported_cost: None,
+            project: Some(ProjectAlias::new("tokenmaster")?),
+            originator: None,
+            activity: ActivityCounts::default(),
+        })?;
+        Ok(Canonicalizer::new().canonicalize(&draft)?)
     }
 
     fn batch(seed: u8, fingerprint: u8) -> TestResult<AppendBatch> {
@@ -624,23 +721,22 @@ mod tests {
             previous_partial_chunk: None,
             chunk_updates: vec![StoredSourceChunk::new(0, 100, [8; 32])?].into_boxed_slice(),
             next_checkpoint: checkpoint(seed, 100)?,
-            last_seen_scan_id: None,
             diagnostic_count_delta: 0,
         })?)
     }
 
     #[test]
-    fn deferred_foreign_key_fault_rolls_back_every_append_write() -> TestResult {
+    fn projection_integrity_fault_rolls_back_every_append_write() -> TestResult {
         let mut store = UsageStore::in_memory()?;
         store.register_source(&registration(7)?)?;
         let before = store.counts()?;
         let batch = batch(7, 1)?;
 
-        let error = match store.apply_append_batch_with_deferred_fk_failure(&batch) {
-            Ok(()) => return Err("deferred foreign key unexpectedly committed".into()),
+        let error = match store.apply_append_batch_with_projection_integrity_failure(&batch) {
+            Ok(()) => return Err("invalid canonical projection unexpectedly committed".into()),
             Err(error) => error,
         };
-        assert_eq!(error.code(), StoreErrorCode::Database);
+        assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue);
         assert_eq!(store.counts()?, before);
         let snapshot = store
             .generation_snapshot(SourceKey::from_bytes([7; 32]))?
@@ -655,6 +751,7 @@ mod tests {
     #[test]
     fn canonical_rebuild_selects_remaining_smallest_current_observation() -> TestResult {
         let mut store = UsageStore::in_memory()?;
+        let fingerprint = *event(3)?.fingerprint().as_bytes();
         for seed in [9_u8, 1_u8] {
             store.register_source(&registration(seed)?)?;
             store.apply_append_batch(&batch(seed, 3)?)?;
@@ -664,19 +761,19 @@ mod tests {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         transaction.execute(
             "DELETE FROM usage_event WHERE fingerprint = ?1",
-            params![[3_u8; 32].as_slice()],
+            params![fingerprint.as_slice()],
         )?;
         transaction.execute(
             "DELETE FROM usage_observation
              WHERE file_key = ?1 AND generation = 0 AND fingerprint = ?2",
-            params![[1_u8; 32].as_slice(), [3_u8; 32].as_slice()],
+            params![[1_u8; 32].as_slice(), fingerprint.as_slice()],
         )?;
-        refresh_canonical(&transaction, &[3_u8; 32])?;
+        refresh_canonical(&transaction, &fingerprint)?;
         transaction.commit()?;
 
         let selected: Vec<u8> = store.connection.query_row(
             "SELECT selected_file_key FROM usage_event WHERE fingerprint = ?1",
-            params![[3_u8; 32].as_slice()],
+            params![fingerprint.as_slice()],
             |row| row.get(0),
         )?;
         assert_eq!(selected, [9_u8; 32]);

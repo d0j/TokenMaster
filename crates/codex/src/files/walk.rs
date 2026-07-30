@@ -1,4 +1,5 @@
-use std::fs::{self, ReadDir};
+use std::cmp::Reverse;
+use std::fs::{self, DirEntry, ReadDir};
 use std::path::{Component, Path};
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
@@ -12,6 +13,8 @@ use super::{
 };
 use crate::file_identity::{filename_session_hint, hashed_session_hint};
 use crate::path_policy::{is_reparse_point, path_byte_len, validate_local_root_namespace};
+
+const MAX_SORTED_DIRECTORY_ENTRIES: usize = 256;
 
 pub(super) enum WalkControl {
     Continue,
@@ -36,8 +39,56 @@ impl WalkIdentity {
 }
 
 struct DirectoryFrame {
-    entries: ReadDir,
+    entries: DirectoryEntries,
     depth: usize,
+}
+
+enum DirectoryEntries {
+    Sorted(std::vec::IntoIter<DirEntry>),
+    Streaming {
+        buffered: std::vec::IntoIter<DirEntry>,
+        remaining: Box<ReadDir>,
+    },
+}
+
+impl DirectoryEntries {
+    fn next(&mut self, state: &mut EnumerationState) -> Option<DirEntry> {
+        match self {
+            Self::Sorted(entries) => entries.next(),
+            Self::Streaming {
+                buffered,
+                remaining,
+            } => buffered.next().or_else(|| {
+                loop {
+                    match remaining.next()? {
+                        Ok(entry) => return Some(entry),
+                        Err(_) => state.degrade(EnumerationDiagnosticCode::UnreadableEntry),
+                    }
+                }
+            }),
+        }
+    }
+}
+
+fn ordered_directory_entries(
+    mut entries: ReadDir,
+    state: &mut EnumerationState,
+) -> DirectoryEntries {
+    let mut buffered = Vec::with_capacity(MAX_SORTED_DIRECTORY_ENTRIES.saturating_add(1));
+    while buffered.len() <= MAX_SORTED_DIRECTORY_ENTRIES {
+        match entries.next() {
+            Some(Ok(entry)) => buffered.push(entry),
+            Some(Err(_)) => state.degrade(EnumerationDiagnosticCode::UnreadableEntry),
+            None => {
+                buffered.sort_unstable_by_key(|entry| Reverse(entry.file_name()));
+                return DirectoryEntries::Sorted(buffered.into_iter());
+            }
+        }
+    }
+    DirectoryEntries::Streaming {
+        buffered: buffered.into_iter(),
+        remaining: Box::new(entries),
+    }
 }
 
 pub(super) fn validate_root(root: &Path) -> Result<(), EnumerationError> {
@@ -71,6 +122,7 @@ pub(super) fn walk_source(
     let root = source.path();
     let entries =
         fs::read_dir(root).map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?;
+    let entries = ordered_directory_entries(entries, state);
     let mut frames = Vec::with_capacity(MAX_ENUMERATION_DEPTH.saturating_add(1));
     frames.push(DirectoryFrame { entries, depth: 0 });
     state.record(EnumerationDiagnosticCode::VisitedDirectory);
@@ -82,19 +134,12 @@ pub(super) fn walk_source(
         }
 
         let (next, depth) = match frames.last_mut() {
-            Some(frame) => (frame.entries.next(), frame.depth),
+            Some(frame) => (frame.entries.next(state), frame.depth),
             None => break,
         };
-        let Some(entry_result) = next else {
+        let Some(entry) = next else {
             frames.pop();
             continue;
-        };
-        let entry = match entry_result {
-            Ok(value) => value,
-            Err(_) => {
-                state.degrade(EnumerationDiagnosticCode::UnreadableEntry);
-                continue;
-            }
         };
         let absolute_path = entry.path();
         if path_byte_len(&absolute_path) > MAX_PATH_BYTES {
@@ -110,7 +155,7 @@ pub(super) fn walk_source(
                 match fs::read_dir(&absolute_path) {
                     Ok(entries) => {
                         frames.push(DirectoryFrame {
-                            entries,
+                            entries: ordered_directory_entries(entries, state),
                             depth: depth.saturating_add(1),
                         });
                         state.record(EnumerationDiagnosticCode::VisitedDirectory);
@@ -174,6 +219,74 @@ pub(super) fn walk_source(
     }
 
     Ok(WalkControl::Continue)
+}
+
+pub(super) fn inspect_source_path(
+    sources: &[SourceDescriptor],
+    absolute_path: &Path,
+) -> Result<Option<SourceFileDescriptor>, EnumerationError> {
+    if path_byte_len(absolute_path) > MAX_PATH_BYTES
+        || validate_local_root_namespace(absolute_path).is_err()
+    {
+        return Ok(None);
+    }
+    let mut matched = sources.iter().filter_map(|source| {
+        absolute_path
+            .strip_prefix(source.path())
+            .ok()
+            .filter(|relative| valid_relative_path(relative))
+            .map(|relative| (source, relative.to_path_buf()))
+    });
+    let Some((source, relative_path)) = matched.next() else {
+        return Ok(None);
+    };
+    if matched.next().is_some() {
+        return Ok(None);
+    }
+    let metadata = match fs::symlink_metadata(absolute_path) {
+        Ok(metadata)
+            if metadata.is_file()
+                && !is_reparse_point(&metadata)
+                && has_jsonl_extension(absolute_path) =>
+        {
+            metadata
+        }
+        Ok(_) | Err(_) => return Ok(None),
+    };
+    if source.kind() == tokenmaster_provider::SourceKind::Archived {
+        let active_root = sources
+            .iter()
+            .find(|candidate| candidate.kind() == tokenmaster_provider::SourceKind::Active)
+            .map(SourceDescriptor::path);
+        let mut state = EnumerationState::default();
+        if active_root.is_some_and(|active| archive_is_shadowed(active, &relative_path, &mut state))
+        {
+            return Ok(None);
+        }
+    }
+    let profile_id = Arc::new(
+        UsageProfileId::new(source.profile_id().as_str().to_owned())
+            .map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?,
+    );
+    let source_id = Arc::new(
+        UsageSourceId::new(source.id().as_str().to_owned())
+            .map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?,
+    );
+    let hashed_session_hint = hashed_session_hint(&profile_id, &relative_path)
+        .map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?;
+    Ok(Some(SourceFileDescriptor {
+        profile_id,
+        source_id,
+        source_kind: source.kind(),
+        absolute_path: absolute_path.to_path_buf(),
+        relative_path: relative_path.clone(),
+        filename_session_hint: filename_session_hint(&relative_path),
+        hashed_session_hint,
+        metadata_hint: FileMetadataHint::new(
+            metadata.len(),
+            metadata.modified().ok().map(system_time_to_unix_nanos),
+        ),
+    }))
 }
 
 pub(super) enum CandidateClassification {

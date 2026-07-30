@@ -12,6 +12,7 @@ pub enum ProviderCapability {
     Projects,
     Models,
     CodeOutput,
+    RepositoryActivity,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

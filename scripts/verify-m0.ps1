@@ -18,42 +18,40 @@ if (-not $PesterModule) {
     throw "Pester $RequiredPesterVersion is required. Install-Module Pester -RequiredVersion $RequiredPesterVersion -Scope CurrentUser"
 }
 Import-Module Pester -RequiredVersion $RequiredPesterVersion -Force
-& (Join-Path $PSScriptRoot "audit-clean-root.ps1") -RepositoryRoot $RepositoryRoot
 
-$MingwRoot = $null
-$MingwLinker = $null
-foreach ($CandidateRoot in @("C:\mingw64", "C:\msys64\mingw64")) {
-    $CandidateLinker = Join-Path $CandidateRoot "bin\x86_64-w64-mingw32-gcc.exe"
-    $CandidateImportLibraries = @(
-        (Join-Path $CandidateRoot "lib\libshlwapi.a"),
-        (Join-Path $CandidateRoot "x86_64-w64-mingw32\lib\libshlwapi.a")
-    )
-    $CandidateShlwapi = $CandidateImportLibraries |
-        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-        Select-Object -First 1
-    if ((Test-Path -LiteralPath $CandidateLinker -PathType Leaf) -and $CandidateShlwapi) {
-        $MingwRoot = $CandidateRoot
-        $MingwLinker = $CandidateLinker
-        break
-    }
+function Write-M0StageBegin {
+    param([string]$Id)
+    Write-Host "TM-M0-STAGE-BEGIN $Id"
 }
-if (-not $MingwRoot) {
-    throw "MinGW with the shlwapi import library is required under C:\mingw64 or C:\msys64\mingw64"
+
+function Write-M0StagePass {
+    param([string]$Id)
+    Write-Host "TM-M0-STAGE-PASS $Id"
 }
-$MingwBin = Join-Path $MingwRoot "bin"
-$env:Path = "$MingwBin$([IO.Path]::PathSeparator)${env:Path}"
-$env:CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = $MingwLinker
-$MingwVersionOutput = @(& $MingwLinker --version)
-$MingwExitCode = $LASTEXITCODE
-$MingwVersion = $MingwVersionOutput | Select-Object -First 1
-if ($MingwExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($MingwVersion)) {
-    throw "The validated GNU linker did not report a version"
+
+Write-M0StageBegin "clean-root"
+& (Join-Path $PSScriptRoot "audit-clean-root.ps1") -RepositoryRoot $RepositoryRoot
+Write-M0StagePass "clean-root"
+Write-M0StageBegin "immutable-actions"
+& (Join-Path $PSScriptRoot "validate-immutable-actions.ps1") `
+    -RepositoryRoot $RepositoryRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "GitHub Actions references are not immutable"
 }
+Write-M0StagePass "immutable-actions"
+Write-M0StageBegin "dependency-policy"
+& (Join-Path $PSScriptRoot "verify-dependency-policy.ps1") `
+    -RepositoryRoot $RepositoryRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Dependency policy did not pass"
+}
+Write-M0StagePass "dependency-policy"
 
 $Cargo = (Get-Command cargo.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Name
 
 function Invoke-Checked {
-    param([string]$File, [string[]]$Arguments)
+    param([string]$Id, [string]$File, [string[]]$Arguments)
+    Write-M0StageBegin $Id
     $Started = [DateTimeOffset]::UtcNow
     & $File @Arguments
     $ExitCode = $LASTEXITCODE
@@ -65,10 +63,12 @@ function Invoke-Checked {
     if ($ExitCode -ne 0) {
         throw "$File failed with exit code $ExitCode"
     }
+    Write-M0StagePass $Id
 }
 
 function Invoke-PesterChecked {
-    param([string]$Path)
+    param([string]$Id, [string]$Path)
+    Write-M0StageBegin $Id
     $Started = [DateTimeOffset]::UtcNow
     $Result = Invoke-Pester $Path -PassThru
     $ExitCode = if ($Result.FailedCount -eq 0) { 0 } else { 1 }
@@ -80,16 +80,22 @@ function Invoke-PesterChecked {
     if ($ExitCode -ne 0) {
         throw "Invoke-Pester failed for $Path"
     }
+    Write-M0StagePass $Id
 }
 
-$Stamp = [DateTimeOffset]::UtcNow.ToString("yyyyMMdd-HHmmssfff")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\m0-soak-lib.Tests.ps1")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\m0-scripts.Tests.ps1")
-Invoke-Checked $Cargo @("+1.97.0", "fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
+Invoke-PesterChecked "pester-m0-scripts" (Join-Path $PSScriptRoot "tests\m0-scripts.Tests.ps1")
+Invoke-PesterChecked "pester-immutable-actions" (Join-Path $PSScriptRoot "tests\immutable-actions.Tests.ps1")
+Invoke-PesterChecked "pester-release-artifact-workflow" (Join-Path $PSScriptRoot "tests\release-artifact-workflow.Tests.ps1")
+Invoke-PesterChecked "pester-dependency-policy" (Join-Path $PSScriptRoot "tests\dependency-policy.Tests.ps1")
+Invoke-PesterChecked "pester-secret-scan" (Join-Path $PSScriptRoot "tests\secret-scan.Tests.ps1")
+Invoke-PesterChecked "pester-clean-root" (Join-Path $PSScriptRoot "tests\audit-clean-root.Tests.ps1")
+Invoke-PesterChecked "pester-product-package" (Join-Path $PSScriptRoot "tests\product-package.Tests.ps1")
+Invoke-PesterChecked "pester-p3e-interactive" (Join-Path $PSScriptRoot "tests\validate-p3e-interactive.Tests.ps1")
+Invoke-Checked "fmt" $Cargo @("fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
 $PreviousRustFlags = $env:RUSTFLAGS
 try {
     $env:RUSTFLAGS = "$PreviousRustFlags -Dwarnings".Trim()
-    Invoke-Checked $Cargo @("+1.97.0", "clippy", "--manifest-path", $Manifest, "--workspace", "--all-targets", "--locked")
+    Invoke-Checked "clippy" $Cargo @("clippy", "--manifest-path", $Manifest, "--workspace", "--all-targets", "--locked")
 }
 finally {
     if ($null -eq $PreviousRustFlags) {
@@ -98,23 +104,16 @@ finally {
         $env:RUSTFLAGS = $PreviousRustFlags
     }
 }
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-gates", "--test", "budget_contract", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "metrics_contract", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "stress_contract", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-store", "--test", "sqlite_contract", "--locked", "--", "one_million_rows_remain_page_bounded", "--ignored", "--exact")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "--workspace", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "build", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--release", "--locked")
-
-$Executable = Join-Path $RepositoryRoot "target\x86_64-pc-windows-gnu\release\tokenmaster-m0.exe"
-Invoke-Checked $Executable @("--stress", "switches", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-switches-$Stamp.json")
-Invoke-Checked $Executable @("--stress", "routes", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-routes-$Stamp.json")
+Invoke-Checked "sqlite-one-million" $Cargo @("test", "--manifest-path", $Manifest, "-p", "tokenmaster-store", "--test", "sqlite_contract", "--locked", "--", "one_million_rows_remain_page_bounded", "--ignored", "--exact")
+Invoke-Checked "workspace-tests" $Cargo @("test", "--manifest-path", $Manifest, "--workspace", "--locked")
+Invoke-Checked "product-release-build" $Cargo @("build", "--manifest-path", $Manifest, "-p", "tokenmaster-app", "--release", "--locked")
 
 $Summary = [ordered]@{
     schemaVersion = 1
     kind = "developer-verification"
     result = "pass"
     toolchain = "rust-1.97"
-    mingw = "validated"
+    target = "x86_64-pc-windows-msvc"
     pester = "5.7.1"
     commands = $Commands
     externalGates = @(

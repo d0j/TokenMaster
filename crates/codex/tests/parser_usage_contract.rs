@@ -1,9 +1,10 @@
+use tokenmaster_accounting::{Canonicalizer, EVENT_FINGERPRINT_VERSION};
 use tokenmaster_codex::{
     LONG_CONTEXT_THRESHOLD, MAX_LINE_BYTES, ParseContext, ParseOutcome, ParserDiagnosticCode,
     ParserDiagnostics, ParserState, parse_line,
 };
 use tokenmaster_domain::{
-    LongContextState, TokenCount, UsageProfileId, UsageSessionId, UsageSourceId,
+    LongContextState, ObservationDraft, TokenCount, UsageProfileId, UsageSessionId, UsageSourceId,
 };
 
 fn context() -> ParseContext {
@@ -19,7 +20,7 @@ fn emitted(
     diagnostics: &mut ParserDiagnostics,
     offset: u64,
     line: &[u8],
-) -> tokenmaster_domain::CanonicalUsageEvent {
+) -> ObservationDraft {
     match parse_line(context, state, diagnostics, offset, line) {
         ParseOutcome::Emitted(event) => event,
         _ => panic!("event expected"),
@@ -296,7 +297,7 @@ fn invalid_model_alias_falls_through_to_the_next_valid_alias() {
 }
 
 #[test]
-fn emitted_events_use_the_final_version_one_fingerprint() {
+fn emitted_drafts_canonicalize_only_through_core_accounting() {
     let context = context();
     let mut state = ParserState::new();
     let mut diagnostics = ParserDiagnostics::new();
@@ -308,11 +309,10 @@ fn emitted_events_use_the_final_version_one_fingerprint() {
         br#"{"timestamp":"2026-07-10T08:00:00.123Z","model":"gpt-5.6-sol","usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}"#,
     );
 
-    assert_eq!(
-        event.fingerprint().to_hex(),
-        "b84082eed792810c900c9758588bfbab99926845d792ede99f091a68b2d29c3a"
-    );
-    assert_eq!(event.id().as_str(), "event_b84082eed792810c900c");
+    let canonical = Canonicalizer::new()
+        .canonicalize(&event)
+        .expect("Codex draft canonicalizes through core accounting");
+    assert_eq!(canonical.fingerprint_version(), EVENT_FINGERPRINT_VERSION);
 }
 
 #[test]
@@ -600,7 +600,7 @@ fn nested_usage_precedence_and_aliases_match_the_oracle() {
 }
 
 #[test]
-fn available_zero_and_unavailable_null_have_distinct_fingerprints() {
+fn available_zero_and_unavailable_null_remain_distinct_after_canonicalization() {
     let context = context();
     let mut state = ParserState::new();
     let mut diagnostics = ParserDiagnostics::new();
@@ -611,17 +611,22 @@ fn available_zero_and_unavailable_null_have_distinct_fingerprints() {
         0,
         br#"{"timestamp":1700000000,"model":"gpt-5.6-sol","usage":{"input_tokens":0,"output_tokens":2,"total_tokens":2}}"#,
     );
+    let mut unavailable_state = ParserState::new();
     let unavailable = emitted(
         &context,
-        &mut state,
+        &mut unavailable_state,
         &mut diagnostics,
         1,
         br#"{"timestamp":1700000000,"model":"gpt-5.6-sol","usage":{"output_tokens":2,"total_tokens":2}}"#,
     );
 
-    assert_ne!(
-        observed_zero.fingerprint().as_bytes(),
-        unavailable.fingerprint().as_bytes()
-    );
+    let canonicalizer = Canonicalizer::new();
+    let observed_zero = canonicalizer
+        .canonicalize(&observed_zero)
+        .expect("observed-zero draft canonicalizes");
+    let unavailable = canonicalizer
+        .canonicalize(&unavailable)
+        .expect("unavailable draft canonicalizes");
+    assert_ne!(observed_zero.fingerprint(), unavailable.fingerprint());
     assert_ne!(observed_zero.id(), unavailable.id());
 }

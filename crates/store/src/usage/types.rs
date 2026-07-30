@@ -1,15 +1,69 @@
 use std::fmt;
 
-use tokenmaster_domain::CanonicalUsageEvent;
+use tokenmaster_accounting::CanonicalUsageEvent;
+use tokenmaster_accounting::{
+    CANONICALIZER_VERSION, EVENT_FINGERPRINT_VERSION, REPLAY_SIGNATURE_VERSION,
+};
+use tokenmaster_domain::SessionRelationDraft;
 
+use super::query::UsageTokenAggregate;
 use crate::{StoreError, StoreErrorCode};
 
 pub const MAX_RESUME_BYTES: usize = 32 * 1024;
 pub const MAX_USAGE_EVENT_PAGE_SIZE: usize = 256;
 pub const MAX_APPEND_EVENTS: usize = 256;
+pub const MAX_APPEND_RELATIONS: usize = 256;
 pub const MAX_APPEND_CHUNK_UPDATES: usize = 18;
+pub const MAX_AGGREGATE_REBUILD_PAGE_SIZE: usize = 2_048;
+pub const MAX_REPLAY_SOURCES: usize = 256;
+pub const MAX_SCAN_SCOPES: usize = 256;
+pub const SCAN_HISTORY_PER_SCOPE: usize = 32;
+pub const SCAN_PRUNE_BATCH_SIZE: usize = 64;
 pub const SOURCE_CHUNK_BYTES: u64 = 1 << 20;
 const MAX_ANCHOR_BYTES: u16 = 4096;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AggregateRebuildStatus {
+    Ready,
+    Rebuilding,
+    Restarted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AggregateRebuildProgress {
+    status: AggregateRebuildStatus,
+    processed_events: u64,
+    total_events: u64,
+}
+
+impl AggregateRebuildProgress {
+    pub(super) const fn new(
+        status: AggregateRebuildStatus,
+        processed_events: u64,
+        total_events: u64,
+    ) -> Self {
+        Self {
+            status,
+            processed_events,
+            total_events,
+        }
+    }
+
+    #[must_use]
+    pub const fn status(self) -> AggregateRebuildStatus {
+        self.status
+    }
+
+    #[must_use]
+    pub const fn processed_events(self) -> u64 {
+        self.processed_events
+    }
+
+    #[must_use]
+    pub const fn total_events(self) -> u64 {
+        self.total_events
+    }
+}
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct SourceKey([u8; 32]);
@@ -35,6 +89,321 @@ impl SourceKey {
 impl fmt::Debug for SourceKey {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("SourceKey([redacted])")
+    }
+}
+
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ScanScope {
+    provider_id: Box<str>,
+    profile_id: Box<str>,
+}
+
+impl ScanScope {
+    pub fn new(
+        provider_id: impl Into<Box<str>>,
+        profile_id: impl Into<Box<str>>,
+    ) -> Result<Self, StoreError> {
+        let provider_id = provider_id.into();
+        let profile_id = profile_id.into();
+        if !valid_ascii_id(&provider_id, 64) || !valid_ascii_id(&profile_id, 128) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            provider_id,
+            profile_id,
+        })
+    }
+
+    #[must_use]
+    pub const fn provider_id(&self) -> &str {
+        &self.provider_id
+    }
+
+    #[must_use]
+    pub const fn profile_id(&self) -> &str {
+        &self.profile_id
+    }
+}
+
+impl fmt::Debug for ScanScope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ScanScope")
+            .field("provider_id", &Redacted)
+            .field("profile_id", &Redacted)
+            .finish()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ScanSetManifest {
+    scopes: Box<[ScanScope]>,
+}
+
+impl ScanSetManifest {
+    pub fn new(scopes: Box<[ScanScope]>) -> Result<Self, StoreError> {
+        if scopes.is_empty() {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        if scopes.len() > MAX_SCAN_SCOPES {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_SCAN_SCOPES as u64,
+            ));
+        }
+        let mut scopes = scopes.into_vec();
+        scopes.sort_unstable();
+        if scopes.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            scopes: scopes.into_boxed_slice(),
+        })
+    }
+
+    #[must_use]
+    pub const fn scopes(&self) -> &[ScanScope] {
+        &self.scopes
+    }
+
+    #[must_use]
+    pub const fn scope_count(&self) -> usize {
+        self.scopes.len()
+    }
+}
+
+impl fmt::Debug for ScanSetManifest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ScanSetManifest")
+            .field("scope_count", &self.scopes.len())
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScanSetId(u64);
+
+impl ScanSetId {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScanId(u64);
+
+impl ScanId {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanOutcome {
+    Complete,
+    Partial,
+    Cancelled,
+    Failed,
+    TimedOut,
+}
+
+impl ScanOutcome {
+    pub(super) const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Partial => "partial",
+            Self::Cancelled => "cancelled",
+            Self::Failed => "failed",
+            Self::TimedOut => "timed_out",
+        }
+    }
+
+    pub(super) fn from_sql(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "complete" => Ok(Self::Complete),
+            "partial" => Ok(Self::Partial),
+            "cancelled" => Ok(Self::Cancelled),
+            "failed" => Ok(Self::Failed),
+            "timed_out" => Ok(Self::TimedOut),
+            _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ScanCounters {
+    files_read: u64,
+    bytes_read: u64,
+    events_observed: u64,
+    diagnostics: u64,
+}
+
+impl ScanCounters {
+    pub fn new(
+        files_read: u64,
+        bytes_read: u64,
+        events_observed: u64,
+        diagnostics: u64,
+    ) -> Result<Self, StoreError> {
+        if [files_read, bytes_read, events_observed, diagnostics]
+            .into_iter()
+            .any(|value| value > i64::MAX as u64)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            files_read,
+            bytes_read,
+            events_observed,
+            diagnostics,
+        })
+    }
+
+    #[must_use]
+    pub const fn files_read(self) -> u64 {
+        self.files_read
+    }
+
+    #[must_use]
+    pub const fn bytes_read(self) -> u64 {
+        self.bytes_read
+    }
+
+    #[must_use]
+    pub const fn events_observed(self) -> u64 {
+        self.events_observed
+    }
+
+    #[must_use]
+    pub const fn diagnostics(self) -> u64 {
+        self.diagnostics
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScanSnapshot {
+    pub(super) id: ScanId,
+    pub(super) scan_set_id: ScanSetId,
+    pub(super) scope: ScanScope,
+    pub(super) started_at_ms: i64,
+    pub(super) completed_at_ms: Option<i64>,
+    pub(super) outcome: Option<ScanOutcome>,
+    pub(super) sources_seen: u64,
+    pub(super) counters: ScanCounters,
+}
+
+impl ScanSnapshot {
+    #[must_use]
+    pub const fn id(&self) -> ScanId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn scan_set_id(&self) -> ScanSetId {
+        self.scan_set_id
+    }
+
+    #[must_use]
+    pub const fn scope(&self) -> &ScanScope {
+        &self.scope
+    }
+
+    #[must_use]
+    pub const fn started_at_ms(&self) -> i64 {
+        self.started_at_ms
+    }
+
+    #[must_use]
+    pub const fn completed_at_ms(&self) -> Option<i64> {
+        self.completed_at_ms
+    }
+
+    #[must_use]
+    pub const fn outcome(&self) -> Option<ScanOutcome> {
+        self.outcome
+    }
+
+    #[must_use]
+    pub const fn sources_seen(&self) -> u64 {
+        self.sources_seen
+    }
+
+    #[must_use]
+    pub const fn counters(&self) -> ScanCounters {
+        self.counters
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScanSetSnapshot {
+    pub(super) id: ScanSetId,
+    pub(super) started_at_ms: i64,
+    pub(super) completed_at_ms: Option<i64>,
+    pub(super) outcome: Option<ScanOutcome>,
+    pub(super) expected_scope_count: u64,
+}
+
+impl ScanSetSnapshot {
+    #[must_use]
+    pub const fn id(self) -> ScanSetId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn started_at_ms(self) -> i64 {
+        self.started_at_ms
+    }
+
+    #[must_use]
+    pub const fn completed_at_ms(self) -> Option<i64> {
+        self.completed_at_ms
+    }
+
+    #[must_use]
+    pub const fn outcome(self) -> Option<ScanOutcome> {
+        self.outcome
+    }
+
+    #[must_use]
+    pub const fn expected_scope_count(self) -> u64 {
+        self.expected_scope_count
     }
 }
 
@@ -170,7 +539,6 @@ impl SourceRegistration {
             || parts.initial_checkpoint.physical_identity() != parts.physical_identity.as_ref()
             || parts.initial_checkpoint.committed_offset() != 0
             || parts.initial_checkpoint.scan_offset() != 0
-            || parts.initial_checkpoint.observed_file_length() != 0
             || parts.initial_checkpoint.anchor_start() != 0
             || parts.initial_checkpoint.anchor_len() != 0
         {
@@ -218,7 +586,6 @@ pub struct AppendBatchParts {
     pub previous_partial_chunk: Option<StoredSourceChunk>,
     pub chunk_updates: Box<[StoredSourceChunk]>,
     pub next_checkpoint: StoredCheckpoint,
-    pub last_seen_scan_id: Option<u64>,
     pub diagnostic_count_delta: u64,
 }
 
@@ -245,10 +612,7 @@ impl AppendBatch {
                 return Err(StoreError::new(StoreErrorCode::InvalidValue));
             }
         }
-        if parts
-            .last_seen_scan_id
-            .is_some_and(|value| value > i64::MAX as u64)
-            || parts.events.len() > MAX_APPEND_EVENTS
+        if parts.events.len() > MAX_APPEND_EVENTS
             || parts.chunk_updates.len() > MAX_APPEND_CHUNK_UPDATES
             || parts.expected_scan_offset < parts.expected_committed_offset
             || parts.next_checkpoint.committed_offset() < parts.expected_committed_offset
@@ -340,7 +704,6 @@ fn append_debug(
         .field("previous_partial_chunk", &parts.previous_partial_chunk)
         .field("chunk_updates_count", &parts.chunk_updates.len())
         .field("next_checkpoint", &parts.next_checkpoint)
-        .field("last_seen_scan_id", &parts.last_seen_scan_id)
         .field("diagnostic_count_delta", &parts.diagnostic_count_delta)
         .finish()
 }
@@ -524,6 +887,22 @@ impl GenerationStatus {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplaySourceState {
+    Pending,
+    Complete,
+}
+
+impl ReplaySourceState {
+    pub(super) fn from_sql(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "complete" => Ok(Self::Complete),
+            _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GenerationSnapshot {
     pub(super) source_key: SourceKey,
@@ -551,6 +930,30 @@ impl GenerationSnapshot {
     #[must_use]
     pub const fn checkpoint(&self) -> &StoredCheckpoint {
         &self.checkpoint
+    }
+}
+
+/// Every event the archive holds, with no date bounds.
+///
+/// The analytics path cannot express this: each range goes through `UsageRange`, whose
+/// `custom` constructor rejects a span over 400 days, so a lifetime is not a long range.
+/// The known count travels beside the sum for the same reason it does per range -- it is
+/// what separates a complete total from a partial one.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct UsageLifetimeTotals {
+    pub(super) event_count: u64,
+    pub(super) total: UsageTokenAggregate,
+}
+
+impl UsageLifetimeTotals {
+    #[must_use]
+    pub const fn event_count(self) -> u64 {
+        self.event_count
+    }
+
+    #[must_use]
+    pub const fn total(self) -> UsageTokenAggregate {
+        self.total
     }
 }
 
@@ -606,11 +1009,724 @@ impl UsageStoreCounts {
     }
 }
 
+#[derive(Clone)]
+pub struct ReplayAppendBatchParts {
+    pub revision_id: ReplayRevisionId,
+    pub expected_epoch: ReplayEpoch,
+    pub append_batch: AppendBatch,
+    pub relations: Box<[SessionRelationDraft]>,
+}
+
+impl fmt::Debug for ReplayAppendBatchParts {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        replay_append_debug("ReplayAppendBatchParts", self, formatter)
+    }
+}
+
+#[derive(Clone)]
+pub struct ReplayAppendBatch {
+    parts: ReplayAppendBatchParts,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ReplayRelation {
+    pub(super) revision_id: ReplayRevisionId,
+    pub(super) expected_epoch: ReplayEpoch,
+    pub(super) source_key: SourceKey,
+    pub(super) provider_id: Box<str>,
+    pub(super) profile_id: Box<str>,
+    pub(super) session_id: Box<str>,
+    pub(super) parent_session_id: Option<Box<str>>,
+    pub(super) declared_conflict: bool,
+    pub(super) source_id: Box<str>,
+    pub(super) source_offset: u64,
+}
+
+impl ReplayRelation {
+    pub fn new(
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+        source_key: SourceKey,
+        relation: &SessionRelationDraft,
+    ) -> Result<Self, StoreError> {
+        if relation.source_offset() > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            revision_id,
+            expected_epoch,
+            source_key,
+            provider_id: relation.provider_id().as_str().into(),
+            profile_id: relation.profile_id().as_str().into(),
+            session_id: relation.session_id().as_str().into(),
+            parent_session_id: Some(relation.parent_session_id().as_str().into()),
+            declared_conflict: relation.declared_conflict(),
+            source_id: relation.source_id().as_str().into(),
+            source_offset: relation.source_offset(),
+        })
+    }
+}
+
+impl fmt::Debug for ReplayRelation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ReplayRelation")
+            .field("revision_id", &self.revision_id)
+            .field("expected_epoch", &self.expected_epoch)
+            .field("source", &Redacted)
+            .field("relation", &Redacted)
+            .field("declared_conflict", &self.declared_conflict)
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayContinuationResult {
+    pub(super) processed_count: u16,
+    pub(super) remaining_work: bool,
+    pub(super) epoch: ReplayEpoch,
+}
+
+impl ReplayContinuationResult {
+    #[must_use]
+    pub const fn processed_count(self) -> u16 {
+        self.processed_count
+    }
+
+    #[must_use]
+    pub const fn remaining_work(self) -> bool {
+        self.remaining_work
+    }
+
+    #[must_use]
+    pub const fn epoch(self) -> ReplayEpoch {
+        self.epoch
+    }
+}
+
+impl ReplayAppendBatch {
+    pub fn new(parts: ReplayAppendBatchParts) -> Result<Self, StoreError> {
+        if parts.relations.len() > MAX_APPEND_RELATIONS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_APPEND_RELATIONS as u64,
+            ));
+        }
+        if parts
+            .relations
+            .iter()
+            .any(|relation| relation.source_offset() > i64::MAX as u64)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self { parts })
+    }
+
+    pub(super) const fn parts(&self) -> &ReplayAppendBatchParts {
+        &self.parts
+    }
+}
+
+impl fmt::Debug for ReplayAppendBatch {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        replay_append_debug("ReplayAppendBatch", &self.parts, formatter)
+    }
+}
+
+#[derive(Clone)]
+pub struct CurrentReplayAppendBatchParts {
+    pub revision_id: ReplayRevisionId,
+    pub expected_epoch: ReplayEpoch,
+    pub expected_archive_generation: ArchiveGeneration,
+    pub append_batch: AppendBatch,
+    pub relations: Box<[SessionRelationDraft]>,
+}
+
+#[derive(Clone)]
+pub struct CurrentReplayAppendBatch {
+    parts: CurrentReplayAppendBatchParts,
+}
+
+impl CurrentReplayAppendBatch {
+    pub fn new(parts: CurrentReplayAppendBatchParts) -> Result<Self, StoreError> {
+        if parts.relations.len() > MAX_APPEND_RELATIONS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_APPEND_RELATIONS as u64,
+            ));
+        }
+        if parts
+            .relations
+            .iter()
+            .any(|relation| relation.source_offset() > i64::MAX as u64)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self { parts })
+    }
+
+    pub(super) const fn parts(&self) -> &CurrentReplayAppendBatchParts {
+        &self.parts
+    }
+}
+
+impl fmt::Debug for CurrentReplayAppendBatch {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CurrentReplayAppendBatch")
+            .field("revision_id", &self.parts.revision_id)
+            .field("expected_epoch", &self.parts.expected_epoch)
+            .field(
+                "expected_archive_generation",
+                &self.parts.expected_archive_generation,
+            )
+            .field("append_batch", &self.parts.append_batch)
+            .field("relation_count", &self.parts.relations.len())
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CurrentReplaySourceExpectation {
+    pub(crate) revision_id: ReplayRevisionId,
+    pub(crate) expected_epoch: ReplayEpoch,
+    pub(crate) expected_archive_generation: ArchiveGeneration,
+    pub(crate) source_key: SourceKey,
+    pub(crate) expected_generation: u64,
+}
+
+impl CurrentReplaySourceExpectation {
+    #[must_use]
+    pub const fn new(
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+        expected_archive_generation: ArchiveGeneration,
+        source_key: SourceKey,
+        expected_generation: u64,
+    ) -> Self {
+        Self {
+            revision_id,
+            expected_epoch,
+            expected_archive_generation,
+            source_key,
+            expected_generation,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CurrentReplayCommit {
+    pub(super) processed_count: u16,
+    pub(super) remaining_work: bool,
+    pub(super) epoch: ReplayEpoch,
+    pub(super) archive_generation: ArchiveGeneration,
+    pub(super) quality: ArchivePublicationQuality,
+}
+
+#[derive(Clone)]
+pub struct CurrentScanPublicationParts {
+    pub revision_id: ReplayRevisionId,
+    pub expected_epoch: ReplayEpoch,
+    pub expected_archive_generation: ArchiveGeneration,
+    pub scan_set_id: ScanSetId,
+    pub discovered_sources: Box<[SourceKey]>,
+}
+
+#[derive(Clone)]
+pub struct CurrentScanPublication {
+    parts: CurrentScanPublicationParts,
+}
+
+impl CurrentScanPublication {
+    pub fn new(parts: CurrentScanPublicationParts) -> Result<Self, StoreError> {
+        if parts.discovered_sources.len() > MAX_REPLAY_SOURCES {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_REPLAY_SOURCES as u64,
+            ));
+        }
+        let mut discovered_sources = parts.discovered_sources.into_vec();
+        discovered_sources.sort_unstable_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        if discovered_sources.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            parts: CurrentScanPublicationParts {
+                discovered_sources: discovered_sources.into_boxed_slice(),
+                ..parts
+            },
+        })
+    }
+
+    pub(super) const fn parts(&self) -> &CurrentScanPublicationParts {
+        &self.parts
+    }
+}
+
+impl fmt::Debug for CurrentScanPublication {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CurrentScanPublication")
+            .field("revision_id", &self.parts.revision_id)
+            .field("expected_epoch", &self.parts.expected_epoch)
+            .field(
+                "expected_archive_generation",
+                &self.parts.expected_archive_generation,
+            )
+            .field("scan_set_id", &self.parts.scan_set_id)
+            .field("discovered_count", &self.parts.discovered_sources.len())
+            .finish()
+    }
+}
+
+impl CurrentReplayCommit {
+    #[must_use]
+    pub const fn processed_count(self) -> u16 {
+        self.processed_count
+    }
+
+    #[must_use]
+    pub const fn remaining_work(self) -> bool {
+        self.remaining_work
+    }
+
+    #[must_use]
+    pub const fn epoch(self) -> ReplayEpoch {
+        self.epoch
+    }
+
+    #[must_use]
+    pub const fn archive_generation(self) -> ArchiveGeneration {
+        self.archive_generation
+    }
+
+    #[must_use]
+    pub const fn quality(self) -> ArchivePublicationQuality {
+        self.quality
+    }
+}
+
+fn replay_append_debug(
+    name: &str,
+    parts: &ReplayAppendBatchParts,
+    formatter: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
+    formatter
+        .debug_struct(name)
+        .field("revision_id", &parts.revision_id)
+        .field("expected_epoch", &parts.expected_epoch)
+        .field("append_batch", &parts.append_batch)
+        .field("relation_count", &parts.relations.len())
+        .finish()
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AccountingVersions {
+    canonicalizer: u16,
+    fingerprint: u16,
+    replay_signature: u16,
+}
+
+impl AccountingVersions {
+    #[must_use]
+    pub const fn compiled() -> Self {
+        Self {
+            canonicalizer: CANONICALIZER_VERSION,
+            fingerprint: EVENT_FINGERPRINT_VERSION,
+            replay_signature: REPLAY_SIGNATURE_VERSION,
+        }
+    }
+
+    pub(super) fn from_stored(
+        canonicalizer: i64,
+        fingerprint: i64,
+        replay_signature: i64,
+    ) -> Result<Self, StoreError> {
+        let versions = Self {
+            canonicalizer: u16::try_from(canonicalizer)
+                .ok()
+                .filter(|value| *value != 0)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+            fingerprint: u16::try_from(fingerprint)
+                .ok()
+                .filter(|value| *value != 0)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+            replay_signature: u16::try_from(replay_signature)
+                .ok()
+                .filter(|value| *value != 0)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+        };
+        Ok(versions)
+    }
+
+    #[must_use]
+    pub const fn canonicalizer(self) -> u16 {
+        self.canonicalizer
+    }
+
+    #[must_use]
+    pub const fn fingerprint(self) -> u16 {
+        self.fingerprint
+    }
+
+    #[must_use]
+    pub const fn replay_signature(self) -> u16 {
+        self.replay_signature
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ReplayRevisionId(u64);
+
+impl ReplayRevisionId {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ReplayEpoch(u64);
+
+impl ReplayEpoch {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ArchiveGeneration(u64);
+
+impl ArchiveGeneration {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct DatasetGeneration(u64);
+
+impl DatasetGeneration {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArchivePublicationQuality {
+    Empty,
+    Complete,
+    Partial,
+    RecoveryPending,
+}
+
+impl ArchivePublicationQuality {
+    pub(super) const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::Complete => "complete",
+            Self::Partial => "partial",
+            Self::RecoveryPending => "recovery_pending",
+        }
+    }
+
+    pub(super) fn from_sql(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "empty" => Ok(Self::Empty),
+            "complete" => Ok(Self::Complete),
+            "partial" => Ok(Self::Partial),
+            "recovery_pending" => Ok(Self::RecoveryPending),
+            _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArchivePublication {
+    pub(super) generation: ArchiveGeneration,
+    pub(super) dataset_generation: DatasetGeneration,
+    pub(super) current_revision: Option<ReplayRevisionId>,
+    pub(super) latest_complete_scan_set: Option<ScanSetId>,
+    pub(super) quality: ArchivePublicationQuality,
+}
+
+impl ArchivePublication {
+    #[must_use]
+    pub const fn generation(self) -> ArchiveGeneration {
+        self.generation
+    }
+
+    #[must_use]
+    pub const fn dataset_generation(self) -> DatasetGeneration {
+        self.dataset_generation
+    }
+
+    #[must_use]
+    pub const fn current_revision(self) -> Option<ReplayRevisionId> {
+        self.current_revision
+    }
+
+    #[must_use]
+    pub const fn latest_complete_scan_set(self) -> Option<ScanSetId> {
+        self.latest_complete_scan_set
+    }
+
+    #[must_use]
+    pub const fn quality(self) -> ArchivePublicationQuality {
+        self.quality
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ReplayManifest {
+    source_keys: Box<[SourceKey]>,
+}
+
+impl ReplayManifest {
+    pub fn new(source_keys: Box<[SourceKey]>) -> Result<Self, StoreError> {
+        if source_keys.is_empty() {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        if source_keys.len() > MAX_REPLAY_SOURCES {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_REPLAY_SOURCES as u64,
+            ));
+        }
+        let mut source_keys = source_keys.into_vec();
+        source_keys.sort_unstable_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        if source_keys.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            source_keys: source_keys.into_boxed_slice(),
+        })
+    }
+
+    pub(super) const fn source_keys(&self) -> &[SourceKey] {
+        &self.source_keys
+    }
+
+    #[must_use]
+    pub const fn source_count(&self) -> usize {
+        self.source_keys.len()
+    }
+}
+
+impl fmt::Debug for ReplayManifest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ReplayManifest")
+            .field("source_count", &self.source_keys.len())
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplayRevisionStatus {
+    Staging,
+    Current,
+}
+
+impl ReplayRevisionStatus {
+    pub(super) const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Staging => "staging",
+            Self::Current => "current",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayRevisionSnapshot {
+    pub(super) id: ReplayRevisionId,
+    pub(super) epoch: ReplayEpoch,
+    pub(super) status: ReplayRevisionStatus,
+    pub(super) versions: AccountingVersions,
+    pub(super) expected_source_count: u64,
+    pub(super) scan_set_id: Option<ScanSetId>,
+    pub(super) sealed: bool,
+    pub(super) promoted: bool,
+}
+
+impl ReplayRevisionSnapshot {
+    #[must_use]
+    pub const fn id(self) -> ReplayRevisionId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn epoch(self) -> ReplayEpoch {
+        self.epoch
+    }
+
+    #[must_use]
+    pub const fn status(self) -> ReplayRevisionStatus {
+        self.status
+    }
+
+    #[must_use]
+    pub const fn versions(self) -> AccountingVersions {
+        self.versions
+    }
+
+    #[must_use]
+    pub const fn expected_source_count(self) -> u64 {
+        self.expected_source_count
+    }
+
+    #[must_use]
+    pub const fn scan_set_id(self) -> Option<ScanSetId> {
+        self.scan_set_id
+    }
+
+    #[must_use]
+    pub const fn sealed(self) -> bool {
+        self.sealed
+    }
+
+    #[must_use]
+    pub const fn promoted(self) -> bool {
+        self.promoted
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArchiveMode {
+    Empty,
+    LegacyUnverified,
+    ReplayVerified,
+    ReplayVersionStale,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArchiveState {
+    pub(super) mode: ArchiveMode,
+    pub(super) active_revision: Option<ReplayRevisionId>,
+    pub(super) rebuild_staging: bool,
+}
+
+impl ArchiveState {
+    #[must_use]
+    pub const fn mode(self) -> ArchiveMode {
+        self.mode
+    }
+
+    #[must_use]
+    pub const fn active_revision(self) -> Option<ReplayRevisionId> {
+        self.active_revision
+    }
+
+    #[must_use]
+    pub const fn rebuild_staging(self) -> bool {
+        self.rebuild_staging
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReplayQualityCounts {
+    pub(super) eligible: u64,
+    pub(super) replay: u64,
+    pub(super) pending: u64,
+    pub(super) conflict: u64,
+}
+
+impl ReplayQualityCounts {
+    #[must_use]
+    pub const fn eligible(self) -> u64 {
+        self.eligible
+    }
+
+    #[must_use]
+    pub const fn replay(self) -> u64 {
+        self.replay
+    }
+
+    #[must_use]
+    pub const fn pending(self) -> u64 {
+        self.pending
+    }
+
+    #[must_use]
+    pub const fn conflict(self) -> u64 {
+        self.conflict
+    }
+
+    #[must_use]
+    pub const fn total(self) -> u64 {
+        self.eligible
+            .saturating_add(self.replay)
+            .saturating_add(self.pending)
+            .saturating_add(self.conflict)
+    }
+}
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct EventCursor {
-    timestamp_seconds: i64,
-    timestamp_nanos: u32,
-    fingerprint: [u8; 32],
+    pub(super) timestamp_seconds: i64,
+    pub(super) timestamp_nanos: u32,
+    pub(super) fingerprint: [u8; 32],
 }
 
 impl EventCursor {
@@ -629,11 +1745,13 @@ impl EventCursor {
         })
     }
 
-    pub(super) const fn timestamp_seconds(self) -> i64 {
+    #[must_use]
+    pub const fn timestamp_seconds(self) -> i64 {
         self.timestamp_seconds
     }
 
-    pub(super) const fn timestamp_nanos(self) -> u32 {
+    #[must_use]
+    pub const fn timestamp_nanos(self) -> u32 {
         self.timestamp_nanos
     }
 

@@ -1,0 +1,26 @@
+[package]
+name = "tokenmaster-query"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+jiff.workspace = true
+thiserror.workspace = true
+tokenmaster-domain = { path = "../domain" }
+tokenmaster-benefits = { path = "../benefits" }
+tokenmaster-pricing = { path = "../pricing" }
+tokenmaster-quota = { path = "../quota" }
+tokenmaster-store = { path = "../store" }
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+tokenmaster-git = { path = "../git" }
+windows.workspace = true
+
+[[test]]
+name = "resource_contract"
+path = "tests/resource_contract.rs"
+harness = false

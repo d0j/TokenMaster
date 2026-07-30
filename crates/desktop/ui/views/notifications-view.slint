@@ -1,0 +1,213 @@
+import { BenefitLotRow, ReminderScopeRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { SectionState } from "../components/section-state.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component NotificationsHeaderCard inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> evidence-label;
+    in property <string> loaded-label;
+    in property <string> completeness-label;
+    in property <bool> narrow;
+
+    min-height: root.narrow ? 128px : 108px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: @tr("Notifications expiry reminders {0} {1} {2}", root.loaded-label, root.completeness-label, root.evidence-label);
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                horizontal-stretch: 1;
+                Text { text: @tr("Notifications"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
+                Text { text: @tr("Expiry reminders · effective in-app coverage"); color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
+            }
+            SectionState { state: root.state; reasons: root.reasons; }
+        }
+        if root.narrow: VerticalLayout {
+            spacing: UiTokens.space-xs;
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; overflow: elide; }
+            Text { text: root.completeness-label + " · " + root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
+        }
+        if !root.narrow: HorizontalLayout {
+            spacing: UiTokens.space;
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+        }
+    }
+}
+
+component ReminderProfilesCard inherits Rectangle {
+    in property <[ReminderScopeRow]> rows;
+    in property <string> state;
+    in property <bool> narrow;
+
+    min-height: max(108px, 70px + root.rows.length * (root.narrow ? 112px : 76px));
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: table;
+    accessible-label: @tr("Effective reminder profiles and truthful delivery coverage");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 0px;
+        Text { text: @tr("Reminder profiles"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
+        if root.rows.length == 0: Text {
+            text: root.state == "waiting" ? @tr("Waiting for reminder profiles") : (root.state == "ready" ? @tr("No reminder profiles") : @tr("Reminder profiles unavailable"));
+            color: UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+            height: 34px;
+        }
+        for scope[i] in root.rows: Rectangle {
+            height: root.narrow ? 112px : 76px;
+            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: list-item;
+            accessible-label: @tr("{0} {1} coverage {2} policy {3} leads {4} {5} {6} {7} {8} {9}", scope.scope-label, scope.lot-count-label, scope.coverage-label, scope.source-label, scope.leads-label, scope.next-due-label, scope.nearest-expiry-label, scope.completeness-label, scope.evidence-label, scope.warning-label);
+            VerticalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                padding-top: UiTokens.space-xs;
+                padding-bottom: UiTokens.space-xs;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: scope.scope-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 72px; }
+                    Text { text: scope.coverage-label; color: scope.coverage-label == "Disabled" ? UiTokens.degraded : UiTokens.ready; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 84px; }
+                    Text { text: scope.source-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 72px; }
+                    Text { text: scope.lot-count-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+                    Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: root.narrow ? 0px : 184px; visible: !root.narrow; horizontal-alignment: right; }
+                }
+                Text { text: @tr("Leads · {0}", scope.leads-label); color: UiTokens.accent; font-size: UiTokens.text-caption; overflow: elide; }
+                Text { text: scope.next-due-label + " · " + scope.nearest-expiry-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
+                if root.narrow: Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
+                if scope.warning-label != "": Text { text: scope.warning-label; color: UiTokens.degraded; font-size: UiTokens.text-caption; overflow: elide; }
+            }
+        }
+    }
+}
+
+component BenefitLotsCard inherits Rectangle {
+    in property <[BenefitLotRow]> rows;
+    in property <string> state;
+    in property <bool> narrow;
+
+    min-height: max(108px, 70px + root.rows.length * (root.narrow ? 92px : 58px));
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: table;
+    accessible-label: @tr("Current separate benefit lots with expiry precision and evidence");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 0px;
+        Text { text: @tr("Current benefits"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
+        if root.rows.length == 0: Text {
+            text: root.state == "waiting" ? @tr("Waiting for benefit inventory") : (root.state == "ready" ? @tr("No current benefits") : @tr("Benefit inventory unavailable"));
+            color: UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+            height: 34px;
+        }
+        if !root.narrow && root.rows.length > 0: HorizontalLayout {
+            height: 26px;
+            spacing: UiTokens.space-sm;
+            Text { text: @tr("Scope"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 66px; }
+            Text { text: @tr("Benefit"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 170px; }
+            Text { text: @tr("Quantity"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 56px; horizontal-alignment: right; }
+            Text { text: @tr("State"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 94px; }
+            Text { text: @tr("Expiry"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; }
+            Text { text: @tr("Evidence"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 210px; horizontal-alignment: right; }
+        }
+        for lot[i] in root.rows: Rectangle {
+            height: root.narrow ? 92px : 58px;
+            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: list-item;
+            accessible-label: @tr("{0} {1} {2} quantity {3} state {4} {5} {6} {7}", lot.scope-label, lot.kind-label, lot.benefit-label, lot.quantity-label, lot.state-label, lot.expiry-label, lot.granted-label, lot.evidence-label);
+            if root.narrow: VerticalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                padding-top: UiTokens.space-xs;
+                padding-bottom: UiTokens.space-xs;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: lot.scope-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 58px; }
+                    Text { text: lot.kind-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: lot.quantity-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-bold; width: 54px; horizontal-alignment: right; }
+                    Text { text: lot.state-label; color: lot.state-label == "Available" ? UiTokens.ready : UiTokens.degraded; font-size: UiTokens.text-caption; width: 90px; horizontal-alignment: right; }
+                }
+                Text { text: lot.expiry-label; color: UiTokens.accent; font-size: UiTokens.text-caption; overflow: elide; }
+                Text { text: lot.evidence-label + " · " + lot.granted-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
+            }
+            if !root.narrow: HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: lot.scope-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 66px; }
+                VerticalLayout {
+                    width: 170px;
+                    Text { text: lot.kind-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; overflow: elide; }
+                    Text { text: lot.benefit-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
+                }
+                Text { text: lot.quantity-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-bold; width: 56px; horizontal-alignment: right; }
+                Text { text: lot.state-label; color: lot.state-label == "Available" ? UiTokens.ready : UiTokens.degraded; font-size: UiTokens.text-caption; width: 94px; }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    Text { text: lot.expiry-label; color: UiTokens.accent; font-size: UiTokens.text-caption; overflow: elide; }
+                    Text { text: lot.granted-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; overflow: elide; }
+                }
+                Text { text: lot.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 210px; horizontal-alignment: right; overflow: elide; }
+            }
+        }
+    }
+}
+
+export component NotificationsView inherits Rectangle {
+    in property <[ReminderScopeRow]> scope-rows;
+    in property <[BenefitLotRow]> lot-rows;
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> evidence-label;
+    in property <string> loaded-label;
+    in property <string> completeness-label;
+    out property <bool> narrow: root.width < 984px;
+    out property <string> layout-mode: root.narrow ? "narrow" : "wide";
+
+    background: UiTokens.background;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        content := VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            NotificationsHeaderCard {
+                state: root.state;
+                reasons: root.reasons;
+                evidence-label: root.evidence-label;
+                loaded-label: root.loaded-label;
+                completeness-label: root.completeness-label;
+                narrow: root.narrow;
+            }
+            ReminderProfilesCard { rows: root.scope-rows; state: root.state; narrow: root.narrow; }
+            BenefitLotsCard { rows: root.lot-rows; state: root.state; narrow: root.narrow; }
+        }
+        viewport-height: max(self.height, content.min-height);
+    }
+}

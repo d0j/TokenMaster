@@ -1,0 +1,255 @@
+import { ProjectUsageRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { MetricValue } from "../components/metric-value.slint";
+import { SectionState } from "../components/section-state.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component ProjectsHeaderCard inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> usage-range-label;
+    in property <string> usage-time-zone-label;
+    in property <string> usage-evidence-label;
+    in property <string> code-range-label;
+    in property <string> code-time-zone-label;
+    in property <string> code-evidence-label;
+    in property <string> total-tokens;
+    in property <string> total-availability;
+    in property <string> cost;
+    in property <string> cost-availability;
+    in property <string> cost-evidence-label;
+    in property <string> events;
+    in property <string> loaded-label;
+    in property <string> completeness-label;
+    in property <string> code-coverage-label;
+    in property <string> code-completeness-label;
+    in property <bool> narrow;
+
+    min-height: root.narrow ? 252px : 196px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: @tr("Projects. Recent usage {0} {1} {2}. Today code {3} {4} {5}. {6}. {7}.", root.usage-range-label, root.usage-time-zone-label, root.usage-evidence-label, root.code-range-label, root.code-time-zone-label, root.code-evidence-label, root.loaded-label, root.code-coverage-label);
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                horizontal-stretch: 1;
+                Text { text: @tr("Projects"); color: UiTokens.text-primary; font-size: UiTokens.text-headline; font-weight: UiTokens.weight-bold; }
+                Text {
+                    text: @tr("Recent usage · {0} · {1}", root.usage-range-label, root.usage-time-zone-label);
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-body;
+                    overflow: elide;
+                }
+            }
+            SectionState { state: root.state; reasons: root.reasons; }
+        }
+        if root.narrow: VerticalLayout {
+            spacing: UiTokens.space-xs;
+            Text { text: root.usage-evidence-label + " · " + root.loaded-label + " · " + root.completeness-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
+            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: UiTokens.text-body; overflow: elide; }
+            Text { text: root.code-evidence-label + " · " + root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; overflow: elide; }
+        }
+        if !root.narrow: HorizontalLayout {
+            spacing: UiTokens.space;
+            Text { text: root.usage-evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; }
+            Text { text: root.completeness-label; color: UiTokens.accent; font-size: UiTokens.text-body; horizontal-stretch: 1; }
+        }
+        if !root.narrow: HorizontalLayout {
+            spacing: UiTokens.space;
+            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: UiTokens.text-body; }
+            Text { text: root.code-evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
+            Text { text: root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; horizontal-stretch: 1; overflow: elide; }
+        }
+        HorizontalLayout {
+            spacing: UiTokens.space;
+            MetricValue { label: @tr("Recent tokens"); value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Recent cost · {0}", root.cost-evidence-label); value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Recent events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+        }
+    }
+}
+
+component ProjectsTableCard inherits Rectangle {
+    in property <[ProjectUsageRow]> rows;
+    in property <bool> narrow;
+    in property <string> state;
+
+    min-height: max(108px, 70px + root.rows.length * (root.narrow ? 106px : 56px));
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: table;
+    accessible-label: @tr("Recent usage by project with separately labelled today code output");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 0px;
+        Text { text: @tr("Usage by project"); color: UiTokens.text-primary; font-size: UiTokens.text-subhead; font-weight: UiTokens.weight-bold; height: 32px; }
+        if root.rows.length == 0: Text {
+            text: root.state == "waiting" ? @tr("Waiting for project evidence") : (root.state == "ready" ? @tr("No project usage in this range") : @tr("Project evidence unavailable"));
+            color: UiTokens.text-secondary;
+            font-size: UiTokens.text-body;
+            height: 34px;
+        }
+        if !root.narrow && root.rows.length > 0: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: @tr("Project"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 128px; }
+            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 60px; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 62px; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 96px; horizontal-alignment: right; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 42px; horizontal-alignment: right; }
+            Text { text: @tr("Commits"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 48px; horizontal-alignment: right; }
+            Text { text: @tr("+Added"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 54px; horizontal-alignment: right; }
+            Text { text: @tr("-Removed"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 58px; horizontal-alignment: right; }
+            Text { text: @tr("Net"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; width: 52px; horizontal-alignment: right; }
+            Text { text: @tr("Cost / 100 added product-code lines"); color: UiTokens.text-secondary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; }
+        }
+        for project[i] in root.rows: Rectangle {
+            height: root.narrow ? 106px : 56px;
+            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: list-item;
+            accessible-label: @tr("Recent usage {0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}. Today code {9} {10} commits {11} added {12} removed {13} net {14} efficiency {15} {16} {17}", project.project-label, project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.total-label, project.cost-label, project.cost-evidence-label, project.event-label, project.code-status-label, project.repository-label, project.commits-label, project.added-label, project.removed-label, project.net-label, project.efficiency-label, project.efficiency-reason-label, project.code-evidence-label);
+            if root.narrow: VerticalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                padding-top: UiTokens.space-xs;
+                padding-bottom: UiTokens.space-xs;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: project.project-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: project.total-label; color: project.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; width: 72px; horizontal-alignment: right; }
+                    Text { text: project.cost-label + " · " + project.cost-evidence-label; color: project.cost-availability == "unavailable" ? UiTokens.text-secondary : (project.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 140px; horizontal-alignment: right; overflow: elide; }
+                }
+                Rectangle {
+                    height: 3px;
+                    background: UiTokens.accent-subtle;
+                    border-radius: 2px;
+                    Rectangle { width: max(1px, project.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
+                }
+                Text {
+                    text: @tr("Recent · In {0} · Cache {1} · Out {2} · Reason {3} · {4} events", project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.event-label);
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-caption;
+                    overflow: elide;
+                }
+                Text {
+                    text: @tr("Today code · {0} · {1} · {2} commits · {3} / {4} · net {5}", project.code-status-label, project.repository-label, project.commits-label, project.added-label, project.removed-label, project.net-label);
+                    color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary;
+                    font-size: UiTokens.text-caption;
+                    overflow: elide;
+                }
+                Text {
+                    text: project.efficiency-label + " · " + project.code-evidence-label + (project.efficiency-reason-label == "" ? "" : " · " + project.efficiency-reason-label);
+                    color: project.code-complete ? UiTokens.text-secondary : UiTokens.accent;
+                    font-size: UiTokens.text-caption;
+                    overflow: elide;
+                }
+            }
+            if !root.narrow: VerticalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    height: 32px;
+                    spacing: UiTokens.space-sm;
+                    Text { text: project.project-label; color: UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 128px; overflow: elide; }
+                    Rectangle {
+                        width: 60px;
+                        height: 4px;
+                        y: (parent.height - self.height) / 2;
+                        background: UiTokens.accent-subtle;
+                        border-radius: 2px;
+                        Rectangle { width: max(1px, project.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
+                    }
+                    Text { text: project.total-label; color: project.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-body; font-weight: UiTokens.weight-medium; width: 62px; horizontal-alignment: right; }
+                    Text { text: project.cost-label; color: project.cost-availability == "unavailable" ? UiTokens.text-secondary : (project.cost-availability == "partial" ? UiTokens.accent : UiTokens.text-primary); font-size: UiTokens.text-body; width: 96px; horizontal-alignment: right; }
+                    Text { text: project.event-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; width: 42px; horizontal-alignment: right; }
+                    Text { text: project.commits-label; color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 48px; horizontal-alignment: right; }
+                    Text { text: project.added-label; color: project.code-available ? UiTokens.ready : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 54px; horizontal-alignment: right; }
+                    Text { text: project.removed-label; color: project.code-available ? UiTokens.degraded : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 58px; horizontal-alignment: right; }
+                    Text { text: project.net-label; color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 52px; horizontal-alignment: right; }
+                    Text { text: project.efficiency-label; color: project.efficiency-label == "—" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
+                }
+                Text {
+                    text: @tr("Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}", project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.cost-evidence-label, project.code-status-label, project.repository-label, project.code-evidence-label, project.efficiency-reason-label);
+                    color: UiTokens.text-secondary;
+                    font-size: UiTokens.text-caption;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}
+
+export component ProjectsView inherits Rectangle {
+    in property <[ProjectUsageRow]> rows;
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> usage-range-label;
+    in property <string> usage-time-zone-label;
+    in property <string> usage-evidence-label;
+    in property <string> code-range-label;
+    in property <string> code-time-zone-label;
+    in property <string> code-evidence-label;
+    in property <string> total-tokens;
+    in property <string> total-availability;
+    in property <string> cost;
+    in property <string> cost-availability;
+    in property <string> cost-evidence-label;
+    in property <string> events;
+    in property <string> loaded-label;
+    in property <string> completeness-label;
+    in property <string> code-coverage-label;
+    in property <string> code-completeness-label;
+    out property <bool> narrow: root.width < 984px;
+    out property <string> layout-mode: root.narrow ? "narrow" : "wide";
+
+    background: UiTokens.background;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: self.width;
+        content := VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            ProjectsHeaderCard {
+                state: root.state;
+                reasons: root.reasons;
+                usage-range-label: root.usage-range-label;
+                usage-time-zone-label: root.usage-time-zone-label;
+                usage-evidence-label: root.usage-evidence-label;
+                code-range-label: root.code-range-label;
+                code-time-zone-label: root.code-time-zone-label;
+                code-evidence-label: root.code-evidence-label;
+                total-tokens: root.total-tokens;
+                total-availability: root.total-availability;
+                cost: root.cost;
+                cost-availability: root.cost-availability;
+                cost-evidence-label: root.cost-evidence-label;
+                events: root.events;
+                loaded-label: root.loaded-label;
+                completeness-label: root.completeness-label;
+                code-coverage-label: root.code-coverage-label;
+                code-completeness-label: root.code-completeness-label;
+                narrow: root.narrow;
+            }
+            ProjectsTableCard { rows: root.rows; narrow: root.narrow; state: root.state; }
+        }
+        viewport-height: max(self.height, content.min-height);
+    }
+}
