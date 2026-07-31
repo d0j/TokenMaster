@@ -383,9 +383,12 @@ Decision: keep Rust 1.97, Slint 1.17, bundled SQLite, the built-in Codex adapter
 the provider-neutral architecture. After P2 query/data work, deliver the complete
 desktop UI in P3, presentation/localization in P4, and the read-only CLI/MCP automation
 surface in P5. P6 produces the canonical signed `x86_64-pc-windows-msvc` portable ZIP.
-The current GNU lane remains development/M0 evidence until an explicit dual-lane P6
-comparison passes; the workspace-global forced target is then replaced by explicit
-build-script target selection. No automatic updater or installer ships in 1.0.
+The GNU lane this entry deferred to a dual-lane P6 comparison no longer exists:
+`rust-toolchain.toml` pins `x86_64-pc-windows-msvc` as both host and target, so there is
+no second lane and the comparison cannot be run rather than being merely unfinished. The
+workspace-global forced target in `.cargo/config.toml` therefore outlived the reason it
+was scheduled for replacement, and whether it still earns its place is an open question
+and not a consequence of that comparison. No automatic updater or installer ships in 1.0.
 
 The Slint desktop distribution follows the Royalty-free License 2.0 attribution route
 with Help/About and public-download attribution, dependency notices, license policy,
