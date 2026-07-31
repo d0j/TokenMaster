@@ -186,6 +186,30 @@ survives edits and is greppable.
 | note | **`RebuildReason::ParserVersionChanged` is declared and constructed nowhere.** A checkpoint whose parser schema version no longer matches surfaces as `InvalidCheckpoint`, a different class of answer from the rebuild signal the enum advertises -- and `PARSER_SCHEMA_VERSION` is already at 2, so it has been bumped once. The variant's existence is a claim that this case is handled where it is not: stale documentation, but in code. This repository's stated preference is deleting over adding, so deleting the variant is the cheaper honest option. Reported by the sweep and not verified here. | `enum RebuildReason` in `crates/codex/src/reader/mod.rs` |
 | note | **Two decision records point at a package that was deleted, and one ledger row names a gate that does not exist.** ADR-078 explains why the tray is hand-written by saying the Slint `system-tray` feature "is scoped only to the separate M0 probe"; `tokenmaster-m0` is not among the workspace members -- verified, zero matches in `Cargo.toml` -- and `CLAUDE.md` records that probe as deleted. ADR-049 carries the same stale present tense. So a reader following the reasoning lands on a crate that is not there, and the property the sentence exists to explain now rests only on the absence of a feature flag nothing asserts. Separately `docs/FEATURE_PARITY.md` states that a `rejected` row passes only with a regression gate present, and one row's gate is "CLI/MCP allowlist tests" -- there is no CLI or MCP crate, and `allowlist` appears in **no** `.rs`, `.ps1` or `.toml` file in the repository. Following this repository's own precedent, the ADRs get a closing pointer rather than a rewrite: they are history, and ADR-015 set that shape. The ledger row either names a check that exists today or moves to `planned`. Found by the Opus critic. | ADR-078 and ADR-049 in `spec/DECISIONS.md`; the `rejected` rows in `docs/FEATURE_PARITY.md` |
 
+## How much a review finding is worth here
+
+Five outside reviews produced roughly forty findings across this branch. **Five of them did
+not survive being checked against the code**, and one more was half right -- so a finding
+arrives as a lead, not as a fact, and the entry that records it says which it is.
+
+What failed, and how, because the shapes repeat:
+
+- **A count stood in for a cause.** A tool call was said to be counted or dropped depending on
+  a stray backslash; the mechanism was real and the consequence was not, because the ordinal
+  in the fingerprint already separates the events the report said would merge.
+- **A document's own prose was searched instead of the concept.** Four parity gate clauses
+  were reported as asserted nowhere; two are plainly asserted under names that share no words
+  with the ledger. The same four phrases returned zero for me too, one minute before listing
+  the directory and finding both contracts.
+- **A field's presence was read as a collapse.** `unwrap_or_default()` on an absent credits
+  array was called a loss of the unavailable state; the authoritative count sits in a
+  neighbouring field and the completeness enum carries the distinction correctly.
+- **A repair's own hole was missed by the reviewer who verified the repair**, and found by the
+  next one -- twice, in the same predicate.
+
+So: open every finding before believing it, and record the verdict either way. A withdrawal
+costs one reading; a false entry costs every decision made on it afterwards.
+
 ## What the reviews did not look at
 
 Three outside reviews ran over this branch -- two `fable` readers and one `opus`, each a single
