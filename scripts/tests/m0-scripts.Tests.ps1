@@ -138,15 +138,18 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match '(?i)\bgo\.exe\b|\bnode\.exe\b|\bpython\.exe\b'
     }
 
-    It "verification runs the surviving script contracts" {
+    It "verification runs every Pester suite that exists" {
         $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
-        $Text | Should -Match 'm0-scripts\.Tests\.ps1'
-        $Text | Should -Match 'immutable-actions\.Tests\.ps1'
-        $Text | Should -Match 'release-artifact-workflow\.Tests\.ps1'
-        $Text | Should -Match 'dependency-policy\.Tests\.ps1'
-        $Text | Should -Match 'audit-clean-root\.Tests\.ps1'
-        $Text | Should -Match 'product-package\.Tests\.ps1'
-        $Text | Should -Match 'validate-p3e-interactive\.Tests\.ps1'
+        # Enumerated from disk, never spelled out here. A hand-written list is what failed:
+        # it named seven suites while the gate ran eight, so secret-scan could have been
+        # dropped from verify-m0.ps1 without turning anything red -- and a ninth suite added
+        # tomorrow would have been forgotten the same way.
+        $Suites = @(Get-ChildItem -LiteralPath (Join-Path $ScriptsRoot "tests") `
+                -Filter "*.Tests.ps1" -File | Select-Object -ExpandProperty Name)
+        $Suites.Count | Should -BeGreaterOrEqual 8
+        foreach ($Suite in $Suites) {
+            $Text | Should -Match ([regex]::Escape($Suite))
+        }
         $Text | Should -Match 'validate-immutable-actions\.ps1'
         $Text | Should -Match 'verify-dependency-policy\.ps1'
     }

@@ -310,6 +310,84 @@ fn recovery_ui_source_keeps_authority_bounded_and_accessible() {
     }
 }
 
+/// The forbidden list in the test above reads five Slint files by name, and the one file in
+/// the tree that animates is not among them -- so the rule that exists to keep an idle
+/// animation out of the product could never have seen the only animation in the product.
+/// It entered once already and was found by measuring a core at 97.7%, not by this gate.
+///
+/// Enumerated from disk for the same reason the localization contract is: a list of files
+/// has to be remembered, and forgetting is the failure being guarded against. The single
+/// exception is pinned by content rather than by file name, so moving `ImportActivityDot`
+/// somewhere else keeps it legal and adding a second animation anywhere does not.
+#[test]
+fn the_only_animation_in_the_slint_tree_is_the_guarded_import_dot() {
+    fn collect(directory: &std::path::Path, sources: &mut Vec<(String, String)>) {
+        for entry in std::fs::read_dir(directory).expect("read ui directory") {
+            let path = entry.expect("directory entry").path();
+            if path.is_dir() {
+                collect(&path, sources);
+            } else if path.extension().is_some_and(|value| value == "slint") {
+                let text = std::fs::read_to_string(&path).expect("read slint source");
+                sources.push((path.display().to_string(), text.replace("\r\n", "\n")));
+            }
+        }
+    }
+
+    let mut sources = Vec::new();
+    collect(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui"),
+        &mut sources,
+    );
+    assert!(
+        sources.len() > 20,
+        "expected the whole Slint tree, found {} files",
+        sources.len()
+    );
+
+    // Comments are stripped before matching so the explanation written beside the exception
+    // does not count as a second one, and so a new animation cannot hide inside a comment.
+    let mut animating = Vec::new();
+    for (path, text) in &sources {
+        for (number, line) in text.lines().enumerate() {
+            let code = line.split("//").next().unwrap_or_default();
+            if ["Timer {", "animate ", "animation-"]
+                .iter()
+                .any(|token| code.contains(token))
+            {
+                animating.push((path.clone(), number, code.trim().to_string()));
+            }
+        }
+    }
+    assert_eq!(
+        animating.len(),
+        1,
+        "exactly one animation is allowed in the tree, found {animating:#?}"
+    );
+
+    let (path, number, line) = &animating[0];
+    assert!(
+        line.contains("animation-tick()"),
+        "the allowed animation is the import dot's tick, found {line:?} in {path}"
+    );
+
+    // The guard is the whole reason this one is allowed: `animation-tick()` schedules a
+    // repaint for as long as its binding is evaluated, and Slint 1.17 instantiates the
+    // contents of an `if` eagerly, so an unguarded read burns a core whether or not the
+    // window is even visible. The condition must sit on the binding that reads the tick.
+    let (_, text) = sources
+        .iter()
+        .find(|(candidate, _)| candidate == path)
+        .expect("the animating source");
+    let guard = text
+        .lines()
+        .nth(number.saturating_sub(1))
+        .unwrap_or_default();
+    assert!(
+        guard.contains("root.active") && guard.contains("!root.reduced-motion"),
+        "the animation must stay behind the active and reduced-motion guard, found {guard:?}"
+    );
+}
+
 #[test]
 fn desktop_bridge_factory_is_send_sync_and_retains_no_strong_window() {
     fn assert_send_sync<T: Send + Sync>() {}
