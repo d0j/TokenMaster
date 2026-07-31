@@ -240,32 +240,15 @@ fn incremental_scan(executable: &Path, args: &[String]) -> io::Result<()> {
     std::process::exit(2);
 }
 
+include!("receipt_entry.rs");
+
 fn write_receipt(executable: &Path, args: &[String]) -> io::Result<()> {
     let receipt = executable
         .parent()
         .map(|directory| directory.join("receipt.txt"))
         .ok_or_else(|| io::Error::other("missing executable parent"))?;
     let mut file = OpenOptions::new().create(true).append(true).open(receipt)?;
-    writeln!(file, "pid={}", std::process::id())?;
-    writeln!(file, "argv={}", args.join("|"))?;
-    writeln!(
-        file,
-        "env=optional_locks:{};prompt:{};pager:{};no_color:{}",
-        env::var("GIT_OPTIONAL_LOCKS").unwrap_or_default(),
-        env::var("GIT_TERMINAL_PROMPT").unwrap_or_default(),
-        env::var("GIT_PAGER").unwrap_or_default(),
-        env::var("NO_COLOR").unwrap_or_default(),
-    )?;
-    writeln!(
-        file,
-        "isolated=dir:{};work_tree:{};index:{};config:{};trace:{};askpass:{}",
-        env::var("GIT_DIR").unwrap_or_default(),
-        env::var("GIT_WORK_TREE").unwrap_or_default(),
-        env::var("GIT_INDEX_FILE").unwrap_or_default(),
-        env::var("GIT_CONFIG_PARAMETERS").unwrap_or_default(),
-        env::var("GIT_TRACE").unwrap_or_default(),
-        env::var("GIT_ASKPASS").unwrap_or_default(),
-    )?;
+    write_receipt_entry(&mut file, std::process::id(), args)?;
     file.flush()?;
     Ok(())
 }

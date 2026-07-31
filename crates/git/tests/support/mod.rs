@@ -3,6 +3,10 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::OnceLock;
 
+// The same source the fixture binary compiles, so the receipt is described once and the
+// contract tests can assert how it is written rather than only what it contains.
+include!("receipt_entry.rs");
+
 pub fn fixture_path() -> PathBuf {
     static FIXTURE: OnceLock<PathBuf> = OnceLock::new();
     FIXTURE

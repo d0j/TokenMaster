@@ -344,6 +344,46 @@ fn assert_fixture_processes_exited(fixture: &Fixture) {
     );
 }
 
+#[test]
+fn a_receipt_entry_reaches_the_file_in_one_write_so_a_killed_fixture_cannot_tear_a_line() {
+    #[derive(Default)]
+    struct Counting(Vec<Vec<u8>>);
+
+    impl std::io::Write for Counting {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.push(buf.to_vec());
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let pid = std::process::id();
+    let args = vec![
+        "rev-parse".to_string(),
+        "--path-format=absolute".to_string(),
+    ];
+    let mut sink = Counting::default();
+    support::write_receipt_entry(&mut sink, pid, &args).expect("receipt entry");
+
+    // Deadline tests kill this fixture on purpose. `writeln!` issues one write per piece of
+    // its format string, so a process stopped between "pid=" and the digits leaves a torn
+    // line in the file forever -- measured at six writes for the first two lines alone.
+    assert_eq!(
+        sink.0.len(),
+        1,
+        "a receipt entry must reach the file in exactly one write"
+    );
+    let entry = String::from_utf8(sink.0.concat()).expect("receipt entry is utf-8");
+    assert!(
+        entry.starts_with(&format!("pid={pid}\n")),
+        "receipt entry must open with a complete pid line, got {entry:?}"
+    );
+    assert!(entry.ends_with('\n'), "receipt entry must end a line");
+}
+
 fn assert_receipt_pids_exited(receipt: &str, executable: &Path) {
     for pid in receipt
         .lines()
