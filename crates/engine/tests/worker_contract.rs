@@ -13,6 +13,27 @@ use tokenmaster_engine::{
     WorkerErrorCode, WorkerPhase,
 };
 
+/// Parks an execute closure until the test releases it, bounded.
+///
+/// The bound is the contract rather than tidiness, and it is written once here because six
+/// closures need it for the same reason. Every `release` channel in this file is declared
+/// before its worker, so unwinding drops the worker first: `RefreshWorker::drop` calls
+/// `shutdown`, whose `cancel` only raises a cooperative flag these closures never read, and
+/// then **joins**. With an unbounded `recv` the sender is still alive in the panicking frame,
+/// so the join never returns, the panic never completes, and the harness names no test.
+///
+/// Measured on the sibling scheduler contract, which had the identical shape and was this
+/// repository's open P4 exit blocker: with the unbounded receive an injected failure left the
+/// process running at 180.2 seconds, CPU 0, three threads, nothing named; bounded, the same
+/// failure was reported in 30.00 seconds. The asserts here are deterministic today, so this
+/// is a latent hang rather than a live one -- which is exactly how the other one looked until
+/// a timing race made it live.
+fn await_release(release_rx: &Receiver<()>, what: &str) {
+    release_rx
+        .recv_timeout(Duration::from_secs(30))
+        .unwrap_or_else(|error| panic!("{what}: {error}"));
+}
+
 #[derive(Default)]
 struct TestClock(AtomicU64);
 
@@ -102,7 +123,7 @@ fn completion_wait_is_bounded_and_returns_the_exact_published_receipt() {
     let (release_tx, release_rx) = sync_channel(1);
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         entered_tx.send(permit.id()).expect("signal active task");
-        release_rx.recv().expect("release active task");
+        await_release(&release_rx, "release active task");
         RefreshOutcome::Completed
     })
     .expect("spawn worker");
@@ -145,7 +166,7 @@ fn cloned_submitter_keeps_one_worker_capacity_and_closes_after_shutdown() {
     let (release_tx, release_rx) = sync_channel(1);
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         entered_tx.send(permit.id()).expect("active task");
-        release_rx.recv().expect("release task");
+        await_release(&release_rx, "release task");
         RefreshOutcome::Completed
     })
     .expect("worker");
@@ -197,7 +218,7 @@ fn ten_thousand_hints_use_one_follow_up_and_latest_only_result_slot() {
         let call = task_calls.fetch_add(1, Ordering::AcqRel) + 1;
         if call == 1 {
             entered_tx.send(permit.id()).expect("signal first task");
-            release_rx.recv().expect("release first task");
+            await_release(&release_rx, "release first task");
             RefreshOutcome::Failed
         } else {
             RefreshOutcome::Completed
@@ -347,7 +368,7 @@ fn panic_faults_worker_abandons_follow_up_and_exposes_no_payload() {
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         task_calls.fetch_add(1, Ordering::AcqRel);
         entered_tx.send(permit.id()).expect("signal active task");
-        release_rx.recv().expect("release active task");
+        await_release(&release_rx, "release active task");
         panic!("fixed test panic")
     })
     .expect("spawn worker");
@@ -412,7 +433,7 @@ fn stale_cancel_cannot_touch_newer_work_and_shutdown_is_idempotent() {
     let (release_tx, release_rx) = sync_channel(1);
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         entered_tx.send(permit.id()).expect("signal task");
-        release_rx.recv().expect("release task");
+        await_release(&release_rx, "release task");
         RefreshOutcome::Completed
     })
     .expect("spawn worker");
@@ -525,7 +546,7 @@ fn expired_pending_work_is_reported_without_a_second_callback() {
     let mut worker = RefreshWorker::spawn(clock.clone(), move |permit| {
         task_calls.fetch_add(1, Ordering::AcqRel);
         entered_tx.send(permit.id()).expect("signal active task");
-        release_rx.recv().expect("release active task");
+        await_release(&release_rx, "release active task");
         RefreshOutcome::Completed
     })
     .expect("spawn worker");
