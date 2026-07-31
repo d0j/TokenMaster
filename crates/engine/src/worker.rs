@@ -194,34 +194,46 @@ enum Wake {
 ///
 /// **Lock order is slot then state, never the reverse.** `publish_latest` is the only place
 /// that holds both; every other path takes one.
+struct SlotState {
+    latest: Option<WorkerCompletion>,
+    closed: bool,
+}
+
 struct CompletionSlot {
-    latest: Mutex<Option<WorkerCompletion>>,
-    closed: Mutex<bool>,
+    state: Mutex<SlotState>,
     ready: Condvar,
 }
 
 impl CompletionSlot {
     fn new() -> Self {
         Self {
-            latest: Mutex::new(None),
-            closed: Mutex::new(false),
+            state: Mutex::new(SlotState {
+                latest: None,
+                closed: false,
+            }),
             ready: Condvar::new(),
         }
     }
 
-    fn is_closed(&self) -> Result<bool, WorkerError> {
-        self.closed
+    fn lock(&self) -> Result<MutexGuard<'_, SlotState>, WorkerError> {
+        self.state
             .lock()
-            .map(|closed| *closed)
             .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))
     }
 
     /// Marks the slot closed and wakes every waiter, so a worker that has stopped producing
     /// ends their wait instead of leaving them to their timeout. The channel got this from
     /// disconnection; a slot has to say it.
+    ///
+    /// `closed` lives in the same mutex as `latest` because a waiter checks both and then
+    /// waits, and a condition variable only guarantees the wakeup is not lost when the
+    /// predicate is read under the very lock it waits on. Held apart, this sequence loses it:
+    /// the waiter reads `closed` false and releases that second lock, the worker sets it and
+    /// notifies, and only then does the waiter register -- after the notification, sleeping
+    /// out its whole timeout for a receipt that can never arrive.
     fn close(&self) {
-        if let Ok(mut closed) = self.closed.lock() {
-            *closed = true;
+        if let Ok(mut state) = self.state.lock() {
+            state.closed = true;
         }
         self.ready.notify_all();
     }
@@ -359,11 +371,7 @@ impl RefreshWorker {
     }
 
     pub fn try_completion(&self) -> Result<Option<WorkerCompletion>, WorkerError> {
-        self.completions
-            .latest
-            .lock()
-            .map(|mut latest| latest.take())
-            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))
+        Ok(self.completions.lock()?.latest.take())
     }
 
     /// Waits for a completion without holding the slot while it waits.
@@ -380,16 +388,12 @@ impl RefreshWorker {
         timeout: Duration,
     ) -> Result<Option<WorkerCompletion>, WorkerError> {
         let deadline = Instant::now() + timeout;
-        let mut latest = self
-            .completions
-            .latest
-            .lock()
-            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
+        let mut state = self.completions.lock()?;
         loop {
-            if let Some(completion) = latest.take() {
+            if let Some(completion) = state.latest.take() {
                 return Ok(Some(completion));
             }
-            if self.completions.is_closed()? {
+            if state.closed {
                 return Err(WorkerError::new(WorkerErrorCode::Closed));
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -399,9 +403,9 @@ impl RefreshWorker {
             let (guard, _timed_out) = self
                 .completions
                 .ready
-                .wait_timeout(latest, remaining)
+                .wait_timeout(state, remaining)
                 .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
-            latest = guard;
+            state = guard;
         }
     }
 
@@ -654,14 +658,11 @@ fn publish_latest(
     completions: &Arc<CompletionSlot>,
     mut completion: WorkerCompletion,
 ) -> Result<(), WorkerError> {
-    if completions.is_closed()? {
+    let mut slot = completions.lock()?;
+    if slot.closed {
         return Err(WorkerError::new(WorkerErrorCode::Closed));
     }
-    let mut latest = completions
-        .latest
-        .lock()
-        .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
-    if latest.is_some() {
+    if slot.latest.is_some() {
         let mut state = lock_state(state)?;
         state.superseded_results = state
             .superseded_results
@@ -670,8 +671,8 @@ fn publish_latest(
             .ok_or_else(|| WorkerError::new(WorkerErrorCode::CapacityExceeded))?;
         completion = completion.with_superseded_results(state.superseded_results);
     }
-    *latest = Some(completion);
-    drop(latest);
+    slot.latest = Some(completion);
+    drop(slot);
     completions.ready.notify_all();
     Ok(())
 }
