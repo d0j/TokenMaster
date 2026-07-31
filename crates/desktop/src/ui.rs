@@ -2845,6 +2845,26 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
     window.set_dashboard_header_cost(format_cost(header.cost()).into());
     window
         .set_dashboard_header_events(format_dashboard_events(window, header.event_count()).into());
+    // Carried rather than re-derived in the view. The card used to compare its own rendered
+    // text to an em dash, which collapsed five availability states into two and announced a
+    // `Partial` token count as known -- and hung the whole distinction on one glyph, so
+    // changing that glyph in any formatter would have flipped the meaning silently.
+    window.set_dashboard_header_tokens_availability(
+        availability_code(header.tokens().availability()).into(),
+    );
+    window.set_dashboard_header_cost_availability(
+        availability_code(header.cost().availability()).into(),
+    );
+    // The event count is an `Option<u64>` with no availability of its own, so this one is two
+    // valued by construction and the change buys robustness rather than a corrected answer.
+    window.set_dashboard_header_events_availability(
+        if header.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
     window.set_dashboard_header_evidence(
         format_dashboard_evidence(window, header.freshness(), header.quality()).into(),
     );

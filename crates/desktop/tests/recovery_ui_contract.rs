@@ -474,6 +474,63 @@ fn animates(line: &str) -> bool {
     false
 }
 
+/// No view may decide a fact by looking at the text it just rendered.
+///
+/// The Dashboard header carried `availability: root.tokens == "—" ? "unavailable" : "known"`,
+/// which collapsed five availability states into two -- a `Partial` count announced itself as
+/// known -- and hung the whole distinction on one glyph, so changing the em dash in any Rust
+/// formatter would have flipped the meaning of the product's most prominent card with every
+/// test still green. The projection already computed the fact; the card threw it away and
+/// guessed it back from typography.
+///
+/// The rule is the shape, not those three lines: an em dash is a rendering, and a rendering is
+/// not evidence. Every value that needs its availability receives it, the way the trend card
+/// one row below always did.
+#[test]
+fn no_slint_source_infers_a_fact_from_the_unavailable_glyph() {
+    let mut comparisons = Vec::new();
+    for (source, text) in slint_sources() {
+        for line in text.lines() {
+            // Deliberately on the raw line: `code_of` empties string literals, and the glyph
+            // being compared against lives inside one.
+            if line.contains("== \"—\"") || line.contains("!= \"—\"") {
+                comparisons.push(format!("{source}: {}", line.trim()));
+            }
+        }
+    }
+    // A closed debt rather than a clean assertion, because the defect turned out to be in four
+    // views and not one: the Dashboard header is carried now, and history, models and projects
+    // still guess. History is the expensive one -- it carries no availability at all today, so
+    // eight values need new properties threaded from the projection before its eleven lines can
+    // go. The list is closed so a fifteenth site fails immediately, and each repair lowers a
+    // number here, which is the only way this debt stays visible.
+    let mut by_view: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for comparison in &comparisons {
+        let view = [
+            "dashboard-view",
+            "history-view",
+            "models-view",
+            "projects-view",
+        ]
+        .into_iter()
+        .find(|name| comparison.contains(name))
+        .unwrap_or("other");
+        *by_view.entry(view).or_default() += 1;
+    }
+    let expected: std::collections::BTreeMap<&str, usize> = [
+        ("history-view", 11),
+        ("models-view", 1),
+        ("projects-view", 2),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        by_view, expected,
+        "the glyph-comparison debt changed; it may only shrink, and `dashboard-view` must stay \
+         absent: {comparisons:#?}"
+    );
+}
+
 /// The tray's labels must arrive as data, never as literals in its own source.
 ///
 /// The localization contract asserts a closed msgid set and that each entry appears as `@tr`

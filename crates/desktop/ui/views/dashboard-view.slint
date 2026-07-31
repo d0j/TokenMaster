@@ -67,6 +67,12 @@ component DashboardHeaderCard inherits Rectangle {
     in property <string> tokens;
     in property <string> cost;
     in property <string> events;
+    // Carried, never re-derived. These three read their availability from the projection that
+    // computed it; comparing the rendered string to an em dash collapsed five states into two
+    // and called a Partial value known, and it hung the whole distinction on one glyph.
+    in property <string> tokens-availability;
+    in property <string> cost-availability;
+    in property <string> events-availability;
     in property <string> evidence;
 
     min-height: 118px;
@@ -125,7 +131,7 @@ component DashboardHeaderCard inherits Rectangle {
                 }
                 Text {
                     text: root.cost;
-                    color: root.cost == "—" ? UiTokens.text-secondary : UiTokens.text-primary;
+                    color: root.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary;
                     font-family: UiTokens.mono;
                     font-size: UiTokens.text-hero;
                     font-weight: UiTokens.weight-bold;
@@ -145,7 +151,7 @@ component DashboardHeaderCard inherits Rectangle {
                     width: parent.width - 2 * UiTokens.space-sm;
                     label: @tr("Tokens");
                     value: root.tokens;
-                    availability: root.tokens == "—" ? "unavailable" : "known";
+                    availability: root.tokens-availability;
                 }
             }
             Rectangle {
@@ -160,7 +166,7 @@ component DashboardHeaderCard inherits Rectangle {
                     width: parent.width - 2 * UiTokens.space-sm;
                     label: @tr("Events");
                     value: root.events;
-                    availability: root.events == "—" ? "unavailable" : "known";
+                    availability: root.events-availability;
                 }
             }
         }
@@ -713,6 +719,9 @@ export component DashboardView inherits Rectangle {
     in property <string> header-tokens;
     in property <string> header-cost;
     in property <string> header-events;
+    in property <string> header-tokens-availability;
+    in property <string> header-cost-availability;
+    in property <string> header-events-availability;
     in property <string> header-evidence;
     in property <bool> initial-import-in-progress;
     in property <bool> import-progress-known;
@@ -753,7 +762,7 @@ export component DashboardView inherits Rectangle {
                 progress-label: root.import-progress-label;
                 progress-ratio: root.import-progress-ratio;
             }
-            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; tokens-availability: root.header-tokens-availability; cost-availability: root.header-cost-availability; events-availability: root.header-events-availability; evidence: root.header-evidence; }
             for slot in root.slots: DashboardBoardSlot { slot: slot; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-area: root.trend-token-area; trend-cost-area: root.trend-cost-area; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
         if !root.narrow && root.layout-id == 0: VerticalLayout {
@@ -768,7 +777,7 @@ export component DashboardView inherits Rectangle {
                 progress-label: root.import-progress-label;
                 progress-ratio: root.import-progress-ratio;
             }
-            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; tokens-availability: root.header-tokens-availability; cost-availability: root.header-cost-availability; events-availability: root.header-events-availability; evidence: root.header-evidence; }
             if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-area: root.trend-token-area; trend-cost-area: root.trend-cost-area; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {
                 spacing: UiTokens.space;
@@ -794,7 +803,7 @@ export component DashboardView inherits Rectangle {
                 progress-label: root.import-progress-label;
                 progress-ratio: root.import-progress-ratio;
             }
-            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; tokens-availability: root.header-tokens-availability; cost-availability: root.header-cost-availability; events-availability: root.header-events-availability; evidence: root.header-evidence; }
             if root.slots.length > 0: HorizontalLayout {
                 spacing: UiTokens.space;
                 DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-area: root.trend-token-area; trend-cost-area: root.trend-cost-area; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
@@ -820,7 +829,7 @@ export component DashboardView inherits Rectangle {
                 progress-label: root.import-progress-label;
                 progress-ratio: root.import-progress-ratio;
             }
-            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; tokens-availability: root.header-tokens-availability; cost-availability: root.header-cost-availability; events-availability: root.header-events-availability; evidence: root.header-evidence; }
             if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-area: root.trend-token-area; trend-cost-area: root.trend-cost-area; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {
                 spacing: UiTokens.space;

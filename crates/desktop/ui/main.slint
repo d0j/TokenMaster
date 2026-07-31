@@ -114,6 +114,9 @@ export component MainWindow inherits Window {
     in property <string> dashboard-header-tokens;
     in property <string> dashboard-header-cost;
     in property <string> dashboard-header-events;
+    in property <string> dashboard-header-tokens-availability;
+    in property <string> dashboard-header-cost-availability;
+    in property <string> dashboard-header-events-availability;
     in property <string> dashboard-header-evidence;
     in property <bool> dashboard-initial-import-in-progress;
     in property <bool> dashboard-import-progress-known: false;
@@ -501,6 +504,9 @@ export component MainWindow inherits Window {
                     header-tokens: root.dashboard-header-tokens;
                     header-cost: root.dashboard-header-cost;
                     header-events: root.dashboard-header-events;
+                    header-tokens-availability: root.dashboard-header-tokens-availability;
+                    header-cost-availability: root.dashboard-header-cost-availability;
+                    header-events-availability: root.dashboard-header-events-availability;
                     header-evidence: root.dashboard-header-evidence;
                     initial-import-in-progress: root.dashboard-initial-import-in-progress;
                     import-progress-known: root.dashboard-import-progress-known;
