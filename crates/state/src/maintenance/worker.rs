@@ -264,12 +264,21 @@ impl MaintenanceWorker {
                 .wait_timeout(state, remaining)
                 .map_err(|_| StateError::internal_invariant())?;
             state = next;
-            if wait.timed_out() {
-                if state.waited_root == Some(root_request_id) {
-                    state.waited_root = None;
-                }
-                return Ok(None);
-            }
+            // A timeout is not an answer, it is a reason to look again. `run_worker` publishes
+            // `latest_completion` and signals while still holding this mutex, so a waiter whose
+            // timer has expired must reacquire it before `wait_timeout` can return -- and the
+            // window in which the wait reports timed-out while the completion is already
+            // published is the width of the worker's whole finish block. Returning `Ok(None)`
+            // there discarded a receipt the caller had already been handed: `submit_and_wait`
+            // turns it into `unavailable` and `wait_for_mandatory_backup` reads that as a failed
+            // mandatory backup, refusing a migration while a `Published` completion for that
+            // exact root sits in the state -- unclaimable, because the same branch cleared
+            // `waited_root` on its way out.
+            //
+            // So the loop simply goes round. The top re-reads the completion, the fault and the
+            // stop, and `remaining.is_zero()` immediately below performs the identical give-up
+            // with the identical cleanup, one iteration later.
+            let _ = wait;
         }
     }
 
@@ -558,4 +567,74 @@ fn install_panic_redaction() {
             }
         }));
     });
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    /// A timeout is not an answer when the answer arrived during it.
+    ///
+    /// `run_worker` publishes `latest_completion` and signals while still holding this mutex,
+    /// so a waiter whose timer has expired must reacquire it before `wait_timeout` can return.
+    /// The window in which the wait reports timed-out while the completion is already published
+    /// is therefore the width of the worker's whole finish block. The race is made
+    /// deterministic here by holding the guard from a third thread past the caller's deadline,
+    /// which is exactly what that finish block does to a waiter.
+    #[test]
+    fn a_completion_published_during_the_timeout_is_not_discarded() {
+        let worker =
+            MaintenanceWorker::spawn(MaintenanceSourceState::Healthy, true, |permit| {
+                permit.begin_publication().expect("publication boundary");
+                MaintenanceExecution::Published { bytes: 64 }
+            })
+            .expect("spawn maintenance worker");
+
+        let root = match worker.submit(MaintenancePurpose::Manual) {
+            MaintenanceAdmission::Started(permit) => permit.root_request_id(),
+            admission => panic!("unexpected admission: {admission:?}"),
+        };
+        let completion = worker
+            .wait_for_completion(root, Duration::from_secs(30))
+            .expect("first wait")
+            .expect("a published completion");
+
+        // Cleared so the predicate is false when the caller enters, then republished by a
+        // holder that keeps the guard well past the caller's deadline.
+        worker
+            .submitter
+            .state
+            .lock()
+            .expect("state")
+            .latest_completion = None;
+
+        // The ordering is the whole test, and a first version of it proved nothing by getting
+        // this wrong: publishing *before* the deadline makes the condition variable report the
+        // wait as notified rather than timed out, so the buggy branch is never entered and the
+        // test passes against the defect. The guard must be taken while the caller is waiting,
+        // held across the caller's deadline, and the completion written only after that
+        // deadline has passed -- which is what the worker's finish block does when it wins the
+        // race with a waiter's timer.
+        let state = Arc::clone(&worker.submitter.state);
+        let signal = Arc::clone(&worker.submitter.completion);
+        let holder = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(20));
+            let mut held = state.lock().expect("state");
+            std::thread::sleep(Duration::from_millis(180));
+            held.latest_completion = Some(completion);
+            signal.notify_all();
+        });
+
+        let observed = worker
+            .wait_for_completion(root, Duration::from_millis(60))
+            .expect("second wait");
+        holder.join().expect("holder thread");
+
+        assert_eq!(
+            observed,
+            Some(completion),
+            "a completion published while the waiter reacquired the mutex was discarded"
+        );
+    }
 }
