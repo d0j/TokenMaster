@@ -1595,7 +1595,10 @@ prevent cancellation receipts from contradicting durable mutation.
 
 Decision: P3-D.0 uses three release-mode developer contracts and one strict receipt,
 separate from M0 and product release. Backup throughput runs automatic, normal, and
-compact pipelines against deterministic 8 MiB and 96 MiB schema-13 freelist fixtures.
+compact pipelines against deterministic 8 MiB and 96 MiB freelist fixtures built at whatever
+`USAGE_SCHEMA_VERSION` is compiled, because the fixture calls `UsageStore::open`, which
+migrates. The number the fixture kind used to carry named the schema of the day it was
+written and had been wrong for two migrations by the time anyone read it.
 The fixture's intentionally random Git installation salt is normalized only in test so
 its byte length and SHA-256 are reproducible. Streaming evidence uses an absolute 64 MiB
 private-growth ceiling plus 16 MiB large-database headroom rather than comparing two
@@ -2141,8 +2144,16 @@ state, or unbounded privacy surface.
 
 ## ADR-087 — Aggregate full rhythm through the shared recent History envelope
 
-Decision: an opted-in recent History request produces two fixed distributions: 24
-local-hour buckets and seven Monday-Sunday buckets. The request is limited to 30 civil
+Decision: an opted-in recent History request produces **three** fixed distributions: 24
+local-hour buckets, seven Monday-Sunday buckets, and the 168 weekday-by-hour cells the two
+marginals cannot reconstruct -- the busiest hour beside the busiest weekday does not say
+Tuesday at 03:00. `load_rhythm` runs all three as grouped passes and checks each against the
+overview, so three views that do not sum alike are three answers and at most one is right.
+**Two is what the Activity projection takes**, and that is the sentence below rather than
+this one: the grid reaches the query layer as `UsageRhythmCell` and stops there, because no
+drawn place for a heatmap exists yet. This clause said "two" for both and was read at two
+different layers by two different readers, which is how this area came to be recorded wrong
+in three directions. The request is limited to 30 civil
 days; query planning walks time without retaining minute rows, compresses local
 occurrences, and rejects more than 768 occurrences or 2,304 aligned rollup segments.
 Each bucket carries the existing aggregate token/event/activity algebra plus elapsed

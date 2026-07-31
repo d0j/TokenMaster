@@ -428,7 +428,7 @@ plugin/LLM mutation are outside the product boundary.
 ## P3-D.0 evidence boundary
 
 Reliable State closes through a separate release-mode developer rail rather than the
-M0 or product-release pipeline. State owns deterministic 8/96 MiB schema-13 fixtures,
+M0 or product-release pipeline. State owns deterministic 8/96 MiB current-schema fixtures,
 real automatic/normal/compact backup/package verification, the 10,000-trigger and
 resume coalescing model, and one Windows process sampler. The sampler is the only added
 measurement thread and records private bytes, process handles, threads, USER/GDI

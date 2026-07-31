@@ -598,7 +598,7 @@ reference machine, an automatic backup MUST add no more than 10 ms to cached Das
 query p95 or measured input-to-paint p95.
 
 P3-D.0 developer acceptance measures automatic, normal, and compact pipelines against
-deterministic 8 MiB and 96 MiB schema-13 fixtures in release mode. Private-memory growth
+deterministic 8 MiB and 96 MiB current-schema fixtures in release mode. Private-memory growth
 MUST remain within a fixed 64 MiB envelope and at least 16 MiB below the large database;
 the only permitted sampled thread delta is the measurement thread. The resource gate
 MUST warm every contour, then execute 256 backup/package/verify/import-cancel/retention

@@ -930,7 +930,7 @@ bounded refresh completes; retry reuses the promoted archive and never reruns co
 archive replacement.
 
 Task 17 closes the bounded data-plane evidence without adding a production schema or
-public payload. The release-only fixtures normalize the schema-13 installation salt to
+public payload. The release-only fixtures normalize the current-schema installation salt to
 a fixed test value and bind exact byte length plus SHA-256 for 8 MiB and 96 MiB
 freelist databases. Package I/O remains 64 KiB, the Zstd decoder window remains at most
 8 MiB, and sampled private growth remains within 64 MiB with more than 16 MiB headroom
