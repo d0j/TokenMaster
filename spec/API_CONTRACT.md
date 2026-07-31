@@ -387,7 +387,11 @@ Its errors and `Debug` output are stable and path-free.
 
 `RefreshWorker::spawn_notified` accepts one optional
 `Arc<dyn WorkerCompletionNotifier>`. After publishing the capacity-one completion
-receipt and outside worker locks, it sends one copied lossy completion hint. Notifier
+receipt and outside worker locks, it sends one copied lossy completion hint. The hint is
+delivered on the worker's own thread between publishing the receipt and starting the
+follow-up, so an implementation MUST NOT wait for a lock: it may only try-acquire, and a
+publication skipped for contention is dropped rather than queued, which is what makes the
+hint lossy. Notifier
 panic is caught/redacted and cannot fault the worker or remove the receipt. Live,
 nested Git, quota, and reminder runtimes expose additive `start_notified` constructors;
 their existing `start` constructors retain identical no-notifier behavior.
