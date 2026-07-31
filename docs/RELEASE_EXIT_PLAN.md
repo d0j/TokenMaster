@@ -186,6 +186,26 @@ survives edits and is greppable.
 | note | **`RebuildReason::ParserVersionChanged` is declared and constructed nowhere.** A checkpoint whose parser schema version no longer matches surfaces as `InvalidCheckpoint`, a different class of answer from the rebuild signal the enum advertises -- and `PARSER_SCHEMA_VERSION` is already at 2, so it has been bumped once. The variant's existence is a claim that this case is handled where it is not: stale documentation, but in code. This repository's stated preference is deleting over adding, so deleting the variant is the cheaper honest option. Reported by the sweep and not verified here. | `enum RebuildReason` in `crates/codex/src/reader/mod.rs` |
 | note | **Two decision records point at a package that was deleted, and one ledger row names a gate that does not exist.** ADR-078 explains why the tray is hand-written by saying the Slint `system-tray` feature "is scoped only to the separate M0 probe"; `tokenmaster-m0` is not among the workspace members -- verified, zero matches in `Cargo.toml` -- and `CLAUDE.md` records that probe as deleted. ADR-049 carries the same stale present tense. So a reader following the reasoning lands on a crate that is not there, and the property the sentence exists to explain now rests only on the absence of a feature flag nothing asserts. Separately `docs/FEATURE_PARITY.md` states that a `rejected` row passes only with a regression gate present, and one row's gate is "CLI/MCP allowlist tests" -- there is no CLI or MCP crate, and `allowlist` appears in **no** `.rs`, `.ps1` or `.toml` file in the repository. Following this repository's own precedent, the ADRs get a closing pointer rather than a rewrite: they are history, and ADR-015 set that shape. The ledger row either names a check that exists today or moves to `planned`. Found by the Opus critic. | ADR-078 and ADR-049 in `spec/DECISIONS.md`; the `rejected` rows in `docs/FEATURE_PARITY.md` |
 
+## Landing the two open pull requests
+
+Written down because it was decided once and would otherwise be re-derived, probably wrongly.
+
+- **Tag first, push the tag after the merge.** `main` is squash-only with
+  `delete_branch_on_merge`, so the merge is also a delete and every commit message carrying a
+  measurement goes with the branch. `history/` is undeletable with no bypass actor. Pushing
+  the tag *before* the merge starts a fresh run of the required check on a commit that had
+  already passed, and the merge then waits an hour for an answer it had; the local tag
+  protects the commits in the meantime and GitHub keeps the branch objects on the pull
+  request's own refs until then.
+- **PR #4 before PR #5, and the order is not arbitrary.** Required checks are `strict`, so
+  whichever merges first makes the other out of date and forces a re-run. #4 is the large
+  branch and the one whose check is usually already in flight; merging #5 first would throw
+  that away. One extra run is unavoidable either way -- the choice only decides which one is
+  wasted.
+- **#5 is one commit**, so its squash preserves its message without a tag. #4 is not: it
+  carries the engine, the gate, the tests and the documents, and its individual messages hold
+  the measurements that justify them.
+
 ## How much a review finding is worth here
 
 Five outside reviews produced roughly forty findings across this branch. **Five of them did
