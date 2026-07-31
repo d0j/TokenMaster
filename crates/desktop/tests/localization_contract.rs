@@ -1761,6 +1761,40 @@ fn shell_and_presentation_strip_use_only_the_closed_translation_key_set() {
     );
 }
 
+/// A translation may not add or drop the msgid's leading or trailing whitespace.
+///
+/// The closed msgid set is asserted in both directions and every placeholder is compared, but
+/// nothing compared the edges -- and several msgids are concatenation fragments whose whole
+/// job is that space: `State: `, `Qty `, ` tokens `. The pseudo generator wraps a string in
+/// brackets, and on ten of 533 entries the wrapper had swallowed the edge, so the one locale
+/// that exists to expose layout and concatenation defects was the one hiding them. `ru`
+/// preserved the edges on all 533, which is why this is the convention rather than a taste.
+#[test]
+fn every_translation_keeps_the_leading_and_trailing_whitespace_of_its_msgid() {
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("bundled catalog");
+        for (msgid, msgstr) in po_entries(&catalog) {
+            let edges = |value: &str| {
+                (
+                    value.len() - value.trim_start().len(),
+                    value.len() - value.trim_end().len(),
+                )
+            };
+            assert_eq!(
+                edges(msgstr),
+                edges(msgid),
+                "{locale} changed the edge whitespace of {msgid:?} in {msgstr:?}"
+            );
+        }
+    }
+}
+
 fn po_entries(catalog: &str) -> std::collections::BTreeMap<&str, &str> {
     let mut entries = std::collections::BTreeMap::new();
     let mut msgid = None;

@@ -106,7 +106,7 @@ msgid "Review"
 msgstr "［Řêṽîêŵ ···］"
 
 msgid "Review restore point "
-msgstr "［Řêṽîêŵ řêšţõřê þõîñţ ···］"
+msgstr "［Řêṽîêŵ řêšţõřê þõîñţ ···］ "
 
 msgid "Route palette"
 msgstr "［Řõûţê þåļêţţê ·····］"
@@ -121,7 +121,7 @@ msgid "Up/Down to select · Enter to open · Escape to dismiss"
 msgstr "［Ûþ/Ðõŵñ ţõ šêļêçţ · Êñţêř ţõ õþêñ · Êšçåþê ţõ ðîšɱîšš ·······］"
 
 msgid "Expiry notifications. "
-msgstr "［Êxþîřÿ ñõţîƒîçåţîõñš ···］"
+msgstr "［Êxþîřÿ ñõţîƒîçåţîõñš ···］ "
 
 msgid ". Open Notifications for current inventory and reminder policy."
 msgstr "［Õþêñ Ñõţîƒîçåţîõñš ƒõř çûřřêñţ îñṽêñţõřÿ åñð řêɱîñðêř þõļîçÿ ·······］"
@@ -139,10 +139,10 @@ msgid "These reminders were applied in TokenMaster. Open Notifications for the c
 msgstr "［Ţĥêšê řêɱîñðêřš ŵêřê åþþļîêð îñ ŢõķêñMåšţêř. Õþêñ Ñõţîƒîçåţîõñš ƒõř ţĥê çõɱþļêţê çûřřêñţ îñṽêñţõřÿ ·······］"
 
 msgid "Qty "
-msgstr "［Qţÿ ···］"
+msgstr "［Qţÿ ···］ "
 
 msgid "Reliable state operation "
-msgstr "［Řêļîåβļê šţåţê õþêřåţîõñ ···］"
+msgstr "［Řêļîåβļê šţåţê õþêřåţîõñ ···］ "
 
 msgid "Refresh"
 msgstr "［Rêfřêšĥ ···］"
@@ -184,19 +184,19 @@ msgid "Data recovery requires attention."
 msgstr "［Ðåţå řêçõṽêřÿ řêǫûîřêš åţţêñţîõñ ·····］"
 
 msgid "State: "
-msgstr "［Šţåţê ···］"
+msgstr "［Šţåţê ···］ "
 
 msgid "No blocking reasons"
 msgstr "［Ñõ βļõçķîñğ řêåšõñš ·····］"
 
 msgid "Reasons: "
-msgstr "［Řêåšõñš ···］"
+msgstr "［Řêåšõñš ···］ "
 
 msgid "Product generation "
-msgstr "［Þřõðûçţ ğêñêřåţîõñ ···］"
+msgstr "［Þřõðûçţ ğêñêřåţîõñ ···］ "
 
 msgid ": "
-msgstr "［: ···］"
+msgstr "［: ···］ "
 
 msgid "Settings"
 msgstr "［Šêţţîñğš ···］"
@@ -683,7 +683,7 @@ msgstr "［Çåñçêļ řêšţõřê řêṽîêŵ ····］"
 msgid "Generation {0}"
 msgstr "［Ĝêñêřåţîõñ {0} ···］"
 msgid " · Latest failure {0}"
-msgstr "［ · Ļåţêšţ ƒåîļûřê {0} ···］"
+msgstr " ［· Ļåţêšţ ƒåîļûřê {0} ···］"
 msgid "About and licenses. TokenMaster is Apache-2.0 licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route."
 msgstr "［Åβõûţ åñð ļîçêñšêš. TokenMaster îš Apache-2.0 ļîçêñšêð. WhereMyTokens åñð ccusage åřê þîññêð êẋţêřñåļ MIT řêƒêřêñçêš, ñõţ řûñţîɱê ðêþêñðêñçîêš. Ţĥê îñţêřƒåçê îš ɱåðê ŵîţĥ Slint ûñðêř ţĥê šêļêçţêð Royalty-free License 2.0 åţţřîβûţîõñ řõûţê. ·····］"
 msgid "About and licenses"
@@ -835,7 +835,7 @@ msgstr "［Ðåîļÿ ðêţåîļš ···］"
 msgid "Date"
 msgstr "［Ðåţê ···］"
 msgid " tokens "
-msgstr "［ ţõķêñš  ···］"
+msgstr " ［ţõķêñš  ···］ "
 msgid "Notifications expiry reminders {0} {1} {2}"
 msgstr "［Ñõţîƒîçåţîõñš êẋþîřÿ řêɱîñðêřš {0} {1} {2} ·····］"
 msgid "Notifications"
