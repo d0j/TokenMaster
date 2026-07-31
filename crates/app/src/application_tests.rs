@@ -1959,7 +1959,7 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
     bundle
         .publish_runtime(ProductRuntimeGeneration::new(1).expect("generation"))
         .expect("publish runtime health");
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if bundle
             .controller

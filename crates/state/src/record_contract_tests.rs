@@ -612,7 +612,7 @@ fn process_death_before_flush_before_publish_and_after_publish_recovers_atomical
             .spawn()
             .expect("spawn interrupted save child");
 
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             if marker.exists() {
                 break;

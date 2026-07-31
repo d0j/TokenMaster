@@ -5146,7 +5146,7 @@ mod duration_tests {
             let _ = completed_sender.send(result);
             Ok(())
         });
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(30);
         while inner
             .latest
             .lock()

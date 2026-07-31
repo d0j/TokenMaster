@@ -256,7 +256,7 @@ impl NotificationPresenter for FakePresenter {
 }
 
 fn wait_until(mut predicate: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_secs(30);
     while !predicate() {
         assert!(Instant::now() < deadline, "condition timed out");
         std::thread::yield_now();

@@ -3227,7 +3227,7 @@ mod tests {
             .refresh(DesktopRefreshUrgency::Hint)
             .expect("refresh starts");
 
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(30);
         let completion = loop {
             if let Some(completion) = controller.try_completion().expect("worker healthy") {
                 break completion;
@@ -3286,7 +3286,7 @@ mod tests {
                 .expect("terminal rollback"),
             intent
         );
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(30);
         let completion = loop {
             if let Some(completion) = controller.try_completion().expect("worker healthy") {
                 break completion;
@@ -3367,7 +3367,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(2))
             .expect("worker notifier delivers terminal rollback without completion polling");
         assert_eq!(terminal, intent);
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             if controller
                 .try_completion()
@@ -3440,7 +3440,7 @@ mod tests {
                 .expect("worker terminal rollback"),
             intent
         );
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             if controller
                 .try_completion()
@@ -3501,7 +3501,7 @@ mod tests {
             DesktopRefreshAdmission::Coalesced { .. }
         ));
         release_sender.send(()).expect("release refresh");
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(30);
         while controller
             .try_completion()
             .expect("worker healthy")

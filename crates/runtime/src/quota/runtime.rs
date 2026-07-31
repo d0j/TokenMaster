@@ -492,7 +492,7 @@ mod tests {
             .test_value("quota runtime");
 
         assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
             let snapshot = runtime.snapshot().test_value("runtime snapshot");
             if snapshot.refresh().outcome().is_some() && snapshot.schedule().submitted_count() == 1
@@ -551,7 +551,7 @@ mod tests {
         for _ in 0..10_000 {
             runtime.refresh_now().test_value("coalesced manual refresh");
         }
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
             let snapshot = runtime.snapshot().test_value("snapshot");
             if snapshot.worker().pending_count() == 1 && !snapshot.schedule().refresh_pending() {
@@ -595,7 +595,7 @@ mod tests {
             .test_value("quota runtime");
         assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
             if runtime
                 .snapshot()
@@ -624,7 +624,7 @@ mod tests {
         assert!(runtime.scheduler.hints().wake());
         assert_eq!(receive(&receiver), RefreshUrgency::Periodic);
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
             if runtime
                 .snapshot()
@@ -712,7 +712,7 @@ mod tests {
         let mut usage_runtime =
             crate::LiveRuntime::start(&archive_root.path().join("usage.sqlite3"), request)
                 .test_value("usage runtime");
-        let usage_deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let usage_deadline = std::time::Instant::now() + Duration::from_secs(30);
         loop {
             if usage_runtime
                 .try_completion()
@@ -739,7 +739,7 @@ mod tests {
         })
         .test_value("quota runtime");
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
             if runtime.snapshot().test_value("snapshot").worker().phase() == WorkerPhase::Faulted {
                 break;

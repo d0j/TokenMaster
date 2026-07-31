@@ -35,8 +35,12 @@ Describe "TokenMaster M0 script contracts" {
     # only elapses when something is already broken.
     It "gives every test hang bound at least thirty seconds" {
         $offenders = @()
+        # Every `.rs` under `crates`, not only the ones under a `tests` directory. The filter
+        # that used to sit here made this check blind to sixteen bounds below thirty seconds
+        # living in `#[cfg(test)]` modules inside `src` -- and one of them, a two-second wait
+        # in `notification_tests.rs`, decided a gate run twice. It passed alone in 0.01 s and
+        # timed out under the gate's own load, which is what a short bound on a spin does.
         Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'crates') -Recurse -File -Filter '*.rs' |
-            Where-Object { $_.FullName -match '\\tests\\' } |
             ForEach-Object {
                 $text = Get-Content -LiteralPath $_.FullName -Raw
                 foreach ($match in [regex]::Matches(
