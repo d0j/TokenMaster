@@ -719,8 +719,13 @@ watcher ownership, joins the scheduler closure and its worker reference, then ca
 and joins the worker. Combined Windows evidence requires handles and threads to return
 to baseline; fixed snapshots and Debug expose no source/archive paths or inner errors.
 
-The deterministic worker uses only capacity-one standard-library wake/result
-channels and the constant-state coordinator. External clock and execution callbacks
+The deterministic worker uses one capacity-one standard-library wake channel, a
+latest-only completion slot behind a mutex and condition variable, and the
+constant-state coordinator. The result half was a capacity-one channel whose
+non-`Sync` `Receiver` had to live behind a mutex, so waiting on it held that mutex for
+the caller's whole timeout; the slot's `wait_timeout` releases it by construction. A
+completion is accepted only when it was published by the waiting caller's deadline, so
+work that finished late is a timeout rather than a success. External clock and execution callbacks
 run outside the worker mutex. Stale cancellation cannot affect a newer request;
 shutdown and `Drop` cancel the exact active permit and join the owned thread. Caught
 callback panic publishes only fixed `failed`/`panicked` state, abandons the single
@@ -730,7 +735,7 @@ installed on first spawn: non-worker panics retain the prior application hook, w
 worker panic payload/location output is suppressed. Application code MUST compose its
 custom hook before worker creation and MUST NOT replace the hook while workers exist.
 No panic payload, wrapped error, path, checkpoint, or provider content enters the
-completion channel, snapshot, archive, or diagnostics. `tokenmaster-engine` fails
+completion slot, snapshot, archive, or diagnostics. `tokenmaster-engine` fails
 compilation under `panic=abort`; only unwind builds can provide the required contained
 fault transition.
 
@@ -1081,7 +1086,10 @@ The sole state/store package bridge gives source errors precedence over destinat
 errors and irreversibly discards the unpublished stage on replacement, truncation,
 append, cancellation, codec, seal, or destination failure.
 
-Maintenance owns one capacity-one worker and one capacity-one scheduler wake channel.
+Maintenance owns one capacity-one scheduler wake channel and one latest-only completion
+slot behind a mutex and condition variable, the same shape the deterministic worker uses
+and with the same deadline rule: a completion published after the caller's deadline is a
+timeout, not a success.
 Ten thousand hints retain one active request and one merged follow-up, not attacker-
 proportional queue nodes. Only one shared scheduler timeout exists. Worker panics are
 contained behind the existing thread-local redaction pattern; `Debug`, completion,
@@ -1313,8 +1321,8 @@ and atomically promotes under the fixed writer guard. Resume treats journal back
 absence as valid only for that reconstruction mode.
 
 The reconstructed archive is not healthy authority by itself. Application forces one
-bounded recovery-urgency source refresh and waits through the worker's condition-based
-completion channel before starting healthy backup maintenance. Failure or timeout
+bounded recovery-urgency source refresh and waits on the worker's condition-based
+completion slot before starting healthy backup maintenance. Failure or timeout
 returns to safe mode with no fabricated data. The durable UI receipt is path-free and
 must explicitly state that quota, reset-credit, reminder, and Git history are
 non-reconstructible and unavailable. It never exposes quarantined bytes, filenames,
