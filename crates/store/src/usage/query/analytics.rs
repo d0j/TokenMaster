@@ -441,39 +441,36 @@ impl UsageReadStore {
     /// contractually forbidden to touch. Pinning one `bucket_width` is what keeps the sum
     /// honest: minute and hour buckets each cover every event, so summing both doubles the
     /// answer, and on this archive that is 32.6 billion tokens instead of 16.3.
-    pub fn lifetime_totals(&self) -> Result<UsageLifetimeTotals, StoreError> {
-        let row = self.connection.query_row(
-            "SELECT coalesce(sum(event_count), 0),
-                    coalesce(sum(total_known_count), 0),
-                    coalesce(sum(total_known_sum), 0)
-             FROM usage_time_rollup
-             WHERE aggregate_generation =
-                     (SELECT coalesce(max(aggregate_generation), 0) FROM usage_time_rollup)
-               AND dataset_kind = 'current'
-               AND bucket_width = 'hour'
-               AND dimension_kind = 'all'",
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                ))
-            },
+    ///
+    /// The generation and the dataset kind come from the publication, inside the transaction
+    /// that reads the rows -- the same fence every other aggregate read in this file takes.
+    /// Resolving them here instead, from `max(aggregate_generation)` and a hardcoded
+    /// `'current'`, answered from whichever generation happened to be highest, including one
+    /// a rebuild was still filling and had not declared ready, and from the current dataset
+    /// even when the published one was the legacy snapshot. This figure sits in the shell
+    /// header beside the numbers it summarises, so either disagreement shows in one glance.
+    pub fn lifetime_totals(&mut self) -> Result<UsageLifetimeTotals, StoreError> {
+        let transaction = map_sql(
+            self.connection
+                .transaction_with_behavior(TransactionBehavior::Deferred),
         )?;
-        let event_count = u64::try_from(row.0)
-            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
-        let known_count = u64::try_from(row.1)
-            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
-        let known_sum = u64::try_from(row.2)
-            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
-        if known_count > event_count {
-            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
-        }
-        Ok(UsageLifetimeTotals {
-            event_count,
-            total: UsageTokenAggregate::from_parts(known_count, known_sum),
-        })
+        let raw_publication = load_raw_publication(&transaction)?;
+        let active_generation =
+            load_ready_aggregate_generation(&transaction, raw_publication.dataset_generation)?;
+        let dataset_kind = match raw_publication.dataset_identity()? {
+            UsageQueryDatasetIdentity::Empty => None,
+            UsageQueryDatasetIdentity::ReplayRevision { .. } => Some("current"),
+            UsageQueryDatasetIdentity::LegacySnapshotV1 => Some("legacy"),
+        };
+        let totals = match dataset_kind {
+            None => UsageLifetimeTotals {
+                event_count: 0,
+                total: UsageTokenAggregate::from_parts(0, 0),
+            },
+            Some(kind) => lifetime_totals_at(&transaction, active_generation, kind)?,
+        };
+        map_sql(transaction.commit())?;
+        Ok(totals)
     }
 
     pub fn capture_usage_analytics(
@@ -762,6 +759,48 @@ fn rhythm_sql(segment_count: usize, dimension: &str, expected: usize) -> String 
          GROUP BY rhythm_key.value
          ORDER BY rhythm_key.value"
     )
+}
+
+/// Sums the whole archive at one generation and one dataset kind.
+///
+/// `dimension_kind = 'all'` carries an empty `dimension_value` by table constraint, so this
+/// counts every event once without also naming the value.
+fn lifetime_totals_at(
+    connection: &Connection,
+    active_generation: i64,
+    dataset_kind: &'static str,
+) -> Result<UsageLifetimeTotals, StoreError> {
+    let row = map_sql(connection.query_row(
+        "SELECT coalesce(sum(event_count), 0),
+                coalesce(sum(total_known_count), 0),
+                coalesce(sum(total_known_sum), 0)
+         FROM usage_time_rollup
+         WHERE aggregate_generation = ?1
+           AND dataset_kind = ?2
+           AND bucket_width = 'hour'
+           AND dimension_kind = 'all'",
+        rusqlite::params![active_generation, dataset_kind],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        },
+    ))?;
+    let event_count =
+        u64::try_from(row.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    let known_count =
+        u64::try_from(row.1).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    let known_sum =
+        u64::try_from(row.2).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    if known_count > event_count {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(UsageLifetimeTotals {
+        event_count,
+        total: UsageTokenAggregate::from_parts(known_count, known_sum),
+    })
 }
 
 fn load_range_metrics(
@@ -1143,20 +1182,48 @@ mod lifetime_tests {
         }
     }
 
-    fn seeded(rollups: &[(&str, i64, i64, i64)]) -> (tempfile::TempDir, UsageReadStore) {
+    /// One rollup row: generation, dataset kind, bucket width, events, known count, known sum.
+    type Rollup<'a> = (i64, &'a str, &'a str, i64, i64, i64);
+
+    /// A published replay revision, so the archive's dataset identity is the current one.
+    ///
+    /// `incremental_state` is `partial` rather than `complete` because the latter also demands
+    /// a complete scan set, and a scan set is not what any of these tests are about.
+    const REPLAY_DATASET: &str = "
+        INSERT INTO usage_replay_revision(
+            revision_id, status, canonicalizer_version, fingerprint_version,
+            replay_signature_version, expected_source_count, evidence_epoch,
+            sealed, promoted)
+          VALUES (0, 'current', 1, 1, 1, 0, 0, 1, 1);
+        UPDATE usage_archive_state
+           SET current_revision_id = 0, incremental_state = 'partial'
+         WHERE singleton_id = 1;";
+
+    /// A legacy snapshot and no replay revision, so the dataset identity is the legacy one.
+    ///
+    /// `event_count` is zero because the schema validator demands it equal the row count in
+    /// `usage_legacy_event`, and a trigger forbids inserting into that table at all. What the
+    /// dataset identity reads is only whether this row exists.
+    const LEGACY_DATASET: &str = "
+        INSERT INTO usage_legacy_snapshot(
+            snapshot_id, source_schema_version, quality_state, event_count)
+          VALUES (1, 1, 'legacy_unverified', 0);";
+
+    fn seeded(publication: &str, rollups: &[Rollup<'_>]) -> (tempfile::TempDir, UsageReadStore) {
         let directory = require(tempfile::TempDir::new());
         let path = directory.path().join("usage.sqlite3");
         {
             let store = require(UsageStore::open(&path));
-            for (width, events, known, sum) in rollups {
+            require(store.connection.execute_batch(publication));
+            for (generation, kind, width, events, known, sum) in rollups {
                 require(store.connection.execute(
                     &format!(
                         "INSERT INTO usage_time_rollup({ROLLUP_COLUMNS})
-                             VALUES (0, 'current', ?1, 3600, 'codex', 'default', 'all', '',
-                                     ?2, ?3, ?4, 0, 0, 0, 0, 0, 0, ?3, ?4,
+                             VALUES (?1, ?2, ?3, 3600, 'codex', 'default', 'all', '',
+                                     ?4, ?5, ?6, 0, 0, 0, 0, 0, 0, ?5, ?6,
                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)"
                     ),
-                    rusqlite::params![width, events, known, sum],
+                    rusqlite::params![generation, kind, width, events, known, sum],
                 ));
             }
         }
@@ -1171,7 +1238,13 @@ mod lifetime_tests {
     /// the row would look wrong. This is the bound that refuses it.
     #[test]
     fn a_lifetime_total_counts_each_event_once_across_bucket_widths() {
-        let (_directory, store) = seeded(&[("hour", 3, 3, 100), ("minute", 3, 3, 100)]);
+        let (_directory, mut store) = seeded(
+            REPLAY_DATASET,
+            &[
+                (0, "current", "hour", 3, 3, 100),
+                (0, "current", "minute", 3, 3, 100),
+            ],
+        );
 
         let totals = require(store.lifetime_totals());
 
@@ -1183,12 +1256,81 @@ mod lifetime_tests {
     /// An empty archive answers zero rather than failing.
     #[test]
     fn an_empty_archive_totals_zero() {
-        let (_directory, store) = seeded(&[]);
+        let (_directory, mut store) = seeded("", &[]);
 
         let totals = require(store.lifetime_totals());
 
         assert_eq!(totals.event_count(), 0);
         assert_eq!(totals.total().known_count(), 0);
         assert_eq!(totals.total().known_sum(), 0);
+    }
+
+    /// The generation to read is the one the publication declares ready, not the highest one
+    /// the table happens to hold.
+    ///
+    /// A rebuild fills its new generation's rows before it is published, so `max()` picks up a
+    /// half-built total the rest of the screen is not reading. This figure sits in the shell
+    /// header beside the numbers it summarises, so the disagreement shows in one glance.
+    #[test]
+    fn a_lifetime_total_reads_the_published_generation_and_not_the_highest() {
+        let (_directory, mut store) = seeded(
+            REPLAY_DATASET,
+            &[
+                (0, "current", "hour", 3, 3, 100),
+                (1, "current", "hour", 9, 9, 900),
+            ],
+        );
+
+        let totals = require(store.lifetime_totals());
+
+        assert_eq!(totals.event_count(), 3);
+        assert_eq!(totals.total().known_count(), 3);
+        assert_eq!(totals.total().known_sum(), 100);
+    }
+
+    /// The dataset kind to read is the one the publication names, not `current` by assumption.
+    ///
+    /// On an archive whose published dataset is the legacy snapshot, every other aggregate read
+    /// answers from the `legacy` rows. A lifetime total pinned to `current` reports a different
+    /// archive's numbers, or zero, beside them.
+    #[test]
+    fn a_lifetime_total_reads_the_dataset_kind_the_publication_names() {
+        let (_directory, mut store) = seeded(
+            LEGACY_DATASET,
+            &[
+                (0, "legacy", "hour", 4, 4, 200),
+                (0, "current", "hour", 7, 7, 700),
+            ],
+        );
+
+        let totals = require(store.lifetime_totals());
+
+        assert_eq!(totals.event_count(), 4);
+        assert_eq!(totals.total().known_count(), 4);
+        assert_eq!(totals.total().known_sum(), 200);
+    }
+
+    /// While the aggregate is rebuilding there is no answer, and no answer is not zero.
+    ///
+    /// Unavailable, partial and legitimate-zero are three different facts. The caller already
+    /// distinguishes them -- the desktop controller has a `fail_lifetime` path beside its
+    /// `publish_lifetime` one -- so the only way to get this wrong is to answer anyway.
+    #[test]
+    fn a_lifetime_total_is_unavailable_while_the_aggregate_rebuilds() {
+        // Seeded before the read store opens: that connection is `SQLITE_OPEN_READ_ONLY`.
+        let publication = format!(
+            "{REPLAY_DATASET}
+             UPDATE usage_aggregate_state SET state = 'rebuild_required'
+              WHERE singleton_id = 1;"
+        );
+        let (_directory, mut store) = seeded(&publication, &[(0, "current", "hour", 3, 3, 100)]);
+
+        match store.lifetime_totals() {
+            Err(error) => assert_eq!(error.code(), crate::StoreErrorCode::RebuildRequired),
+            Ok(totals) => panic!(
+                "a rebuilding aggregate answered {} events instead of refusing",
+                totals.event_count()
+            ),
+        }
     }
 }
