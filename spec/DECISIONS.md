@@ -2313,3 +2313,49 @@ straight back: the defect is holding the lock across a wait at all, not holding 
 `Condvar::wait_timeout` releases the mutex for the duration of the wait, and a one-slot queue
 with manual eviction was already a newest-wins slot, so naming it one removed a
 send-evict-resend loop as well.
+
+## ADR-096 — Evict ambiguous benefit lots for capacity, never retire them on a schedule
+
+Decision: an ambiguous benefit lot is retained for as long as there is room, and is removed
+only when a **complete** observation needs the room. Removal is recorded as its own change
+kind, `EvictedAmbiguous`, distinct from `RetiredTerminal`. Ordering is deterministic: oldest
+conservative expiry first, unknown expiry last, ties broken by opaque lot identity. On a
+partial observation the capacity error stands, because it is no longer permanent -- the next
+complete observation evicts against the same un-advanced state. No lot is retired on a miss
+count or a wall clock.
+
+Rationale: the retention is not the defect, the permanence is. `reconcile` returns
+`CapacityExceeded` without advancing state, so once the cap is reached every later
+reconciliation fails identically and the inventory cannot recover by itself. On a complete
+observation every retained-but-unobserved lot is ambiguous by construction, and the incoming
+observation is itself capped at the same limit, so evicting ambiguous lots alone always makes
+room. Retaining an ambiguous lot while room exists is what "we stopped seeing it" honestly
+means, and the set is bounded by the cap rather than by a guess.
+
+Three alternatives were rejected for reasons the code states rather than taste. Retiring after
+N consecutive misses needs new persisted per-lot state and makes the constant mean different
+things on a fast poller and a sleeping laptop, while converting unknown into gone on our own
+schedule with no provider evidence. Retiring on the lot's declared expiry looks principled and
+is not available: `BenefitExpiry::conservative_utc_ms` returns `earliest_at_ms` for a bounded
+expiry, so a "certainly expired" test built on it would retire lots that may still be alive,
+and lots whose expiry is unknown would accumulate to the cap regardless. Reusing
+`RetiredTerminal` avoids a schema revision by telling the lie the invariant forbids: that is
+the provider-confirmed end of a lot's story, and eviction is our own capacity decision about
+something still unknown; the two must stay distinguishable wherever either is shown, and a
+kind label is shown alone.
+
+Silent eviction is not an option: current inventory is a projection over immutable change
+points, the store checks scope row counts against captured rows, and revision continuity on
+reappearance rides the newest-change-per-lot cursor, so a lot cannot leave the current set
+without a change row.
+
+Reminders are unaffected, by inspection rather than assumption: `schedule_reminders` skips
+every lot whose state is not `Available`, so an ambiguous lot already schedules nothing and
+eviction cannot drop anything the user is owed.
+
+Cost, stated because it decides the sequencing: the new change kind is a schema revision with
+an exact migration, plus the `CHECK` constraint, the kind text maps on both the write and read
+sides, and the hydration query that restores a reappearing lot's revision chain. This is a
+migration ladder, and the delivery plan's own abort rule keeps one of those from holding the
+first release hostage, so the decision is settled here and the implementation is scheduled
+after the tag.
