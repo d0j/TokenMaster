@@ -170,6 +170,56 @@ survives edits and is greppable.
 | **serious, open** | **Two ways a Pester stage still disappears quietly.** The composition pin asserts the suite's file name appears somewhere in `verify-m0.ps1`'s text, never that it reaches an `Invoke-PesterChecked` call -- so putting a `#` in front of a stage leaves the name present *inside that very comment*, the guard green, and the gate running seven suites while printing fifteen stages. The proof recorded when that pin was written was a **deletion** of the line, which is the one mutation a substring match does catch; commenting out is the one it does not. Separately the stage floor requires one passing test, so `-Skip` on four of five `It` blocks leaves `PassedCount = 1` and the stage green. And every stage records `id = "pester"` in the receipt, so `reports/verification-summary.json` cannot tell seven Pester stages from eight either. The repair removes the list rather than hardening the match: enumerate `scripts/tests/*.Tests.ps1` inside `verify-m0.ps1` itself and run each, so a suite that exists is run by construction; add `SkippedCount -eq 0` to the stage condition; record the suite's own name and its passed count. Break it by commenting out one stage and by skipping one `It`. Found by the Opus critic; the comment half was found by Fable too. | `verification runs every Pester suite that exists` in `scripts/tests/m0-scripts.Tests.ps1`; `Invoke-PesterChecked` in `scripts/verify-m0.ps1` |
 | note | **Two decision records point at a package that was deleted, and one ledger row names a gate that does not exist.** ADR-078 explains why the tray is hand-written by saying the Slint `system-tray` feature "is scoped only to the separate M0 probe"; `tokenmaster-m0` is not among the workspace members -- verified, zero matches in `Cargo.toml` -- and `CLAUDE.md` records that probe as deleted. ADR-049 carries the same stale present tense. So a reader following the reasoning lands on a crate that is not there, and the property the sentence exists to explain now rests only on the absence of a feature flag nothing asserts. Separately `docs/FEATURE_PARITY.md` states that a `rejected` row passes only with a regression gate present, and one row's gate is "CLI/MCP allowlist tests" -- there is no CLI or MCP crate, and `allowlist` appears in **no** `.rs`, `.ps1` or `.toml` file in the repository. Following this repository's own precedent, the ADRs get a closing pointer rather than a rewrite: they are history, and ADR-015 set that shape. The ledger row either names a check that exists today or moves to `planned`. Found by the Opus critic. | ADR-078 and ADR-049 in `spec/DECISIONS.md`; the `rejected` rows in `docs/FEATURE_PARITY.md` |
 
+## What the reviews did not look at
+
+Three outside reviews ran over this branch -- two `fable` readers and one `opus`, each a single
+reader with no fan-out. The table above is what they found. This is where they did not look,
+merged from the twenty-five gaps they declared themselves, and it is here because **an area
+nobody opened and an area swept clean read identically afterwards.** Without this list the next
+reader inherits "audited" as a blanket claim it never was.
+
+- **Nothing was built or run in any of the three.** Every mechanism is read from source; every
+  number in those findings is this repository's own prior measurement, not a fresh one. Where a
+  finding has since been measured here -- the two hangs, the empty Pester suite -- the entry
+  says so.
+- **Concurrency is partly swept.** Read in full: `RefreshWorker`, `CompletionSlot`, the
+  `DesktopController` publish, runtime-observation and worker-execute paths, the
+  `ApplicationBundle` lifecycle, and every `impl Drop` in `crates/*/src` at its call sites. Not
+  read: `crates/state`'s `MaintenanceWorker`/`MaintenanceScheduler` internals and
+  `DurableStagedFile`, `crates/platform` beyond that Drop listing, the quota, reminder and Git
+  runtimes line by line, and most of `controller.rs`. No lock-order inversion appeared in what
+  was read; that clears nothing that was not.
+- **The invariant sweeps are samples and must not be quoted as sweeps.** `unwrap_or(0)` and
+  `unwrap_or_default()`: the Dashboard and desktop hits were opened and each is a defensible
+  default, the store, state and codex hits were not. `with_capacity`: two sites that read a
+  declared length were opened and both are bounded first, roughly forty-five others were not.
+  **Absolute paths reaching a string through `Display`, `Debug` or serialization on the Rust
+  side were not swept at all** -- the finding above covers only the Slint half.
+- **`spec/DECISIONS.md` is unevenly read.** ADR-055 to ADR-063 and ADR-078 to ADR-080 in full,
+  every ADR this branch edited in full; ADR-064 to ADR-077 and ADR-081 to ADR-091 by heading
+  plus targeted greps for stale versions and counts only.
+- **`DATA_CONTRACT` and `SECURITY` tails were checked against claims that name a symbol** --
+  tool versions, poll cadences, shutdown ordering -- rather than read line by line. A prose
+  claim with nothing checkable in it could still be false there.
+- **`docs/FEATURE_PARITY.md` is sampled.** The quota board, trend, rhythm, compact widget,
+  appearance, settings schema and modular skins rows were checked, and the `rejected` rows'
+  gates. The `implemented` rows -- backup/recovery, source discovery, incremental parsing, cost
+  modes -- restate test results nobody re-ran, and one row's gate could not be located either
+  way.
+- **The localization catalogues were checked at the count and contract level only** -- both
+  `.po` files carry 528 msgid lines against the contract's literal 527 plus a header -- not
+  entry by entry beyond the Russian audit already recorded above.
+- **Three platform behaviours are taken on this repository's word**, because confirming them
+  means compiling or measuring: that Slint 1.17 instantiates the contents of an `if` eagerly,
+  that its parser accepts `Timer{` without a space, and that `Condvar::wait_timeout` releases
+  the mutex as `wait_for_completion` assumes on Windows.
+- **Two claims are attribution rather than proof.** Which transient assert fired at the measured
+  one-in-fifteen rate: the `submitted_count` race is the only in-window nondeterminism found,
+  which is not the same as the only one there is. And whether the bundle-slot hold is a bounded
+  stall or a true deadlock -- not every maintenance failure and pause path was traced.
+- **Whether any real archive exists at schema v14** was never checked, so whether the
+  contract drift fixed above was ever user-visible is unknown.
+
 ## Direction, and where the idle cost is not
 
 The trend card's area fill and its two-dot legend are **confirmed on a live window**: the
