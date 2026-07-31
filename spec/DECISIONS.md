@@ -208,7 +208,9 @@ hooks must therefore be installed before the first worker and not replaced durin
 lifetime. The engine rejects `panic=abort` at compile time rather than silently losing
 fault containment. Rationale: this closes the last P1-C ownership/backpressure/privacy
 gap without an async runtime, per-hint allocation, unbounded result queue, or
-provider/UI coupling.
+provider/UI coupling. ADR-095 later replaces the latest-result channel named here with
+a condition-variable slot, for a measured reason; every other guarantee in this entry
+stands.
 
 ## ADR-016 — Separate banked reset inventory with capability-gated activation
 
@@ -2285,3 +2287,25 @@ Rationale: parsing already consumed bytes once, but rebuilding every partial dig
 from the chunk boundary made B event-bounded batches perform quadratic prefix reads.
 An in-memory continuation makes normal proof work linear while a bounded reconstruction
 preserves restart and mutation safety.
+
+## ADR-095 — Wait for a worker completion on a condition variable, not a channel
+
+Decision: `RefreshWorker` publishes completions into one mutex-guarded latest-only slot
+signalled by a condition variable, replacing the capacity-one completion channel ADR-015
+specified. The closed flag and the pending completion live in one state behind one mutex,
+so a waiter reads the predicate under the very lock its wait registers on. A worker thread
+that ends closes the slot and wakes every waiter instead of leaving each to its own
+deadline. `publish_latest` is the only path that holds both the slot and the worker state,
+and it takes them in that order. Supersession accounting, boundedness, path-free values,
+panic containment, and every other guarantee in ADR-015 are unchanged.
+
+Rationale: a `std` `Receiver` is not `Sync`, so it sat behind a mutex, and waiting on it
+meant holding that mutex — the same one every `try_completion` reader takes and the worker
+takes to evict a superseded receipt. A reader arriving behind a two-second wait was measured
+blocked for 1.91 of those seconds, and in the application path the wait is whatever remains
+until a deadline. Slicing it into twenty-millisecond attempts left the same 1.91 seconds,
+because the platform mutex is not fair and a thread that releases and reacquires is handed it
+straight back: the defect is holding the lock across a wait at all, not holding it for long.
+`Condvar::wait_timeout` releases the mutex for the duration of the wait, and a one-slot queue
+with manual eviction was already a newest-wins slot, so naming it one removed a
+send-evict-resend loop as well.

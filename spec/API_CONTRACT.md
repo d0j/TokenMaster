@@ -204,12 +204,17 @@ generation and root count. Missing roots create no watch. Scheduler/watcher erro
 stable path-free codes.
 
 `RefreshWorker` owns exactly one dedicated thread, one capacity-one wake channel, and
-one capacity-one latest-only completion channel. Admission mutates the shared
+one capacity-one latest-only completion slot. Admission mutates the shared
 constant-state coordinator directly; a coalesced hint allocates no command node and
 wakes no additional worker. If the completion slot is occupied, publication removes
 only that older completion, increments a checked fixed supersession counter, and
-publishes the newer fixed result without blocking. Completion and snapshot values
-contain only request identity, phase/outcome/kind, aggregate flags, and counters.
+publishes the newer fixed result without blocking. Waiting on the slot holds no lock
+that admission, publication, or a concurrent reader acquires, so a wait of any length
+delays none of them. A worker thread that ends closes the slot and wakes every waiter
+at once instead of leaving each to its own deadline; the closed flag and the pending
+completion are read under the one lock the wait registers on, so no wakeup is lost.
+Completion and snapshot values contain only request identity, phase/outcome/kind,
+aggregate flags, and counters.
 
 Worker phases are `running`, `shutting_down`, `stopped`, or `faulted`. Callback and
 worker-boundary panics are contained, expose no panic payload through worker results,
