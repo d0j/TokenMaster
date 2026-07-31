@@ -138,18 +138,18 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match '(?i)\bgo\.exe\b|\bnode\.exe\b|\bpython\.exe\b'
     }
 
-    It "verification runs every Pester suite that exists" {
+    It "verification enumerates its Pester suites instead of naming them" {
         $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
-        # Enumerated from disk, never spelled out here. A hand-written list is what failed:
-        # it named seven suites while the gate ran eight, so secret-scan could have been
-        # dropped from verify-m0.ps1 without turning anything red -- and a ninth suite added
-        # tomorrow would have been forgotten the same way.
+        # Every suite on disk is run by construction now, so what is guarded here is that it
+        # stays that way. Two shapes failed before: a hand-written list that named seven of
+        # eight, and then a substring match over this script's text, which a `#` in front of a
+        # stage satisfied from inside the comment it created. A literal suite path in an
+        # Invoke-PesterChecked call is that shape returning, so it is forbidden outright.
+        $Text | Should -Match '(?s)Get-ChildItem.{0,200}?\*\.Tests\.ps1'
+        $Text | Should -Not -Match 'Invoke-PesterChecked[^\r\n]*\.Tests\.ps1'
         $Suites = @(Get-ChildItem -LiteralPath (Join-Path $ScriptsRoot "tests") `
-                -Filter "*.Tests.ps1" -File | Select-Object -ExpandProperty Name)
+                -Filter "*.Tests.ps1" -File)
         $Suites.Count | Should -BeGreaterOrEqual 8
-        foreach ($Suite in $Suites) {
-            $Text | Should -Match ([regex]::Escape($Suite))
-        }
         $Text | Should -Match 'validate-immutable-actions\.ps1'
         $Text | Should -Match 'verify-dependency-policy\.ps1'
     }
