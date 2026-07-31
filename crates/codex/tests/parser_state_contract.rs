@@ -653,3 +653,30 @@ fn rejected_lines_and_invalid_metadata_cannot_corrupt_state() {
     assert!(event.project().is_none());
     assert_ne!(diagnostics.count(ParserDiagnosticCode::InvalidPath), 0);
 }
+
+/// `tool_update` has a fallback for a `response_item` whose payload carries a name but no
+/// recognized `type`. `looks_relevant` decides before it ever runs, on nine markers or on any
+/// backslash byte, and `response_item` is not one of the nine -- so that fallback is
+/// unreachable through `parse_line` for exactly the shape it was written for, and the tool is
+/// dropped with no diagnostic beyond the aggregate `Irrelevant`.
+///
+/// Measured while writing this: the same call carrying `"type":"function_call"` returns
+/// `ToolOnly`, and this one returns `Skipped`. An undercount presented as a legitimate figure
+/// is what the first data invariant forbids.
+#[test]
+fn a_named_response_item_is_counted_without_a_recognized_payload_type() {
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+
+    let named = br#"{"type":"response_item","payload":{"name":"update_plan"}}"#;
+    assert!(
+        matches!(
+            parse(&context, &mut state, &mut diagnostics, 0, named),
+            ParseOutcome::ToolOnly
+        ),
+        "a named response_item must be counted, not discarded as irrelevant"
+    );
+    assert_eq!(state.tool_counts().len(), 1);
+    assert_eq!(state.tool_counts()[0].name(), "update_plan");
+}
