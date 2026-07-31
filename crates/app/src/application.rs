@@ -3101,6 +3101,15 @@ impl ApplicationRuntimeNotifier {
     ///
     /// Dropping a publication is what "lossy" means here rather than a compromise: `pending`
     /// records that one was skipped and the next completion publishes again.
+    ///
+    /// **Only the outer slot is try-acquired, and that is not the whole promise.** Reported by
+    /// the review bot: `publish_into` reaches `publish_runtime`, whose `live.snapshot()`,
+    /// `quota.snapshot` and `reminder.snapshot` each take a mutex blockingly, so a contended
+    /// reminder acknowledgement can still stall this call. The difference from the slot is the
+    /// hold time -- those are snapshot-width critical sections, while the slot is held across a
+    /// five-minute manual backup -- so this is a bounded wait rather than a park, but it is a
+    /// wait. Closing it needs try variants through `crates/runtime`; until then the contract
+    /// says what is true rather than the absolute it first claimed.
     fn publish_hint(&self) {
         let Some(bundle) = self.bundle.upgrade() else {
             self.pending.store(false, Ordering::Release);

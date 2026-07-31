@@ -386,12 +386,19 @@ local directory and archive filename under the exact installed/portable marker p
 Its errors and `Debug` output are stable and path-free.
 
 `RefreshWorker::spawn_notified` accepts one optional
-`Arc<dyn WorkerCompletionNotifier>`. After publishing the capacity-one completion
+`Arc<dyn WorkerCompletionNotifier>`. After publishing the latest-only completion
 receipt and outside worker locks, it sends one copied lossy completion hint. The hint is
 delivered on the worker's own thread between publishing the receipt and starting the
-follow-up, so an implementation MUST NOT wait for a lock: it may only try-acquire, and a
-publication skipped for contention is dropped rather than queued, which is what makes the
-hint lossy. Notifier
+follow-up, so an implementation MUST NOT wait on any lock a caller can hold across an
+operation: those it may only try-acquire, and a publication skipped for contention is
+dropped rather than queued, which is what makes the hint lossy. The application bundle
+slot is such a lock -- a manual backup holds it for as long as `MANDATORY_BACKUP_TIMEOUT`,
+five minutes -- and `publish_hint` try-acquires it. **This is weaker than the absolute it
+first stated, and the difference is recorded rather than hidden:** the runtime snapshots
+the publication then takes acquire short-lived mutexes blockingly, so the hint can still
+wait on one for the width of a snapshot. Making that path try-only as well needs try
+variants through `crates/runtime`, which is open work, not a property this clause may
+claim. Notifier
 panic is caught/redacted and cannot fault the worker or remove the receipt. Live,
 nested Git, quota, and reminder runtimes expose additive `start_notified` constructors;
 their existing `start` constructors retain identical no-notifier behavior.
