@@ -127,6 +127,12 @@ Each of these cost real time.
   between them. A slow suite is its own parallel cases and the child processes they spawn.
 - **Resource contracts are load-sensitive.** A red one is checked by re-running it alone
   before it is believed, and the reason is recorded beside its constants.
+- **The gate fails if the working tree changes while it runs, anywhere.** The
+  dependency-policy stage captures state before and after and compares `Commit` and `Dirty`
+  among others, so an edit to a document no stage reads still throws `dependency policy inputs
+  changed while the check was running`. "No stage reads `docs/`" is true and irrelevant: what
+  is compared is whether the tree moved at all. Commit or stash first, then start the gate,
+  then keep hands off until it answers.
 
 ## Landing work
 

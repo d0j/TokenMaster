@@ -1036,7 +1036,8 @@ and a reusable UI/CLI/MCP projection boundary without inheriting runtime authori
 
 Decision: P3 uses a new frontend leaf package, `tokenmaster-desktop`. The historical
 `tokenmaster-m0` package remains an architecture/resource probe and is neither renamed,
-promoted, nor added as a production dependency. The production Slint package selects
+promoted, nor added as a production dependency. **It was removed entirely at P0.1**, so the
+separation this clause protected is now structural rather than maintained. The production Slint package selects
 only `winit-software`; the probe opts into FemtoVG explicitly for its diagnostic
 fallback. One `DesktopState` maps the current `ProductSnapshot` into exactly 11 fixed
 route rows and rejects equal or older product generations. Slint receives only copied
@@ -1942,7 +1943,11 @@ asset. It emits only Show, Hide, OpenCompact, OpenDashboard, and Quit through th
 single-install `Rc` router with no event queue. One hidden top-level tool window owns
 the icon and fixed menu on the Slint/winit UI thread. An atomic reservation rejects a
 second owner. The production Desktop dependency no longer enables Slint
-`system-tray`; that feature is scoped only to the separate M0 probe.
+`system-tray`; that feature is scoped only to the separate M0 probe. **That probe package
+was removed at P0.1 and is no longer a workspace member**, so what holds the property today is
+simply that `crates/desktop/Cargo.toml` declares no `system-tray` feature -- and nothing
+asserts it. The sentence is left as the decision it was; this is where the reader is told the
+crate it names is gone.
 
 The application shows the main window before deferred tray installation and runs the
 event loop until explicit Quit. Explorer `TaskbarCreated` triggers one checked re-add.
