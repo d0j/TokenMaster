@@ -333,7 +333,8 @@ fn animates(line: &str) -> bool {
         let mut rest = code;
         while let Some(at) = rest.find(keyword) {
             rest = &rest[at + keyword.len()..];
-            if rest.trim_start().starts_with(opener) {
+            let after = rest.trim_start();
+            if after.is_empty() || after.starts_with(opener) {
                 return true;
             }
         }
@@ -341,7 +342,7 @@ fn animates(line: &str) -> bool {
     let mut rest = code;
     while let Some(at) = rest.find("animate") {
         rest = &rest[at + "animate".len()..];
-        if rest.starts_with(char::is_whitespace) {
+        if rest.is_empty() || rest.starts_with(char::is_whitespace) {
             return true;
         }
     }
@@ -364,6 +365,11 @@ fn an_animation_is_recognised_however_its_whitespace_is_written() {
         "states [ shown when root.visible: { opacity: 1.0; } ]",
         "states[ shown when root.visible: { opacity: 1.0; } ]",
         "transitions [ in-out shown: { animate opacity {} } ]",
+        // The keyword may be the last thing on its line, with the property and the block on
+        // the next. An empty remainder is not "no whitespace after the keyword".
+        "        animate",
+        "    states",
+        "    transitions",
     ] {
         assert!(animates(animating), "not recognised as animating: {animating:?}");
     }
