@@ -124,7 +124,7 @@ Not all fifty-one want a name. By how often each appears:
 | 2 | 13 | a role |
 | once | 12 | one-off, may stay a literal |
 
-So **39 roles** at a bar of two uses. Sorted by luminance the shape is 23 dark values
+So **39 roles** at a bar of two uses -- **and that number is wrong, because this count measured the wrong thing.** The handoff has a `## Design Tokens` section of its own that names the roles directly: `bg/window`, `bg/rail`, `bg/chrome`, four surfaces and a track, then seven border tones, eight text steps and five semantics, with the heatmap given as a single scale rather than six values. Counting hex occurrences across the document instead of reading that table turned states and mixes into roles: a hover is a lightened rail, a chip is a vendor accent mixed into a surface, and the heatmap is mint mixed toward the background. Roles are nearer **29**, and most of them are derived rather than chosen. Sorted by luminance the shape is 23 dark values
 (surfaces and borders), 12 in the middle, and 16 light (text and accents) -- which is where
 the fifteen fail, and the failure is structural rather than a shortage:
 
@@ -147,8 +147,8 @@ danger red map onto `accent`, `ready` and `degraded` without argument.
 None of this is reachable by restyling a view. Until the ramp exists, every layout change
 either invents a literal beside the tokens or picks the nearest of fifteen and drifts.
 
-**And widening the ramp is not the mechanical job it looks like, which is the part worth
-stopping on.** The product carries **six** token sets -- three skins, `Refined`, `Graphite`
+**And widening the ramp is not the mechanical job it first looked like -- though not for the
+reason recorded here at first.** The product carries **six** token sets -- three skins, `Refined`, `Graphite`
 and `Ember`, each in a light and a dark scheme -- and every role must have a value in all
 six. The handoff specifies **one** set of values and does not mention a theme, a scheme or a
 skin anywhere in its 202 lines. So going from fifteen roles to thirty-nine is not twenty-four
@@ -164,8 +164,23 @@ That is a product decision rather than a styling task, and it is the owner's:
 - Reduce what the product offers, so the drawn set is the product's appearance and the skin
   and scheme choices go away or shrink.
 
-Until one of those is chosen, adding roles means inventing a hundred and twenty colours, and
-inventing them is how a design standard stops being one.
+**A second reading collapsed that arithmetic, and the fact that collapses it was never
+checked here: no current set matches the drawing either.** `Refined dark` opens with
+`background: rgb(13, 15, 19)`, which is `#0D0F13`, against the handoff's `#090D13` for the same
+window. So the fear of five generated themes beside one drawn one describes an improvement on
+the present, where **six of six** are undrawn -- and the light sets already prove derivation by
+rule is not what happens: Refined's light accent is `rgb(0, 80, 125)` against a dark
+`rgb(45, 212, 191)`, picked for contrast rather than inverted.
+
+What follows is that the missing roles are mostly derivations from each set's **own** seeds --
+a depth between `background` and `surface-raised`, a text step mixed toward the background, a
+chip as accent mixed into a surface -- which cost nothing per extra theme and keep Graphite and
+Ember their own. Genuinely new seeds look like two or three a set: a second series colour for
+the trend, and a neutral for ranking bars so mint never means "just a bar". Ten to fifteen
+values, not a hundred and twenty.
+
+So the three routes above are not the owner's choice; the mechanism is an implementation
+detail once the arithmetic is right. The one thing that is the owner's is written in the plan.
 
 ### Known gaps the designer flagged
 

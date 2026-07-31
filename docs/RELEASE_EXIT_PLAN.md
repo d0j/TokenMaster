@@ -91,10 +91,22 @@ exercised with both states actually observed here, the pre-fix `Ready` and the p
 
 ## Open, and waiting on the owner
 
-Nothing. The two questions that stood here were delegated and are settled; both outcomes are
-in the ledger below, with the evidence that closed them rather than the opinion that would
-have. This heading stays because a plan with nowhere to put an owner's decision quietly grows
-one somewhere worse.
+One, and it is deliberately one rather than the three routes this section first offered --
+those asked the owner to pick a mechanism, which is not theirs to pick.
+
+- **Does the handoff become the product's default appearance, with the other five token sets
+  remaining engineering derivatives, as they already are today?** The "as they already are"
+  is the part that was missing when this was three routes: no set matches the drawing now
+  either -- `Refined dark` opens `#0D0F13` against the handoff's `#090D13` for the same window
+  -- so five generated sets beside one drawn one is an improvement on six undrawn ones, not a
+  compromise. **Yes** and there is nothing to escalate: the drawn set replaces `Refined dark`,
+  the missing roles are derived from each set's own seeds, and a letter to the designer for
+  the other five goes out in parallel blocking nothing. **No** and the real fork appears,
+  between waiting for the designer and reducing what the product offers -- and the second
+  carries a price worth stating before it is chosen, because it reopens `P4-C` and `P4-D` in
+  the specification, moves two ADRs, and needs a settings migration that **destroys the skin
+  and colour-scheme a user has already chosen**. `docs/UI_REFERENCE.md` carries the counting
+  and the correction to it.
 
 ## Recorded, with a phase
 
