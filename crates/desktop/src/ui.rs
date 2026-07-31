@@ -1667,8 +1667,34 @@ fn apply_recommended_reminder_draft(window: &MainWindow) {
     window.set_reminder_feedback("Recommended reminder draft ready".into());
 }
 
+/// The lead times the reminder editor offers as tick boxes, newest-first.
+///
+/// This set was written three times in this file -- a function-local array, five separate
+/// `contains` calls against literals, and a fourth literal list in the filter that decides
+/// which leads become editable rows. Nothing held the three together. Disagree and a lead is
+/// both a ticked preset and an editable row, where the `dedup` on save quietly reverts the
+/// user's edit; disagree the other way and it is dropped from both and lost.
+const REMINDER_PRESET_LEADS: [u32; 5] = [604_800, 86_400, 43_200, 21_600, 3_600];
+
+/// Splits stored leads into the preset tick boxes and the leads that need an editable row.
+///
+/// Pure, and separate from the window, so the property that matters can be checked: every
+/// lead lands in exactly one half. A lead in both halves is the defect this set's three
+/// copies could produce.
+fn split_reminder_leads(leads: &[u32]) -> ([bool; 5], Vec<u32>) {
+    let mut preset_enabled = [false; 5];
+    for (slot, preset) in preset_enabled.iter_mut().zip(REMINDER_PRESET_LEADS) {
+        *slot = leads.contains(&preset);
+    }
+    let custom = leads
+        .iter()
+        .copied()
+        .filter(|lead| !REMINDER_PRESET_LEADS.contains(lead))
+        .collect::<Vec<_>>();
+    (preset_enabled, custom)
+}
+
 fn reminder_policy_intent(window: &MainWindow) -> Option<DesktopIntent> {
-    const PRESETS: [u32; 5] = [604_800, 86_400, 43_200, 21_600, 3_600];
     let preset_enabled = [
         window.get_reminder_preset_seven_days(),
         window.get_reminder_preset_twenty_four_hours(),
@@ -1676,7 +1702,7 @@ fn reminder_policy_intent(window: &MainWindow) -> Option<DesktopIntent> {
         window.get_reminder_preset_six_hours(),
         window.get_reminder_preset_one_hour(),
     ];
-    let mut leads = PRESETS
+    let mut leads = REMINDER_PRESET_LEADS
         .into_iter()
         .zip(preset_enabled)
         .filter_map(|(lead, enabled)| enabled.then_some(lead))
@@ -2329,16 +2355,12 @@ fn apply_reliable_state_projection(
     if !window.get_reminder_dirty() {
         window.set_reminder_enabled(reminder.enabled());
         let leads = reminder.lead_seconds();
-        window.set_reminder_preset_seven_days(leads.contains(&604_800));
-        window.set_reminder_preset_twenty_four_hours(leads.contains(&86_400));
-        window.set_reminder_preset_twelve_hours(leads.contains(&43_200));
-        window.set_reminder_preset_six_hours(leads.contains(&21_600));
-        window.set_reminder_preset_one_hour(leads.contains(&3_600));
-        let custom = leads
-            .iter()
-            .copied()
-            .filter(|lead| ![604_800, 86_400, 43_200, 21_600, 3_600].contains(lead))
-            .collect::<Vec<_>>();
+        let (preset_enabled, custom) = split_reminder_leads(leads);
+        window.set_reminder_preset_seven_days(preset_enabled[0]);
+        window.set_reminder_preset_twenty_four_hours(preset_enabled[1]);
+        window.set_reminder_preset_twelve_hours(preset_enabled[2]);
+        window.set_reminder_preset_six_hours(preset_enabled[3]);
+        window.set_reminder_preset_one_hour(preset_enabled[4]);
         window.set_reminder_custom_lead_rows(reminder_custom_rows(&custom));
         window.set_reminder_feedback("Ready to edit reminder profile".into());
     }
@@ -5372,5 +5394,51 @@ mod trend_area_tests {
 
         assert_eq!(dashboard_trend_area_path(&rows, true), "");
         assert_eq!(dashboard_trend_area_path(&[point(0.5, true)], true), "");
+    }
+}
+
+#[cfg(test)]
+mod reminder_lead_tests {
+    use super::{REMINDER_PRESET_LEADS, split_reminder_leads};
+
+    /// Every stored lead belongs to exactly one half of the editor.
+    ///
+    /// The preset set used to be written three times in this file, and the halves were
+    /// computed from two of those copies. A lead in both halves is shown as a ticked preset
+    /// *and* as an editable row, and the `dedup` on save then reverts whatever the user typed
+    /// into that row. A lead in neither is simply lost. Neither failure says anything on
+    /// screen, which is why this asserts the partition rather than the wording.
+    #[test]
+    fn every_lead_is_a_preset_or_a_custom_row_and_never_both() {
+        let leads = [604_800, 172_800, 86_400, 43_200, 7_200, 21_600, 3_600, 900];
+
+        let (preset_enabled, custom) = split_reminder_leads(&leads);
+
+        for lead in leads {
+            let is_preset = REMINDER_PRESET_LEADS
+                .iter()
+                .zip(preset_enabled)
+                .any(|(preset, enabled)| enabled && *preset == lead);
+            let is_custom = custom.contains(&lead);
+            assert!(
+                is_preset != is_custom,
+                "lead {lead} is {} -- preset={is_preset}, custom={is_custom}",
+                if is_preset {
+                    "in both halves"
+                } else {
+                    "in neither"
+                }
+            );
+        }
+        assert_eq!(custom, vec![172_800, 7_200, 900], "custom rows: {custom:?}");
+    }
+
+    /// A preset the user has not chosen stays unticked and does not become a row either.
+    #[test]
+    fn an_absent_preset_is_neither_ticked_nor_offered_as_a_row() {
+        let (preset_enabled, custom) = split_reminder_leads(&[86_400]);
+
+        assert_eq!(preset_enabled, [false, true, false, false, false]);
+        assert!(custom.is_empty(), "custom rows: {custom:?}");
     }
 }
