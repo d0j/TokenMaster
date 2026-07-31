@@ -704,8 +704,6 @@ fn efficiency(
         Some(GitEfficiencyUnavailableReason::GitStale)
     } else if let Some(reason) = usage.forced_unavailable {
         Some(reason)
-    } else if usage.cost.is_none() {
-        Some(GitEfficiencyUnavailableReason::ProjectNotInUsageSnapshot)
     } else if !usage.quality_complete {
         Some(GitEfficiencyUnavailableReason::UsageQualityIncomplete)
     } else if matches!(
@@ -713,6 +711,13 @@ fn efficiency(
         QueryFreshness::Stale | QueryFreshness::Unavailable
     ) {
         Some(GitEfficiencyUnavailableReason::UsageStale)
+    // Asked after the two above, and the order is the whole point: a missing cost means the
+    // repository's project was not found in the usage snapshot, which is a definite negative
+    // claim about the archive. It is only worth making once the snapshot it was read from is
+    // known good -- otherwise the absence is a property of evidence already known to be
+    // untrustworthy, and the honest answer is why the evidence is untrustworthy.
+    } else if usage.cost.is_none() {
+        Some(GitEfficiencyUnavailableReason::ProjectNotInUsageSnapshot)
     } else {
         let cost = usage
             .cost

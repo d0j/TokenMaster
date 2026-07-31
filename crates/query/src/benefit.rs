@@ -1135,11 +1135,10 @@ pub(crate) fn map_change_capture(
     request: &BenefitChangePageRequest,
     generated_at_ms: i64,
 ) -> Result<MappedBenefitPayload<BenefitChangePage>, QueryError> {
-    if capture.changes().len() > request.page_size.get()
-        || capture
-            .changes()
-            .windows(2)
-            .any(|pair| pair[0].sequence() <= pair[1].sequence())
+    if capture
+        .changes()
+        .windows(2)
+        .any(|pair| pair[0].sequence() <= pair[1].sequence())
     {
         return Err(corrupt());
     }
@@ -1152,7 +1151,11 @@ pub(crate) fn map_change_capture(
         inner: inner.clone(),
     });
     if capture.has_more() != next_cursor.is_some()
-        || (capture.has_more() && changes.len() != request.page_size.get())
+        || !crate::service::page_shape_is_intact(
+            changes.len(),
+            request.page_size.get(),
+            capture.has_more(),
+        )
     {
         return Err(corrupt());
     }
@@ -1278,9 +1281,13 @@ fn map_scope_status(
     let Some(scope) = scope else {
         return (None, QueryFreshness::Unavailable, QueryQuality::Unknown);
     };
+    // A reading stamped after the query is not evidence that is merely getting old, and
+    // `Aging` says degraded but usable. `map_sample_freshness` in `quota.rs` and the git
+    // helper in `git_output.rs` both answer `Unavailable` for this exact condition; one
+    // archive answering two ways about one clock is one answer too many.
     let freshness = if generated_at_ms < scope.observed_at_ms() {
         push_warning(warnings, BenefitWarningCode::ClockDiscontinuity);
-        QueryFreshness::Aging
+        QueryFreshness::Unavailable
     } else if generated_at_ms <= scope.fresh_until_ms() {
         QueryFreshness::Fresh
     } else if generated_at_ms <= scope.stale_after_ms() {
