@@ -4107,7 +4107,15 @@ fn apply_trend(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
 }
 
 /// The y a ratio of zero maps to in the trend viewbox, and so the foot of any shaded area.
-const TREND_ZERO_LINE: f64 = 80.0;
+// The trend geometry, in the 1000x100 viewbox the trend card draws into. These were four
+// literals inside the emitter and a fifth, 80.0, written out here -- which is `TREND_Y_TOP +
+// TREND_Y_SPAN` and was the same number said twice. Editing the band silently detached every
+// area fill from its own line, because only one of the two statements moved.
+const TREND_X_ORIGIN: f64 = 28.0;
+const TREND_X_SPAN: f64 = 944.0;
+const TREND_Y_TOP: f64 = 10.0;
+const TREND_Y_SPAN: f64 = 70.0;
+const TREND_ZERO_LINE: f64 = TREND_Y_TOP + TREND_Y_SPAN;
 
 fn dashboard_trend_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
     if rows.len() < 2 {
@@ -4126,8 +4134,8 @@ fn dashboard_trend_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
             segment_started = false;
             continue;
         }
-        let x = 28.0 + (index as f64 / denominator) * 944.0;
-        let y = 10.0 + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * 70.0;
+        let x = TREND_X_ORIGIN + (index as f64 / denominator) * TREND_X_SPAN;
+        let y = TREND_Y_TOP + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * TREND_Y_SPAN;
         let command = if segment_started { 'L' } else { 'M' };
         path.push_str(&format!("{command} {x:.2} {y:.2} "));
         segment_started = true;
@@ -4171,8 +4179,8 @@ fn dashboard_trend_area_path(rows: &[DashboardTrendPoint], tokens: bool) -> Stri
             flush(&mut run, &mut path);
             continue;
         }
-        let x = 28.0 + (index as f64 / denominator) * 944.0;
-        let y = 10.0 + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * 70.0;
+        let x = TREND_X_ORIGIN + (index as f64 / denominator) * TREND_X_SPAN;
+        let y = TREND_Y_TOP + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * TREND_Y_SPAN;
         run.push((x, y));
     }
     flush(&mut run, &mut path);
@@ -5277,7 +5285,10 @@ mod compact_window_tests {
 
 #[cfg(test)]
 mod trend_area_tests {
-    use super::{DashboardTrendPoint, TREND_ZERO_LINE, dashboard_trend_area_path};
+    use super::{
+        DashboardTrendPoint, TREND_X_ORIGIN, TREND_X_SPAN, TREND_ZERO_LINE,
+        dashboard_trend_area_path, dashboard_trend_path,
+    };
 
     fn point(ratio: f32, available: bool) -> DashboardTrendPoint {
         DashboardTrendPoint {
@@ -5290,6 +5301,31 @@ mod trend_area_tests {
             .into(),
             ..Default::default()
         }
+    }
+
+    /// The zero line has to *be* the foot of the band, not a number that happens to equal it.
+    ///
+    /// The line and the fill each stated the geometry, and the zero line stated it a third
+    /// time as a literal `80.0`. Any of the three could move alone, and the fill would close
+    /// to a height its own line never reaches. This asserts the one relationship that keeps
+    /// them together: a ratio of zero lands exactly on the line the fill closes to, and the
+    /// far edge of the band is the width the emitter actually spans.
+    #[test]
+    fn the_zero_line_is_where_a_zero_ratio_is_drawn() {
+        let rows = vec![point(0.0, true), point(0.0, true)];
+
+        let path = dashboard_trend_path(&rows, true);
+
+        let foot = format!("{TREND_ZERO_LINE:.2}");
+        assert_eq!(
+            path,
+            format!(
+                "M {:.2} {foot} L {:.2} {foot} ",
+                TREND_X_ORIGIN,
+                TREND_X_ORIGIN + TREND_X_SPAN
+            ),
+            "a zero ratio must be drawn on the zero line the area closes to"
+        );
     }
 
     /// A shaded area has to be closed to the zero line, not to whatever point came first.

@@ -109,6 +109,64 @@ beside a model name -- `ModelKey` is a plain ASCII value with no provider on it 
 session context and tool-call counts, and the
 per-repository commit and line statistics the Live Sessions card shows.
 
+### The token gap, counted
+
+The palette is the first blocker, and it is not a matter of taste. Counted from the
+specification rather than estimated: it names colour **199 times** across **51 distinct
+values**, against **fifteen roles** in `UiPalette`.
+
+Not all fifty-one want a name. By how often each appears:
+
+| Uses | Values | What follows |
+|---|---|---|
+| 5 or more | 14 | structural, each needs a role |
+| 3 to 4 | 12 | a role |
+| 2 | 13 | a role |
+| once | 12 | one-off, may stay a literal |
+
+So **39 roles** at a bar of two uses. Sorted by luminance the shape is 23 dark values
+(surfaces and borders), 12 in the middle, and 16 light (text and accents) -- which is where
+the fifteen fail, and the failure is structural rather than a shortage:
+
+- **Surfaces are one role, `surface`, plus two modifiers.** The design distinguishes the
+  window from the sidebar from the header bar, then a muted card shell from a primary one,
+  then an inset item inside a card, a control container, a chip, a footer strip, a hover
+  state and an active state. Ten depths where the tokens hold three.
+- **Borders are one role.** The design uses a window border, a control border, a card inner
+  divider, a primary-card border and a chip border, and the chip border differs per model
+  vendor. Five where the tokens hold one.
+- **Text is two roles, primary and secondary.** The design runs primary, emphasis,
+  tertiary, muted, meta, caption, axis, inactive-segment, sidebar-inactive and window
+  control -- ten steps down a single ramp, where the tokens step twice.
+- **Two chart series colours have no role at all**: tokens and cost are separate hues in
+  the trend legend, and nothing in the tokens expresses "series one" and "series two".
+
+The accent and state roles are the part that survives: brand amber, positive green and
+danger red map onto `accent`, `ready` and `degraded` without argument.
+
+None of this is reachable by restyling a view. Until the ramp exists, every layout change
+either invents a literal beside the tokens or picks the nearest of fifteen and drifts.
+
+**And widening the ramp is not the mechanical job it looks like, which is the part worth
+stopping on.** The product carries **six** token sets -- three skins, `Refined`, `Graphite`
+and `Ember`, each in a light and a dark scheme -- and every role must have a value in all
+six. The handoff specifies **one** set of values and does not mention a theme, a scheme or a
+skin anywhere in its 202 lines. So going from fifteen roles to thirty-nine is not twenty-four
+new colours; it is twenty-four in the set that was drawn and **a hundred and twenty in five
+that were not**.
+
+That is a product decision rather than a styling task, and it is the owner's:
+
+- Derive the other five from the drawn one by rule -- a hue rotation for the skins and an
+  inversion for light -- and accept that five of six themes are generated rather than
+  designed.
+- Ask the designer for the missing sets, which is the only route where all six are drawn.
+- Reduce what the product offers, so the drawn set is the product's appearance and the skin
+  and scheme choices go away or shrink.
+
+Until one of those is chosen, adding roles means inventing a hundred and twenty colours, and
+inventing them is how a design standard stops being one.
+
 ### Known gaps the designer flagged
 
 The handoff itself lists what was not designed: Activity modes other than `7d`, the
