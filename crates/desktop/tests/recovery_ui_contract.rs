@@ -517,13 +517,10 @@ fn no_slint_source_infers_a_fact_from_the_unavailable_glyph() {
         .unwrap_or("other");
         *by_view.entry(view).or_default() += 1;
     }
-    let expected: std::collections::BTreeMap<&str, usize> = [
-        ("history-view", 11),
-        ("models-view", 1),
-        ("projects-view", 2),
-    ]
-    .into_iter()
-    .collect();
+    let expected: std::collections::BTreeMap<&str, usize> =
+        [("models-view", 1), ("projects-view", 2)]
+            .into_iter()
+            .collect();
     assert_eq!(
         by_view, expected,
         "the glyph-comparison debt changed; it may only shrink, and `dashboard-view` must stay \

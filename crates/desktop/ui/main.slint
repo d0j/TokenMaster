@@ -143,6 +143,13 @@ export component MainWindow inherits Window {
     in property <string> history-total-tokens;
     in property <string> history-cost;
     in property <string> history-events;
+    in property <string> history-input-tokens-availability;
+    in property <string> history-cached-tokens-availability;
+    in property <string> history-output-tokens-availability;
+    in property <string> history-reasoning-tokens-availability;
+    in property <string> history-total-tokens-availability;
+    in property <string> history-cost-availability;
+    in property <string> history-events-availability;
     in property <string> history-range-preset: "recent_30_days";
     in property <bool> history-range-pending: false;
     in property <[ModelUsageRow]> model-usage-rows;
@@ -539,6 +546,13 @@ export component MainWindow inherits Window {
                     total-tokens: root.history-total-tokens;
                     cost: root.history-cost;
                     events: root.history-events;
+                    input-tokens-availability: root.history-input-tokens-availability;
+                    cached-tokens-availability: root.history-cached-tokens-availability;
+                    output-tokens-availability: root.history-output-tokens-availability;
+                    reasoning-tokens-availability: root.history-reasoning-tokens-availability;
+                    total-tokens-availability: root.history-total-tokens-availability;
+                    cost-availability: root.history-cost-availability;
+                    events-availability: root.history-events-availability;
                     range-preset: root.history-range-preset;
                     range-pending: root.history-range-pending;
                     request-range-1 => { root.request-history-range-1(); }

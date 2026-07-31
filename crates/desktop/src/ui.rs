@@ -2994,6 +2994,32 @@ fn apply_history_snapshot_projection(window: &MainWindow, history: &DesktopHisto
     window.set_history_total_tokens(format_tokens(history.total_tokens()).into());
     window.set_history_cost(format_cost(history.cost()).into());
     window.set_history_events(projection_optional_events(window, history.event_count()).into());
+    // Carried, not inferred. These eleven values were the largest group deciding their own
+    // availability by comparing the text they had just rendered to an em dash.
+    window.set_history_input_tokens_availability(
+        availability_code(history.input().availability()).into(),
+    );
+    window.set_history_cached_tokens_availability(
+        availability_code(history.cached().availability()).into(),
+    );
+    window.set_history_output_tokens_availability(
+        availability_code(history.output().availability()).into(),
+    );
+    window.set_history_reasoning_tokens_availability(
+        availability_code(history.reasoning().availability()).into(),
+    );
+    window.set_history_total_tokens_availability(
+        availability_code(history.total_tokens().availability()).into(),
+    );
+    window.set_history_cost_availability(availability_code(history.cost().availability()).into());
+    window.set_history_events_availability(
+        if history.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
 
     let rows = history
         .rows()
