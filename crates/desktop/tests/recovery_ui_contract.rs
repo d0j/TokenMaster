@@ -293,21 +293,117 @@ fn recovery_ui_source_keeps_authority_bounded_and_accessible() {
             "missing UI contract: {required}"
         );
     }
-    for forbidden in [
-        "path",
-        "filename",
-        "file-name",
-        "Timer {",
-        "animate ",
-        "animation-",
-        "std::fs",
-        "rusqlite",
-    ] {
-        assert!(
-            !combined.contains(forbidden),
-            "forbidden UI authority or retention: {forbidden}"
-        );
+    // Retention and authority are checked across the whole tree by
+    // `no_slint_source_can_name_a_path_or_reach_past_the_bridge`, and animation keywords by
+    // `animates`. What stays here is the required list above: it asserts these five views'
+    // own contract, which is a different question from a tree-wide rule.
+}
+
+/// Every Slint source, read from disk with line endings normalised.
+///
+/// From disk rather than a list of `include_str!` names, for the reason the localization
+/// contract gives: a list has to be remembered, and forgetting is the failure being guarded
+/// against. Two rules in this file were written against five names while the tree held
+/// twenty-five, and both were blind to the file that mattered.
+fn slint_sources() -> Vec<(String, String)> {
+    fn collect(directory: &std::path::Path, sources: &mut Vec<(String, String)>) {
+        for entry in std::fs::read_dir(directory).expect("read ui directory") {
+            let path = entry.expect("directory entry").path();
+            if path.is_dir() {
+                collect(&path, sources);
+            } else if path.extension().is_some_and(|value| value == "slint") {
+                let text = std::fs::read_to_string(&path).expect("read slint source");
+                sources.push((path.display().to_string(), text.replace("\r\n", "\n")));
+            }
+        }
     }
+
+    let mut sources = Vec::new();
+    collect(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui"),
+        &mut sources,
+    );
+    assert!(
+        sources.len() > 20,
+        "expected the whole Slint tree, found {} files",
+        sources.len()
+    );
+    sources
+}
+
+/// The retention half of the rule above, which stayed on five files when the animation half
+/// moved to the whole tree.
+///
+/// Twenty views had no guard against an absolute path reaching the interface, and that is
+/// where the deferred Live Sessions and project-alias work is heading -- both want to name the
+/// repository a row belongs to. The invariant is the first one in `CLAUDE.md`: never persist
+/// or expose absolute user paths.
+#[test]
+fn no_slint_source_can_name_a_path_or_reach_past_the_bridge() {
+    for (source, text) in slint_sources() {
+        for line in text.lines() {
+            let code = code_of(line);
+            for forbidden in ["path", "filename", "file-name", "std::fs", "rusqlite"] {
+                assert!(
+                    !code.contains(forbidden),
+                    "forbidden UI authority or retention {forbidden:?} in {source}: {:?}",
+                    line.trim()
+                );
+            }
+        }
+    }
+}
+
+/// The whole-tree animation scan reads first-party sources only, and the animation a refactor
+/// would reach for lives in the Slint crate: `std-widgets`' `Spinner` is built on `SpinnerBase`,
+/// whose source reads `animation-tick()`. Seventeen of the twenty-five views already import
+/// from `std-widgets.slint`, so adding `Spinner` to one of them is a single word, and the
+/// first-party scan would find zero animations rather than a second one.
+///
+/// The set is closed in the same way the msgid arrays and `Get-ProductPackageExpectedFile`
+/// are: a new widget has to be added here deliberately, and one that animates cannot arrive
+/// by accident.
+#[test]
+fn the_widgets_imported_from_the_slint_library_are_a_closed_set() {
+    const ALLOWED: [&str; 8] = [
+        "AboutSlint",
+        "Button",
+        "CheckBox",
+        "ComboBox",
+        "LineEdit",
+        "Palette",
+        "ScrollView",
+        "SpinBox",
+    ];
+
+    let mut seen = std::collections::BTreeSet::new();
+    for (path, text) in slint_sources() {
+        for line in text.lines() {
+            let Some(rest) = line.split_once("from \"std-widgets.slint\"") else {
+                continue;
+            };
+            let names = rest
+                .0
+                .trim()
+                .trim_start_matches("import")
+                .trim()
+                .trim_start_matches('{')
+                .trim_end_matches('}');
+            for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+                assert!(
+                    ALLOWED.contains(&name),
+                    "{name:?} is imported from std-widgets in {path} and is not in the closed \
+                     set; a widget from the Slint library can animate without any first-party \
+                     source saying so"
+                );
+                seen.insert(name.to_string());
+            }
+        }
+    }
+    assert!(
+        seen.len() >= 6,
+        "expected the product's std-widgets imports, found {seen:?}"
+    );
 }
 
 /// True when a line of Slint code declares an animation or a repainting timer.
@@ -321,11 +417,40 @@ fn recovery_ui_source_keeps_authority_bounded_and_accessible() {
 /// `animate` must be followed by whitespace and never by more letters, which is what keeps a
 /// property named `animated` from reading as an animation. `animation` shares no prefix with
 /// `animate`, so `animation-tick()` is caught only by its own arm.
+/// The code of one line: string literals emptied and any trailing comment dropped.
+///
+/// Both keyword rules in this file were fooled by text rather than by code. A `//` inside a
+/// string literal -- a URL is enough -- truncated the line before it was scanned, so anything
+/// after it was never read. And the word "path" inside a translated sentence that promises
+/// paths are *not* retained read as a property carrying one, which is what the tree-wide
+/// retention rule hit on its first run.
+///
+/// Emptying literals before matching answers both at once: nothing a user reads can satisfy a
+/// rule about what the code does, and nothing a user reads can hide code from it either.
+fn code_of(line: &str) -> String {
+    let mut code = String::with_capacity(line.len());
+    let mut characters = line.chars().peekable();
+    let mut inside_literal = false;
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' if inside_literal => {
+                characters.next();
+            }
+            '"' => {
+                inside_literal = !inside_literal;
+                code.push('"');
+            }
+            '/' if !inside_literal && characters.peek() == Some(&'/') => break,
+            _ if inside_literal => {}
+            _ => code.push(character),
+        }
+    }
+    code
+}
+
 fn animates(line: &str) -> bool {
-    // Stripped here rather than by the caller so the predicate owns the whole question. The
-    // explanation written beside the one allowed animation names it, and must not count as a
-    // second one; equally, a new animation must not be able to hide behind a `//`.
-    let code = line.split("//").next().unwrap_or_default();
+    let code = code_of(line);
+    let code = code.as_str();
     if code.contains("animation-") {
         return true;
     }
@@ -370,6 +495,8 @@ fn an_animation_is_recognised_however_its_whitespace_is_written() {
         "        animate",
         "    states",
         "    transitions",
+        // A `//` inside a string literal must not truncate the line before it is scanned.
+        "property <string> u: \"https://x\"; animate width { duration: 100ms; }",
     ] {
         assert!(animates(animating), "not recognised as animating: {animating:?}");
     }
@@ -396,28 +523,7 @@ fn an_animation_is_recognised_however_its_whitespace_is_written() {
 /// somewhere else keeps it legal and adding a second animation anywhere does not.
 #[test]
 fn the_only_animation_in_the_slint_tree_is_the_guarded_import_dot() {
-    fn collect(directory: &std::path::Path, sources: &mut Vec<(String, String)>) {
-        for entry in std::fs::read_dir(directory).expect("read ui directory") {
-            let path = entry.expect("directory entry").path();
-            if path.is_dir() {
-                collect(&path, sources);
-            } else if path.extension().is_some_and(|value| value == "slint") {
-                let text = std::fs::read_to_string(&path).expect("read slint source");
-                sources.push((path.display().to_string(), text.replace("\r\n", "\n")));
-            }
-        }
-    }
-
-    let mut sources = Vec::new();
-    collect(
-        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui"),
-        &mut sources,
-    );
-    assert!(
-        sources.len() > 20,
-        "expected the whole Slint tree, found {} files",
-        sources.len()
-    );
+    let sources = slint_sources();
 
     let mut animating = Vec::new();
     for (path, text) in &sources {
