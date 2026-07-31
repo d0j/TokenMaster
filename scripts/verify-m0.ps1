@@ -71,14 +71,21 @@ function Invoke-PesterChecked {
     Write-M0StageBegin $Id
     $Started = [DateTimeOffset]::UtcNow
     $Result = Invoke-Pester $Path -PassThru
-    $ExitCode = if ($Result.FailedCount -eq 0) { 0 } else { 1 }
+    # A suite that ran nothing is not a suite that passed. Measured on Pester 5.7.1 against a
+    # fixture whose only `It` is commented out: FailedCount 0, PassedCount 0, TotalCount 0 and
+    # Result "Passed" -- so FailedCount alone calls an empty stage green, and any suite that
+    # quietly stopped testing would leave every "sixteen stages" claim downstream meaning
+    # fifteen. The eight suites run between 2 and 31 tests each and skip none, so the floor
+    # costs nothing and a fully skipped suite is caught as well.
+    $ExitCode = if ($Result.FailedCount -eq 0 -and $Result.PassedCount -gt 0) { 0 } else { 1 }
     $Commands.Add([ordered]@{
         id = "pester"
         startedUtc = $Started.ToString("O")
         exitCode = $ExitCode
     })
     if ($ExitCode -ne 0) {
-        throw "Invoke-Pester failed for $Path"
+        throw ("Invoke-Pester failed for {0}: {1} passed, {2} failed, {3} total" -f `
+                $Path, $Result.PassedCount, $Result.FailedCount, $Result.TotalCount)
     }
     Write-M0StagePass $Id
 }
