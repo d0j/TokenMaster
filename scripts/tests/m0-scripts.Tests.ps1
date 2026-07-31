@@ -65,21 +65,31 @@ Describe "TokenMaster M0 script contracts" {
     It "keeps every path-holding type out of a derived Debug" {
         $offenders = @()
         $scanned = 0
-        $item = '#\[derive\([^)]*\bDebug\b[^)]*\)\]\s*(?:#\[[^\]]*\]\s*)*' +
-                '(?:pub(?:\([^)]*\))?\s+)?(?:struct|enum)\s+(\w+)[^{;]*\{(?<body>[^}]*)\}'
-        $pathy = ':\s*(?:[A-Za-z_]\w*<)*\s*(?:PathBuf|OsString|&(?:''\w+\s+)?(?:Path|OsStr))\b'
+        $derive = '#\[derive\([^)]*\bDebug\b[^)]*\)\]\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\([^)]*\))?\s+)?'
+        # Two spellings, and the first version of this rule saw only the first. A tuple struct
+        # has no braces at all -- `#[derive(Debug)] struct Private(PathBuf);` -- so a pattern
+        # requiring `{` reported zero offenders across 51 such items while never looking at one.
+        # The Codex reviewer caught that, and it is the same single-shape blindness this rule
+        # exists to guard against.
+        $shapes = @(
+            $derive + '(?:struct|enum)\s+(\w+)[^{;]*\{(?<body>[^}]*)\}'
+            $derive + 'struct\s+(\w+)\s*(?:<[^>]*>)?\s*\((?<body>[^;]*)\)\s*;'
+        )
+        $pathy = '(?:PathBuf|OsString|&(?:''\w+\s+)?(?:Path|OsStr))\b'
         Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'crates') -Recurse -File -Filter '*.rs' |
             ForEach-Object {
                 $text = Get-Content -LiteralPath $_.FullName -Raw
-                foreach ($match in [regex]::Matches($text, $item)) {
-                    $scanned++
-                    if ($match.Groups['body'].Value -match $pathy) {
-                        $offenders += "$($_.Name): $($match.Groups[1].Value)"
+                foreach ($shape in $shapes) {
+                    foreach ($match in [regex]::Matches($text, $shape)) {
+                        $scanned++
+                        if ($match.Groups['body'].Value -match $pathy) {
+                            $offenders += "$($_.Name): $($match.Groups[1].Value)"
+                        }
                     }
                 }
             }
         $offenders -join '; ' | Should -BeExactly ''
-        $scanned | Should -BeGreaterThan 500
+        $scanned | Should -BeGreaterThan 800
     }
 
     # A push touching only one of these files changed what the build produces while

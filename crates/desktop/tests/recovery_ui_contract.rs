@@ -474,6 +474,169 @@ fn animates(line: &str) -> bool {
     false
 }
 
+/// Every brace block in one Slint source, as (opening token, direct content).
+///
+/// Nested blocks are stripped from the content, so a child's bindings never count as its
+/// parent's -- which is the whole point when the parent is the construction under test and
+/// the child is a `MetricValue` that does carry the property the parent forgot to pass.
+fn blocks(text: &str) -> Vec<(String, String)> {
+    let code: String = text
+        .lines()
+        .map(|line| code_of(line) + "\n")
+        .collect::<String>();
+    let bytes: Vec<char> = code.chars().collect();
+    let mut result = Vec::new();
+    for (index, character) in bytes.iter().enumerate() {
+        if *character != '{' {
+            continue;
+        }
+        let header: String = bytes[..index]
+            .iter()
+            .rev()
+            .take_while(|value| **value != '\n' && **value != ';' && **value != '}')
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let mut depth = 0_usize;
+        let mut direct = String::new();
+        for value in &bytes[index..] {
+            match value {
+                '{' => {
+                    depth += 1;
+                    if depth == 1 {
+                        continue;
+                    }
+                }
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            if depth == 1 {
+                direct.push(*value);
+            }
+        }
+        result.push((header.trim().to_owned(), direct));
+    }
+    result
+}
+
+/// The component a block header names, whether it declares one or constructs one.
+///
+/// `export component ModelsView inherits Rectangle` and `if root.models-visible: ModelsView`
+/// both resolve to `ModelsView`; an `inherits` clause resolves to the declared name, not the
+/// base, which is what makes a declaration and its constructions share one key.
+fn component_name(header: &str) -> Option<String> {
+    let head = header.split(" inherits ").next().unwrap_or(header);
+    let token = head
+        .rsplit([' ', ':', '\t'])
+        .find(|value| !value.is_empty())?;
+    token
+        .chars()
+        .next()
+        .is_some_and(|value| value.is_ascii_uppercase())
+        .then(|| token.to_owned())
+}
+
+/// The property names a block binds directly, ignoring anything a nested block binds.
+fn direct_bindings(direct: &str) -> std::collections::BTreeSet<String> {
+    direct
+        .split(';')
+        .filter_map(|statement| {
+            let (name, _) = statement.split_once(':')?;
+            let name = name.trim();
+            (!name.is_empty()
+                && name
+                    .chars()
+                    .all(|value| value.is_ascii_alphanumeric() || value == '-' || value == '_'))
+            .then(|| name.to_owned())
+        })
+        .collect()
+}
+
+/// A value and its availability travel together, or the interface styles a missing number as
+/// an ordinary one.
+///
+/// `ModelsView` and `ProjectsView` each computed `events-availability` correctly and then built
+/// their header card passing `events` alone, so the header rendered the unavailable dash in the
+/// ordinary primary colour -- the one thing the missing-value invariant forbids. Every
+/// neighbouring pair in the same construction, `total-tokens`/`total-availability` and
+/// `cost`/`cost-availability`, was forwarded together, so the defect was a single absent line in
+/// a column of correct ones and invisible to a reader.
+///
+/// This is the fourth site of one shape. The rule is the shape: wherever a component declares a
+/// pair, every construction that passes the value passes the availability with it.
+#[test]
+fn a_value_and_its_availability_are_passed_together() {
+    let sources = slint_sources();
+    // Component name -> the availability bases that component itself declares. Resolving the
+    // component matters: `history-view` declares `total-tokens-availability` while the Models
+    // and Projects headers pair the same `total-tokens` value with `total-availability`, so a
+    // tree-wide set of base names would demand a property those components do not have.
+    let mut declared: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        std::collections::BTreeMap::new();
+    for (_, text) in &sources {
+        for (header, direct) in blocks(text) {
+            let Some(name) = component_name(&header) else {
+                continue;
+            };
+            for statement in direct.split(';') {
+                let statement = statement.trim();
+                let Some(rest) = statement.strip_prefix("in property") else {
+                    continue;
+                };
+                let Some((_, property)) = rest.split_once('>') else {
+                    continue;
+                };
+                if let Some(base) = property.trim().strip_suffix("-availability") {
+                    declared
+                        .entry(name.clone())
+                        .or_default()
+                        .insert(base.to_owned());
+                }
+            }
+        }
+    }
+    assert!(
+        declared.len() >= 3,
+        "expected components declaring availability pairs, found {declared:?}"
+    );
+
+    let mut offenders = Vec::new();
+    for (source, text) in &sources {
+        for (header, direct) in blocks(text) {
+            let Some(name) = component_name(&header) else {
+                continue;
+            };
+            let Some(pairs) = declared.get(&name) else {
+                continue;
+            };
+            let bound = direct_bindings(&direct);
+            // The declaration itself binds nothing; only constructions of it are checked.
+            if direct.contains("in property") {
+                continue;
+            }
+            for base in pairs {
+                let availability = format!("{base}-availability");
+                if bound.contains(base) && !bound.contains(&availability) {
+                    offenders.push(format!(
+                        "{source}: {name} passes {base} without {availability}"
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "an availability was left behind:\n{}",
+        offenders.join("\n")
+    );
+}
+
 /// No view may decide a fact by looking at the text it just rendered.
 ///
 /// The Dashboard header carried `availability: root.tokens == "—" ? "unavailable" : "known"`,
