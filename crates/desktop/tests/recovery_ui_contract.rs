@@ -310,6 +310,75 @@ fn recovery_ui_source_keeps_authority_bounded_and_accessible() {
     }
 }
 
+/// True when a line of Slint code declares an animation or a repainting timer.
+///
+/// Written as a predicate rather than a list of byte sequences because the first version of
+/// this check was a list, and a list matches spacing as well as spelling: it forbade
+/// `Timer {` and `animate ` with exactly one space, so `Timer{` or `animate` followed by a
+/// tab would have walked past it. Every keyword here is matched independently of the
+/// whitespace around its opening delimiter.
+///
+/// `animate` must be followed by whitespace and never by more letters, which is what keeps a
+/// property named `animated` from reading as an animation. `animation` shares no prefix with
+/// `animate`, so `animation-tick()` is caught only by its own arm.
+fn animates(line: &str) -> bool {
+    // Stripped here rather than by the caller so the predicate owns the whole question. The
+    // explanation written beside the one allowed animation names it, and must not count as a
+    // second one; equally, a new animation must not be able to hide behind a `//`.
+    let code = line.split("//").next().unwrap_or_default();
+    if code.contains("animation-") {
+        return true;
+    }
+    for (keyword, opener) in [("Timer", '{'), ("states", '['), ("transitions", '[')] {
+        let mut rest = code;
+        while let Some(at) = rest.find(keyword) {
+            rest = &rest[at + keyword.len()..];
+            if rest.trim_start().starts_with(opener) {
+                return true;
+            }
+        }
+    }
+    let mut rest = code;
+    while let Some(at) = rest.find("animate") {
+        rest = &rest[at + "animate".len()..];
+        if rest.starts_with(char::is_whitespace) {
+            return true;
+        }
+    }
+    false
+}
+
+/// The tree scan below can only prove what the tree happens to contain, and today it contains
+/// exactly one animation written one way. These are the spellings it does not contain -- the
+/// ones a list of byte sequences would have missed -- checked against the predicate directly
+/// so the guarantee does not depend on someone writing them into a view first.
+#[test]
+fn an_animation_is_recognised_however_its_whitespace_is_written() {
+    for animating in [
+        "Timer { interval: 1s; }",
+        "Timer{ interval: 1s; }",
+        "Timer   { interval: 1s; }",
+        "animate width { duration: 200ms; }",
+        "animate\twidth { duration: 200ms; }",
+        "opacity: animation-tick() / 1s;",
+        "states [ shown when root.visible: { opacity: 1.0; } ]",
+        "states[ shown when root.visible: { opacity: 1.0; } ]",
+        "transitions [ in-out shown: { animate opacity {} } ]",
+    ] {
+        assert!(animates(animating), "not recognised as animating: {animating:?}");
+    }
+
+    for still in [
+        "in property <bool> animated;",
+        "text: @tr(\"Timer\");",
+        "width: 7px;",
+        "// animate width { duration: 200ms; }",
+        "property <int> states-count: 3;",
+    ] {
+        assert!(!animates(still), "wrongly read as animating: {still:?}");
+    }
+}
+
 /// The forbidden list in the test above reads five Slint files by name, and the one file in
 /// the tree that animates is not among them -- so the rule that exists to keep an idle
 /// animation out of the product could never have seen the only animation in the product.
@@ -344,16 +413,11 @@ fn the_only_animation_in_the_slint_tree_is_the_guarded_import_dot() {
         sources.len()
     );
 
-    // Comments are stripped before matching so the explanation written beside the exception
-    // does not count as a second one, and so a new animation cannot hide inside a comment.
     let mut animating = Vec::new();
     for (path, text) in &sources {
         for (number, line) in text.lines().enumerate() {
-            let code = line.split("//").next().unwrap_or_default();
-            if ["Timer {", "animate ", "animation-"]
-                .iter()
-                .any(|token| code.contains(token))
-            {
+            if animates(line) {
+                let code = line.split("//").next().unwrap_or_default();
                 animating.push((path.clone(), number, code.trim().to_string()));
             }
         }
