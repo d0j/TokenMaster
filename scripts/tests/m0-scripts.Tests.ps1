@@ -54,6 +54,34 @@ Describe "TokenMaster M0 script contracts" {
         $offenders -join '; ' | Should -BeExactly ''
     }
 
+    # Every type that holds a path writes its own `Debug` and renders `[redacted]`; a derived
+    # one would print the absolute path, and the product invariant forbids exposing those.
+    # What made this worth pinning is that the assertions written to catch it could not:
+    # `Debug` escapes a backslash as two, so about thirty checks comparing a raw Windows path
+    # against `format!("{value:?}")` ask whether `C:\Users` appears in text spelling it
+    # `C:\\Users`, which it never can. This rule guards the property those checks only
+    # appeared to guard. The floor is the second half of it: a scan that silently stops
+    # matching reports zero offenders and reads exactly like a clean tree.
+    It "keeps every path-holding type out of a derived Debug" {
+        $offenders = @()
+        $scanned = 0
+        $item = '#\[derive\([^)]*\bDebug\b[^)]*\)\]\s*(?:#\[[^\]]*\]\s*)*' +
+                '(?:pub(?:\([^)]*\))?\s+)?(?:struct|enum)\s+(\w+)[^{;]*\{(?<body>[^}]*)\}'
+        $pathy = ':\s*(?:[A-Za-z_]\w*<)*\s*(?:PathBuf|OsString|&(?:''\w+\s+)?(?:Path|OsStr))\b'
+        Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'crates') -Recurse -File -Filter '*.rs' |
+            ForEach-Object {
+                $text = Get-Content -LiteralPath $_.FullName -Raw
+                foreach ($match in [regex]::Matches($text, $item)) {
+                    $scanned++
+                    if ($match.Groups['body'].Value -match $pathy) {
+                        $offenders += "$($_.Name): $($match.Groups[1].Value)"
+                    }
+                }
+            }
+        $offenders -join '; ' | Should -BeExactly ''
+        $scanned | Should -BeGreaterThan 500
+    }
+
     # A push touching only one of these files changed what the build produces while
     # triggering nothing, so the change landed ungated. `.gitattributes` is the case
     # that occurred: it decides the bytes `include_str!` compiles in.

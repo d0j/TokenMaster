@@ -11,6 +11,20 @@ fn environment(
     ApplicationEnvironment::new(executable, local_app_data, None, None::<OsString>)
 }
 
+/// Every spelling a private path could reach a rendering through.
+///
+/// `Debug` for `Path`, `OsStr` and `str` escapes a backslash as two, so asking whether
+/// `C:\Users\...` appears in `format!("{value:?}")` asks about text that would spell it
+/// `C:\\Users\\...`. It cannot, whatever the code does. Both assertions in this file were
+/// written that way and so could not fail on the only platform this product ships to --
+/// the strongest-reading privacy check in the crate, unable to fire. Comparing both forms
+/// covers a `Display` leak and a `Debug` leak with one needle.
+fn disclosure_forms(private: &std::path::Path) -> [String; 2] {
+    let raw = private.display().to_string();
+    let escaped = format!("{raw:?}");
+    [raw, escaped.trim_matches('"').to_owned()]
+}
+
 #[test]
 fn resolved_root_creates_one_exact_reliable_state_child() {
     let temporary = tempfile::tempdir().expect("temporary root");
@@ -25,7 +39,10 @@ fn resolved_root_creates_one_exact_reliable_state_child() {
     let metadata = std::fs::symlink_metadata(&reliable_state).expect("reliable-state metadata");
     assert!(metadata.is_dir());
     assert!(!metadata.file_type().is_symlink());
-    assert!(!format!("{root:?}").contains(&reliable_state.display().to_string()));
+    let rendered = format!("{root:?}");
+    for form in disclosure_forms(&reliable_state) {
+        assert!(!rendered.contains(&form), "{rendered} disclosed {form}");
+    }
 }
 
 #[test]
@@ -160,12 +177,13 @@ fn environment_and_data_root_debug_never_disclose_absolute_paths() {
     let root = DataRoot::resolve(&environment).expect("installed data root");
 
     let rendered = format!("{environment:?} {root:?}");
-    for private in [
-        package.path().to_string_lossy(),
-        installed.path().to_string_lossy(),
-        root.archive_path().to_string_lossy(),
-    ] {
-        assert!(!rendered.contains(private.as_ref()));
+    for private in [package.path(), installed.path(), root.archive_path()] {
+        for form in disclosure_forms(private) {
+            assert!(!rendered.contains(&form), "{rendered} disclosed {form}");
+        }
     }
-    assert!(rendered.contains("[redacted]"));
+    // Counted, not merely present: `ApplicationEnvironment` redacts four fields and `DataRoot`
+    // three, and one surviving `[redacted]` satisfied the old assertion no matter how many of
+    // the other six had started rendering their real value.
+    assert_eq!(rendered.matches("[redacted]").count(), 7, "{rendered}");
 }
