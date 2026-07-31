@@ -45,7 +45,7 @@ use crate::{
     UnavailableDesktopHistoryRangeIntentSink, UnavailableDesktopIntentSink,
     UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
     in_app_notification::{NotificationEpochState, SharedInAppNotificationBatch},
-    native_tray::DesktopNativeTrayOwner,
+    native_tray::{DesktopNativeTrayOwner, DesktopTrayLabels},
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -655,6 +655,19 @@ impl DesktopShell {
         &self.window
     }
 
+    /// Rebuilds the tray's text after a language switch.
+    ///
+    /// The menu is a Win32 object built once and kept, so without this the tray would keep
+    /// reading in the previous language until the process restarted -- which moving it off
+    /// English literals would otherwise have introduced as a new defect.
+    fn relabel_tray(&self, window: &MainWindow) {
+        if let Ok(tray) = self.tray.try_borrow()
+            && let Some(owner) = tray.as_ref()
+        {
+            owner.relabel(tray_labels(window));
+        }
+    }
+
     #[must_use]
     pub fn show_lifecycle_surface(&self) -> bool {
         let Some(lifecycle_sink) = self.lifecycle_sink.as_ref() else {
@@ -669,6 +682,7 @@ impl DesktopShell {
         match DesktopNativeTrayOwner::new(
             Rc::clone(lifecycle_sink),
             Rc::clone(&self.tray_availability),
+            tray_labels(&self.window),
         ) {
             Ok(owner) => {
                 *tray = Some(owner);
@@ -777,6 +791,7 @@ impl DesktopShell {
                 &self.reliable_state,
                 &self.in_app_notification_batch,
             );
+            self.relabel_tray(&self.window);
         } else {
             apply_reliable_state_projection(&self.window, &projection);
         }
@@ -1106,6 +1121,21 @@ fn wire_presentation_locale(
             );
         }
     });
+}
+
+/// Reads the tray's text out of the shell in whatever language is selected now.
+///
+/// The tray is Win32 and cannot reach `@tr`, so the strings are declared in the Slint tree --
+/// which is what the localization contract walks -- and resolved here.
+fn tray_labels(window: &MainWindow) -> DesktopTrayLabels {
+    DesktopTrayLabels {
+        show: window.get_tray_show_label().to_string(),
+        dashboard: window.get_tray_dashboard_label().to_string(),
+        compact: window.get_tray_compact_label().to_string(),
+        hide: window.get_tray_hide_label().to_string(),
+        quit: window.get_tray_quit_label().to_string(),
+        tooltip: window.get_tray_tooltip().to_string(),
+    }
 }
 
 fn reapply_localized_projection(

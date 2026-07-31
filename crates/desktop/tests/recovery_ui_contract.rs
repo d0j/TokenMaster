@@ -474,6 +474,39 @@ fn animates(line: &str) -> bool {
     false
 }
 
+/// The tray's labels must arrive as data, never as literals in its own source.
+///
+/// The localization contract asserts a closed msgid set and that each entry appears as `@tr`
+/// in the Slint tree, so a user-visible string emitted from Rust escapes it **by
+/// construction** rather than by oversight. That has now happened twice: eight Activity
+/// labels, and six tray strings that shipped English for the life of the product. Fixing the
+/// strings without forbidding the shape leaves the third occurrence free to arrive the same
+/// way, so this asserts the shape: every menu label is an expression, not a quoted string.
+#[test]
+fn the_tray_names_no_user_visible_string_of_its_own() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/native_tray.rs"),
+    )
+    .expect("read the tray source");
+
+    let mut literals = Vec::new();
+    for line in source.lines() {
+        let code = code_of(line);
+        let Some(argument) = code.split("append_menu_item(").nth(1) else {
+            continue;
+        };
+        // `code_of` empties literals but keeps their quotes, so a label that was written as a
+        // string still shows as `""` here and an expression does not.
+        if argument.contains("\"\"") {
+            literals.push(line.trim().to_string());
+        }
+    }
+    assert!(
+        literals.is_empty(),
+        "tray menu labels must be passed in, not written here: {literals:#?}"
+    );
+}
+
 /// The tree scan below can only prove what the tree happens to contain, and today it contains
 /// exactly one animation written one way. These are the spellings it does not contain -- the
 /// ones a list of byte sequences would have missed -- checked against the predicate directly
@@ -498,7 +531,10 @@ fn an_animation_is_recognised_however_its_whitespace_is_written() {
         // A `//` inside a string literal must not truncate the line before it is scanned.
         "property <string> u: \"https://x\"; animate width { duration: 100ms; }",
     ] {
-        assert!(animates(animating), "not recognised as animating: {animating:?}");
+        assert!(
+            animates(animating),
+            "not recognised as animating: {animating:?}"
+        );
     }
 
     for still in [

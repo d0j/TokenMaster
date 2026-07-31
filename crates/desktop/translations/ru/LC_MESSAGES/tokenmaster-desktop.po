@@ -1365,3 +1365,18 @@ msgstr "Разделы"
 
 msgid "{0} all time"
 msgstr "{0} за всё время"
+
+msgid "Show"
+msgstr "Показать"
+
+msgid "Open Dashboard"
+msgstr "Открыть панель управления"
+
+msgid "Open Compact"
+msgstr "Открыть компактное окно"
+
+msgid "Hide"
+msgstr "Скрыть"
+
+msgid "Quit"
+msgstr "Выход"

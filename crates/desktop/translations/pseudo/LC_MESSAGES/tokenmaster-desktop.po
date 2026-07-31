@@ -1365,3 +1365,18 @@ msgstr "［Ṽíéẃš ···］"
 
 msgid "{0} all time"
 msgstr "[{0} åłł ţíḿé]"
+
+msgid "Show"
+msgstr "⟦Şĥöŵ⟧"
+
+msgid "Open Dashboard"
+msgstr "⟦Öpéñ Đàšĥbôãrd⟧"
+
+msgid "Open Compact"
+msgstr "⟦Öpéñ Çômpãçt⟧"
+
+msgid "Hide"
+msgstr "⟦Ĥïdé⟧"
+
+msgid "Quit"
+msgstr "⟦Qûït⟧"

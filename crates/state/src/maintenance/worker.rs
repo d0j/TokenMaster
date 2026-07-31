@@ -584,12 +584,11 @@ mod tests {
     /// which is exactly what that finish block does to a waiter.
     #[test]
     fn a_completion_published_during_the_timeout_is_not_discarded() {
-        let worker =
-            MaintenanceWorker::spawn(MaintenanceSourceState::Healthy, true, |permit| {
-                permit.begin_publication().expect("publication boundary");
-                MaintenanceExecution::Published { bytes: 64 }
-            })
-            .expect("spawn maintenance worker");
+        let worker = MaintenanceWorker::spawn(MaintenanceSourceState::Healthy, true, |permit| {
+            permit.begin_publication().expect("publication boundary");
+            MaintenanceExecution::Published { bytes: 64 }
+        })
+        .expect("spawn maintenance worker");
 
         let root = match worker.submit(MaintenancePurpose::Manual) {
             MaintenanceAdmission::Started(permit) => permit.root_request_id(),
