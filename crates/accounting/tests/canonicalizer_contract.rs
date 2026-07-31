@@ -77,17 +77,31 @@ fn canonical_hash_vectors_are_versioned_and_deterministic() {
         ))
         .expect("valid draft canonicalizes");
 
-    assert_eq!(event.canonicalizer_version(), CANONICALIZER_VERSION);
-    assert_eq!(event.fingerprint_version(), EVENT_FINGERPRINT_VERSION);
-    assert_eq!(event.replay_signature_version(), REPLAY_SIGNATURE_VERSION);
-    assert_eq!(
-        event.fingerprint().to_hex(),
-        "de895eddeacdbe6f7df6e2613209111c59bb955ba6026ac973a4d01e7172be9f"
-    );
-    assert_eq!(
-        event.lineage().signature().to_hex(),
-        "88f132616bfd8a01078c731f35aa71694b046ce8499fdbaae6738ba26ebf0371"
-    );
+    // The digests are selected by the version constants rather than asserted beside them.
+    // The three accessors return those same constants, so comparing them against the
+    // constants was three assertions that could not fail; what the test then held was a
+    // frozen digest with nothing tying it to the version it belongs to, and a changed hash
+    // could be absorbed by editing the digest and leaving the version alone -- which leaves
+    // persisted revisions looking current though a different algorithm produced them.
+    // Editing a digest inside an arm is still possible, but it is now a labelled claim that
+    // these versions produce these bytes, and a bump with no arm names itself here.
+    let (expected_fingerprint, expected_signature) = match (
+        CANONICALIZER_VERSION,
+        EVENT_FINGERPRINT_VERSION,
+        REPLAY_SIGNATURE_VERSION,
+    ) {
+        (1, 2, 1) => (
+            "de895eddeacdbe6f7df6e2613209111c59bb955ba6026ac973a4d01e7172be9f",
+            "88f132616bfd8a01078c731f35aa71694b046ce8499fdbaae6738ba26ebf0371",
+        ),
+        (canonicalizer, fingerprint, signature) => panic!(
+            "canonicalizer {canonicalizer}, fingerprint {fingerprint} and replay signature \
+             {signature} have no frozen vector: a changed hash needs its own arm here, not an \
+             edited digest under the previous version"
+        ),
+    };
+    assert_eq!(event.fingerprint().to_hex(), expected_fingerprint);
+    assert_eq!(event.lineage().signature().to_hex(), expected_signature);
     assert_eq!(event.lineage().evidence(), ReplayEvidence::StrongCumulative);
     assert_eq!(event.id().as_str(), "event_de895eddeacdbe6f7df6");
 
