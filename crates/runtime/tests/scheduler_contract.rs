@@ -190,7 +190,17 @@ fn ten_thousand_scheduler_hints_create_at_most_one_engine_follow_up() {
                 .expect("record execution");
             if first {
                 first = false;
-                release_receiver.recv().expect("release first execution");
+                // Bounded, and the bound is the whole point rather than tidiness. This
+                // channel is declared before `worker`, so unwinding drops `worker` first;
+                // `RefreshWorker::drop` calls `shutdown`, whose `cancel` only sets a
+                // cooperative flag this closure never reads, and then joins. With an
+                // unbounded `recv` the sender is still alive in the panicking frame, the
+                // join never returns, and a failing assert below becomes a process that
+                // waits forever at zero CPU with no test named -- which is what a gate run
+                // hanging for two hours and twenty-four minutes looked like.
+                release_receiver
+                    .recv_timeout(Duration::from_secs(30))
+                    .expect("release first execution");
             }
             RefreshOutcome::Completed
         })
@@ -213,9 +223,17 @@ fn ten_thousand_scheduler_hints_create_at_most_one_engine_follow_up() {
     }
     clock.set(100 + QUIET_WINDOW_MILLIS);
     assert!(hints.watcher_healthy());
+    // Both counters under one deadline, because they are not published together.
+    // `submit_one` increments `submitted_count` only after the submit closure returns, while
+    // `pending_count` reaches 1 inside `RefreshWorker::submit` -- so a poll that stops on
+    // `pending_count` alone can read the scheduler's counter one increment early. A
+    // preemption in that window is the only nondeterminism here, and it lands while the
+    // worker thread is parked in the execute closure above.
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while std::time::Instant::now() < deadline {
-        if worker.snapshot().expect("worker snapshot").pending_count() == 1 {
+        if worker.snapshot().expect("worker snapshot").pending_count() == 1
+            && scheduler.snapshot().submitted_count() == 2
+        {
             break;
         }
         std::thread::sleep(Duration::from_millis(1));
