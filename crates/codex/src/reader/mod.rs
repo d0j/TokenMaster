@@ -218,11 +218,18 @@ impl ReaderDiagnostics {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+/// Why a source must be re-read from its start rather than resumed.
+///
+/// There is no `ParserVersionChanged`. It was declared and constructed nowhere, and the case
+/// it advertised cannot reach this enum: `ReaderCheckpointV1::new` refuses to build a
+/// checkpoint whose `parser_schema_version` differs from the compiled one, answering
+/// `ReaderCheckpointErrorCode::UnsupportedParserVersion`, so the reader never receives one to
+/// report a rebuild for. Each variant below is constructed in this module and asserted in
+/// `reader_revalidation_contract.rs`.
 pub enum RebuildReason {
     IdentityChanged,
     Truncated,
     RewriteDetected,
-    ParserVersionChanged,
     AnchorMismatch,
 }
 
