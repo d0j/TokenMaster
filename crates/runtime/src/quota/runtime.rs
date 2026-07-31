@@ -372,7 +372,7 @@ fn runtime_worker_error(error: WorkerError) -> RuntimeError {
         WorkerErrorCode::Faulted => RuntimeErrorCode::Faulted,
         WorkerErrorCode::CapacityExceeded => RuntimeErrorCode::Busy,
         WorkerErrorCode::Unavailable => RuntimeErrorCode::ProviderUnavailable,
-        WorkerErrorCode::Internal => RuntimeErrorCode::Internal,
+        WorkerErrorCode::InvalidValue | WorkerErrorCode::Internal => RuntimeErrorCode::Internal,
     };
     RuntimeError::new(code)
 }

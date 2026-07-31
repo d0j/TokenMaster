@@ -842,3 +842,23 @@ fn a_long_wait_does_not_lock_out_a_concurrent_reader() {
 
     waiter.join().expect("join waiter");
 }
+
+/// A timeout too large to express is refused, not a panic.
+///
+/// `Instant::now() + timeout` panics on overflow, and a caller writing `Duration::MAX` for
+/// "wait effectively forever" would take the whole process down through a surface that reports
+/// every other failure through `Result`. The `recv_timeout` this wait replaced accepted the
+/// value, so the panic arrived with the condition variable.
+#[test]
+fn an_unrepresentable_timeout_is_refused_instead_of_panicking() {
+    let clock = Arc::new(TestClock::default());
+    let mut worker = RefreshWorker::spawn(clock, move |_permit| RefreshOutcome::Completed)
+        .expect("spawn worker");
+
+    let error = worker
+        .wait_for_completion(Duration::MAX)
+        .expect_err("an unrepresentable deadline must be refused");
+
+    assert_eq!(error.code(), WorkerErrorCode::InvalidValue);
+    worker.shutdown().expect("shutdown worker");
+}

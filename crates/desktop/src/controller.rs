@@ -2356,6 +2356,7 @@ fn map_worker_error(error: WorkerError) -> DesktopControllerError {
         WorkerErrorCode::CapacityExceeded => DesktopControllerErrorCode::CapacityExceeded,
         WorkerErrorCode::StaleRequest => DesktopControllerErrorCode::InvalidPlan,
         WorkerErrorCode::Unavailable => DesktopControllerErrorCode::Unavailable,
+        WorkerErrorCode::InvalidValue => DesktopControllerErrorCode::InvalidPlan,
         WorkerErrorCode::Internal => DesktopControllerErrorCode::Internal,
     };
     DesktopControllerError::new(code)

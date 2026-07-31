@@ -514,7 +514,9 @@ fn runtime_worker_error(error: WorkerError) -> RuntimeError {
         WorkerErrorCode::Closed | WorkerErrorCode::StaleRequest => RuntimeErrorCode::Closed,
         WorkerErrorCode::Faulted => RuntimeErrorCode::Faulted,
         WorkerErrorCode::CapacityExceeded => RuntimeErrorCode::Busy,
-        WorkerErrorCode::Unavailable | WorkerErrorCode::Internal => RuntimeErrorCode::Internal,
+        WorkerErrorCode::InvalidValue
+        | WorkerErrorCode::Unavailable
+        | WorkerErrorCode::Internal => RuntimeErrorCode::Internal,
     })
 }
 
