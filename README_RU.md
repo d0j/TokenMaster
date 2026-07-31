@@ -12,21 +12,31 @@ WhereMyTokens задаёт полноту интерфейса и сценари
 запускает и не встраивает эти проекты: реализация, контракты безопасности и критерии
 качества принадлежат самому TokenMaster.
 
-M0 доказал нативный стек, мгновенную смену layout/skin/locale, виртуализированные
-модели, tray lifecycle и измеряемые ограничения ресурсов. Контур данных уже включает
-ограниченное обнаружение Codex-источников, потоковый JSONL reader, replay-safe
-accounting, production incremental refresh и строгую мигрируемую SQLite-схему на
-`USAGE_SCHEMA_VERSION`. P2-A даёт неизменяемые ограниченные activity-запросы. В P2-B
-готовы provider-self-contained canonical events, транзакционные UTC/session rollups и
-возобновляемая постраничная перестройка агрегатов. Далее — фиксированные aggregate
-queries, календарь/timezone, pricing, quota/reset data, полный UI, automation и
-release evidence.
+Нативный стек, мгновенная смена layout/skin/locale, виртуализированные модели, tray
+lifecycle и измеряемые ограничения ресурсов. Контур данных: ограниченное обнаружение
+Codex-источников, потоковый JSONL reader, replay-safe accounting, production incremental
+refresh и строгая мигрируемая SQLite-схема на `USAGE_SCHEMA_VERSION`. Каждое число в
+интерфейсе приходит снапшотом, а не пересчитывается рядом.
+
+**Что готово, а что нет, этот файл не отвечает намеренно.** Статус требований —
+[`spec/TRACEABILITY.md`](spec/TRACEABILITY.md), порядок работ —
+[`docs/RELEASE_EXIT_PLAN.md`](docs/RELEASE_EXIT_PLAN.md). Вторая копия статуса прозой в
+этом репозитории уже стоила пяти удалённых документов, а этот абзац был следующим: он
+называл P2-B передним краем работы, когда весь P3 и часть P4 были давно позади.
+
+Гейт — одна команда, и она не принимает аргументов:
 
 ```powershell
-cargo test --workspace --locked
-pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
-pwsh -NoProfile -File scripts\verify-secret-scan.ps1 -RepositoryRoot (Get-Location).Path -PackagePath dist\TokenMaster-0.1.0-windows-x64-unsigned.zip
-pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
+pwsh -NoProfile -File scripts\verify-m0.ps1
+```
+
+Шестнадцать стадий, до первого падения. Отдельные куски гейта гонять смысла нет: он сам
+запускает `audit-clean-root.ps1` и `verify-dependency-policy.ps1`, а частичный прогон —
+это то же слово «зелено» при более слабой проверке. Сканирование секретов гейт не
+выполняет, потому что ему нужен собранный пакет, а не дерево:
+
+```powershell
+pwsh -NoProfile -File scripts\verify-secret-scan.ps1 -PackagePath dist\TokenMaster-0.1.0-windows-x64-unsigned.zip
 ```
 
 Не добавляйте сюда переопределение `+toolchain`: `rust-toolchain.toml` уже прибивает
@@ -34,8 +44,8 @@ pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 версию хостом по умолчанию — на хосте `windows-gnu` это выберет GNU-тулчейн без
 `dlltool.exe`, и сборка упадёт.
 
-Последняя команда создаёт только developer evidence. M0 и продуктовый релиз не
-приняты, пока нет отдельных интерактивных Windows и непрерывных soak receipts.
+Гейт требует сети для базы RustSec и установленного Pester 5.7.1, и создаёт только
+developer evidence. Интерактивная приёмка на Windows и подписанный релиз не сделаны.
 
 Подробности: [архитектура](docs/ARCHITECTURE.md),
 [матрица функциональности](docs/FEATURE_PARITY.md)

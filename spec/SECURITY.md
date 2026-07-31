@@ -170,9 +170,11 @@ The absence of network, browser-automation, and async-client crates is enforced 
 `deny.toml`'s `[bans]` list through `scripts/verify-dependency-policy.ps1`, which the
 quality gate runs. Source-level endpoint, cookie, shell, and socket authority is
 carried by the crate's own contracts rather than a separate script that scans
-their strings. The current gate covers 76 production dependency packages,
-43 production files, and three current release libraries with zero forbidden
-matches. This proves the quota core remains offline and separate from provider I/O.
+their strings. What the gate covered on any given run is not restated here:
+`verify-dependency-policy.ps1` runs `cargo-deny` over the locked workspace with all
+features and writes `reports/dependency-policy.json`, whose commit, policy and lock
+digests are the answer for that commit. This proves the quota core remains offline and
+separate from provider I/O.
 
 The implemented Codex quota transport uses only an exact caller-resolved native
 executable plus fixed `app-server --stdio` arguments. It performs no PATH search,
@@ -195,10 +197,9 @@ fallback is permitted.
 The production dependency closure is constrained by `deny.toml`'s `[bans]` list,
 enforced on every gate run. The single fixed command and argument construction, and the
 absence of browser, cookie, private-endpoint, credential-file, shell, socket, and
-logging authority, are carried by the Codex transport's own contracts rather than the release
-library, and scans its strings. The current gate covers 72 production dependency
-packages, 22 production library source files, and one release library with zero
-forbidden matches. A separate isolated Windows gate repeatedly exercises success,
+logging authority, are carried by the Codex transport's own contracts rather than a
+separate script that scans its strings, exactly as above. A separate isolated Windows gate
+repeatedly exercises success,
 JSON-RPC failure, and forced timeout; private memory and handle/thread/USER/GDI
 topology return to a stable plateau and no task-owned child remains.
 

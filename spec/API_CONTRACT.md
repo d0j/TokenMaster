@@ -254,7 +254,8 @@ internal failures use stable path-free codes. The facade clock supplies one exac
 monotonic sample; frontends do not supply publication time.
 
 `UsageReadStore` is the only archive-read implementation behind that facade. It opens
-an existing exact schema-v14 archive read-only, applies query-only/defensive/no-checkpoint
+an existing archive at exactly `USAGE_SCHEMA_VERSION` read-only, applies
+query-only/defensive/no-checkpoint
 policy, performs no migration, and returns owned data after one short deferred read
 transaction. Continuation requires its dataset identity. Current and immutable legacy
 pages use composite keyset seek and at most one lookahead row; progress interruption is
@@ -353,7 +354,7 @@ P3 wraps the synchronous facade with one bounded worker rather than calling SQLi
 a Slint callback.
 
 `QueryService::product_data_status` is the joined scalar entry point for product
-composition. It maps one schema-v14 `UsageReadStore::capture_product_data_status`
+composition. It maps one `UsageReadStore::capture_product_data_status`
 transaction into `ProductDataStatusEnvelope`, allocates a public generation only after
 capture and mapping succeed, and exposes separate usage, aggregate, quota, benefit,
 and Git revisions/states plus at most 16 stable warnings. The capture uses a maximum

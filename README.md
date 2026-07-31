@@ -7,66 +7,55 @@ bounded SQLite archive.
 TokenMaster's original code is licensed under Apache-2.0. WhereMyTokens and ccusage
 remain separately attributed external MIT references.
 
-Global reminder settings synchronization is implemented: portable settings are the
-desired-state authority, `N` maps to global profile revision `N + 1`, and startup,
-explicit Save, and confirmed import share one retryable synchronizer. Settings edits
-enable/disable five recommended and up to eight normalized custom leads. Per-scope
-editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation, P4/P5/P6,
-M0 acceptance, package/signing/soak, and release remain incomplete.
-
 WhereMyTokens is the UX and feature-breadth reference. ccusage is the usage-analysis,
 model, pricing, and reporting reference. TokenMaster owns the implementation and uses
 neither project as a runtime dependency.
 
-## Current state
+## What it is built on
 
-M0, the native architecture proof, has a working Rust/Slint/SQLite baseline with
-three layouts, hot-switchable skins, English/Russian localization, tray lifecycle,
-virtualized presentation models, and resource gates. It is not a product release or
-an accepted interactive Windows validation.
+A Rust/Slint/SQLite baseline with three layouts, hot-switchable skins, Russian and
+English localization, a tray lifecycle, virtualized presentation models and resource
+gates. Bounded Codex discovery and parsing feed a strict migrated archive at
+`USAGE_SCHEMA_VERSION`; unchanged refreshes read zero JSONL payload bytes, append
+resumes from a persisted checkpoint, and replacement, rewrite or truncation requests a
+non-destructive full rebuild. Every number the interface shows arrives by snapshot
+rather than being recomputed beside it.
 
-The data/runtime foundation has bounded Codex discovery/parsing, replay-safe
-accounting, a strict migrated SQLite schema at `USAGE_SCHEMA_VERSION`, exact full
-rebuild, and a production incremental tail refresh. Unchanged refreshes read zero
-JSONL payload bytes; append resumes from the persisted checkpoint; new and
-missing sources follow exact complete-scan authority; replacement, rewrite, and
-truncation or a changed profile scope durably request a non-destructive full rebuild.
-That rebuild safely recovers an unadmitted provisional source. The live runtime now
-assembles startup recovery, the process-owned writer lease, the bounded worker,
-scheduler and pathless watcher, incremental/rebuild selection, pause/resume, and
-joined shutdown. P2 product data is complete: indexed immutable usage/cost analytics,
-dynamic quota and full-reset history, expiring reset-benefit inventory with durable
-reminder events, bounded Git output analytics, and one exact joined product status.
-The constant-state product reducer retains one current snapshot, rejects stale async
-work, copies only bounded runtime health, and derives fixed route readiness without
-giving UI code SQLite or runtime ownership. P3 now includes the responsive Dashboard,
-History, Sessions/detail, Models, Projects, Recent activity, Notifications expiry
-center, Settings/Data Health foundation, and Help/About. Expiry reminders use a
-separate app-owned bridge: a bounded notification becomes visible before durable
-acknowledgement; confirmed release after a failed presentation preserves replay, and
-the same single worker retries presentation without waiting for unrelated product
-activity. A terminal acknowledgement error releases without an automatic presentation
-loop. Global reminder settings synchronization/editing is implemented for the portable
-global profile. The production shell now also has the bounded route palette, same-window
-compact quota mode, fail-visible tray lifecycle, current-session single-instance Show,
-fixed global `Ctrl+Alt+T` Show/restore/focus, and explicit current-user startup backed
-only by the fixed HKCU Run value. Live Windows shell acceptance, OS/tray reminder
-delivery, per-scope editing, snooze, quiet hours, usage alerts, benefit activation,
-later-page Sessions/History controls, P4 presentation/localization, automation,
-interactive evidence, packaging, signing, and release remain. The P3-E packaged shell
-receipt contract and strict local preflight are fixed in `P3E_ACCEPTANCE.md`. Local P6
-package provenance, immutable CI action binding, and the advisory/license/source
-dependency policy are implemented; authenticated external interactive evidence, secret
-scan, attestation, signing, and release remain absent.
+## What is done and what is not
+
+**This file does not answer that, on purpose.** Requirement status lives in
+[`spec/TRACEABILITY.md`](spec/TRACEABILITY.md) and delivery order in
+[`docs/RELEASE_EXIT_PLAN.md`](docs/RELEASE_EXIT_PLAN.md), each with the evidence behind
+it. A second copy of status in prose has already been paid for repeatedly here: four
+narrative state documents were deleted for contradicting each other, `docs/ROADMAP.md`
+followed them for declaring the exit plan authoritative and then carrying a rival phase
+numbering, and this section was the next one -- it still announced that P4 localization,
+later-page Sessions navigation and the secret scan were absent after all three existed.
+
+There is no accepted interactive Windows validation and no signed release.
 
 ## Build and verify
 
+The gate is one command and it takes no arguments:
+
 ```powershell
-cargo test --workspace --locked
-pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
-pwsh -NoProfile -File scripts\verify-dependency-policy.ps1 -RepositoryRoot (Get-Location).Path
-pwsh -NoProfile -File scripts\verify-secret-scan.ps1 -RepositoryRoot (Get-Location).Path -PackagePath dist\TokenMaster-0.1.0-windows-x64-unsigned.zip
-pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
+pwsh -NoProfile -File scripts\verify-m0.ps1
+```
+
+Sixteen stages, in order, stopping at the first failure: clean-root, immutable-actions,
+dependency-policy, eight Pester suites, `fmt`, `clippy`, the SQLite million-row check, the
+workspace tests, and the release build. It runs `audit-clean-root.ps1` and
+`verify-dependency-policy.ps1` itself, so running those separately proves less than the
+whole gate and takes the same tree to do it. This repository once reported green for
+thirty-six hours on `cargo test` alone while the real gate was red across seventy-three
+consecutive runs, which is why the list above used to sit here as five commands and no
+longer does.
+
+The gate runs the secret scan's own contract suite but never runs the scan itself, because
+a scan needs a built package rather than a tree:
+
+```powershell
+pwsh -NoProfile -File scripts\verify-secret-scan.ps1 -PackagePath dist\TokenMaster-0.1.0-windows-x64-unsigned.zip
 ```
 
 **Do not add a `+toolchain` override to these commands.** `rust-toolchain.toml` already
@@ -75,10 +64,9 @@ pins `1.97.0-x86_64-pc-windows-msvc`, and rustup installs it on demand. A bare
 default host instead, so on a host defaulting to `windows-gnu` it selects the GNU
 toolchain, which has no `dlltool.exe` and cannot build `getrandom` at all.
 
-The dependency command bootstraps the exact reviewed `cargo-deny` 0.20.2 Windows
-binary and requires network access to the current RustSec database. The last command
-also requires Pester 5.7.1. Both record developer evidence only; neither claims
-release acceptance.
+The gate bootstraps the exact reviewed `cargo-deny` 0.20.2 Windows binary, so it needs
+network access to the current RustSec database, and it needs Pester 5.7.1 installed. It
+records developer evidence only and claims no release acceptance.
 
 ## Run it
 
