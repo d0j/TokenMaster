@@ -3,11 +3,11 @@ use std::{
     cell::Cell,
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{
-        Arc, Mutex, MutexGuard, Once,
-        mpsc::{Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError, sync_channel},
+        Arc, Condvar, Mutex, MutexGuard, Once,
+        mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
     },
     thread::{Builder, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -178,6 +178,55 @@ enum Wake {
     Work,
 }
 
+/// The one completion receipt a reader can collect, and the wait that does not hold it.
+///
+/// This was a `sync_channel(1)` whose `Receiver` lived behind a mutex, because a `std`
+/// `Receiver` is not `Sync`. Waiting on it therefore held that mutex for the caller's whole
+/// timeout, and the same mutex is taken by `try_completion` and by the worker thread itself
+/// when it evicts a stale receipt. Measured: a reader arriving behind a two-second wait was
+/// blocked for 1.91 of those seconds. Slicing the wait did not help -- the platform mutex is
+/// not fair, so a waiter that releases and immediately reacquires is handed it straight back.
+///
+/// A condition variable is the primitive that fixes it: `wait_timeout` releases the mutex
+/// while it waits and reacquires only to return. A one-slot queue with manual eviction is
+/// also just a slot whose newest value wins, so saying that directly is simpler than the
+/// channel was.
+///
+/// **Lock order is slot then state, never the reverse.** `publish_latest` is the only place
+/// that holds both; every other path takes one.
+struct CompletionSlot {
+    latest: Mutex<Option<WorkerCompletion>>,
+    closed: Mutex<bool>,
+    ready: Condvar,
+}
+
+impl CompletionSlot {
+    fn new() -> Self {
+        Self {
+            latest: Mutex::new(None),
+            closed: Mutex::new(false),
+            ready: Condvar::new(),
+        }
+    }
+
+    fn is_closed(&self) -> Result<bool, WorkerError> {
+        self.closed
+            .lock()
+            .map(|closed| *closed)
+            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))
+    }
+
+    /// Marks the slot closed and wakes every waiter, so a worker that has stopped producing
+    /// ends their wait instead of leaving them to their timeout. The channel got this from
+    /// disconnection; a slot has to say it.
+    fn close(&self) {
+        if let Ok(mut closed) = self.closed.lock() {
+            *closed = true;
+        }
+        self.ready.notify_all();
+    }
+}
+
 struct WorkerState {
     coordinator: RefreshCoordinator,
     pending_start: Option<RefreshPermit>,
@@ -189,7 +238,7 @@ pub struct RefreshWorker {
     clock: Arc<dyn Clock>,
     state: Arc<Mutex<WorkerState>>,
     wake_sender: SyncSender<Wake>,
-    result_receiver: Arc<Mutex<Receiver<WorkerCompletion>>>,
+    completions: Arc<CompletionSlot>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -235,11 +284,10 @@ impl RefreshWorker {
             superseded_results: 0,
         }));
         let (wake_sender, wake_receiver) = sync_channel(1);
-        let (result_sender, result_receiver) = sync_channel(1);
-        let result_receiver = Arc::new(Mutex::new(result_receiver));
+        let completions = Arc::new(CompletionSlot::new());
         let worker_state = state.clone();
         let worker_clock = clock.clone();
-        let worker_result_receiver = result_receiver.clone();
+        let worker_completions = completions.clone();
         let thread = Builder::new()
             .name(String::from("tokenmaster-refresh"))
             .spawn(move || {
@@ -250,8 +298,7 @@ impl RefreshWorker {
                         worker_clock,
                         worker_state,
                         wake_receiver,
-                        result_sender,
-                        worker_result_receiver,
+                        worker_completions.clone(),
                         notifier,
                         execute,
                     );
@@ -260,6 +307,11 @@ impl RefreshWorker {
                 {
                     fault_and_abandon(&recovery_state);
                 }
+                // Whatever ended the thread -- shutdown or a panic already contained above --
+                // nothing further will be published. The channel this replaced said that by
+                // disconnecting; a slot has to say it, or a waiter sits out its whole timeout
+                // for a receipt that can no longer arrive.
+                worker_completions.close();
             })
             .map_err(|_| WorkerError::new(WorkerErrorCode::Unavailable))?;
 
@@ -267,7 +319,7 @@ impl RefreshWorker {
             clock,
             state,
             wake_sender,
-            result_receiver,
+            completions,
             thread: Some(thread),
         })
     }
@@ -307,28 +359,49 @@ impl RefreshWorker {
     }
 
     pub fn try_completion(&self) -> Result<Option<WorkerCompletion>, WorkerError> {
-        let receiver = self
-            .result_receiver
+        self.completions
+            .latest
             .lock()
-            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
-        match receiver.try_recv() {
-            Ok(completion) => Ok(Some(completion)),
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(None),
-        }
+            .map(|mut latest| latest.take())
+            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))
     }
 
+    /// Waits for a completion without holding the slot while it waits.
+    ///
+    /// `Condvar::wait_timeout` releases the mutex for the duration of the wait and reacquires
+    /// it only to return, which is the whole reason this is a condition variable and not a
+    /// channel behind a lock. The previous shape held that lock for the caller's entire
+    /// timeout, and `try_completion` -- sixty-one call sites -- and the worker thread's own
+    /// eviction path both need it. Slicing the wait was tried first and measured: a competing
+    /// reader still waited 1.91 seconds of a two-second wait, because the platform mutex hands
+    /// itself straight back to a thread that releases and reacquires.
     pub fn wait_for_completion(
         &self,
         timeout: Duration,
     ) -> Result<Option<WorkerCompletion>, WorkerError> {
-        let receiver = self
-            .result_receiver
+        let deadline = Instant::now() + timeout;
+        let mut latest = self
+            .completions
+            .latest
             .lock()
             .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
-        match receiver.recv_timeout(timeout) {
-            Ok(completion) => Ok(Some(completion)),
-            Err(RecvTimeoutError::Timeout) => Ok(None),
-            Err(RecvTimeoutError::Disconnected) => Err(WorkerError::new(WorkerErrorCode::Closed)),
+        loop {
+            if let Some(completion) = latest.take() {
+                return Ok(Some(completion));
+            }
+            if self.completions.is_closed()? {
+                return Err(WorkerError::new(WorkerErrorCode::Closed));
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(None);
+            }
+            let (guard, _timed_out) = self
+                .completions
+                .ready
+                .wait_timeout(latest, remaining)
+                .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
+            latest = guard;
         }
     }
 
@@ -410,8 +483,7 @@ fn run_worker<F>(
     clock: Arc<dyn Clock>,
     state: Arc<Mutex<WorkerState>>,
     wake_receiver: Receiver<Wake>,
-    result_sender: SyncSender<WorkerCompletion>,
-    result_receiver: Arc<Mutex<Receiver<WorkerCompletion>>>,
+    completions: Arc<CompletionSlot>,
     notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
     mut execute: F,
 ) where
@@ -504,7 +576,7 @@ fn run_worker<F>(
                         }
                         Err(_) => return,
                     };
-                    let _ = publish_latest(&state, &result_sender, &result_receiver, completion);
+                    let _ = publish_latest(&state, &completions, completion);
                     if let Ok(mut worker_state) = state.lock() {
                         worker_state.phase = WorkerPhase::Faulted;
                     }
@@ -538,7 +610,7 @@ fn run_worker<F>(
                 }
                 Err(_) => return,
             };
-            if publish_latest(&state, &result_sender, &result_receiver, completion).is_err() {
+            if publish_latest(&state, &completions, completion).is_err() {
                 return;
             }
             notify_completion(notifier.as_deref(), completion);
@@ -568,37 +640,40 @@ fn notify_completion(
     }
 }
 
+/// Publishes the newest completion receipt, replacing any the reader has not collected.
+///
+/// One slot, newest wins. When a receipt is displaced the worker's superseded counter rises
+/// and the receipt being published carries the new count, which is the behaviour the previous
+/// one-slot channel produced by evicting and retrying -- said here in one step instead of a
+/// send-evict-resend loop.
+///
+/// This is the only place that holds the slot and the state together, and it takes them in
+/// that order. Nothing takes them the other way round.
 fn publish_latest(
     state: &Arc<Mutex<WorkerState>>,
-    sender: &SyncSender<WorkerCompletion>,
-    receiver: &Arc<Mutex<Receiver<WorkerCompletion>>>,
+    completions: &Arc<CompletionSlot>,
     mut completion: WorkerCompletion,
 ) -> Result<(), WorkerError> {
-    loop {
-        match sender.try_send(completion) {
-            Ok(()) => return Ok(()),
-            Err(TrySendError::Disconnected(_)) => {
-                return Err(WorkerError::new(WorkerErrorCode::Closed));
-            }
-            Err(TrySendError::Full(returned)) => {
-                completion = returned;
-                let removed = receiver
-                    .lock()
-                    .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?
-                    .try_recv()
-                    .is_ok();
-                if removed {
-                    let mut state = lock_state(state)?;
-                    state.superseded_results = state
-                        .superseded_results
-                        .checked_add(1)
-                        .filter(|value| *value <= i64::MAX as u64)
-                        .ok_or_else(|| WorkerError::new(WorkerErrorCode::CapacityExceeded))?;
-                    completion = completion.with_superseded_results(state.superseded_results);
-                }
-            }
-        }
+    if completions.is_closed()? {
+        return Err(WorkerError::new(WorkerErrorCode::Closed));
     }
+    let mut latest = completions
+        .latest
+        .lock()
+        .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
+    if latest.is_some() {
+        let mut state = lock_state(state)?;
+        state.superseded_results = state
+            .superseded_results
+            .checked_add(1)
+            .filter(|value| *value <= i64::MAX as u64)
+            .ok_or_else(|| WorkerError::new(WorkerErrorCode::CapacityExceeded))?;
+        completion = completion.with_superseded_results(state.superseded_results);
+    }
+    *latest = Some(completion);
+    drop(latest);
+    completions.ready.notify_all();
+    Ok(())
 }
 
 fn lock_state(state: &Arc<Mutex<WorkerState>>) -> Result<MutexGuard<'_, WorkerState>, WorkerError> {

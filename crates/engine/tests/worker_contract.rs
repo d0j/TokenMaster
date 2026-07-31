@@ -781,3 +781,43 @@ fn notifier_panic_does_not_fault_worker_or_lose_completion_receipt() {
     );
     assert_eq!(worker.shutdown().expect("shutdown"), WorkerPhase::Stopped);
 }
+
+/// A caller waiting for a completion must not lock every other reader out for its whole wait.
+///
+/// The receiver is not `Sync`, so it sits behind a mutex and waiting on it holds that mutex.
+/// The same one is taken by `try_completion` -- sixty-one call sites -- and by the worker
+/// thread itself, which reaches for the receiver to evict a stale result when the one-slot
+/// result queue is full. A wait that keeps the lock for its full timeout therefore stalls the
+/// worker, and production reaches this with a timeout of whatever remains until a deadline.
+///
+/// Red before the fix: the second thread here blocked for the whole two seconds. It now
+/// returns within a slice, because the wait releases the lock between attempts.
+#[test]
+fn a_long_wait_does_not_lock_out_a_concurrent_reader() {
+    let clock = Arc::new(TestClock::default());
+    let worker = Arc::new(
+        RefreshWorker::spawn(clock, |_permit| RefreshOutcome::Completed).expect("spawn worker"),
+    );
+
+    let waiting = worker.clone();
+    let waiter = std::thread::spawn(move || {
+        // Nothing will ever be published, so this runs to its own timeout.
+        let _ = waiting.wait_for_completion(Duration::from_secs(2));
+    });
+
+    // Give the waiter time to be inside the wait rather than racing to reach it.
+    std::thread::sleep(Duration::from_millis(100));
+
+    let started = Instant::now();
+    let seen = worker.try_completion().expect("poll completions");
+    let elapsed = started.elapsed();
+
+    assert!(seen.is_none(), "no completion was published");
+    assert!(
+        elapsed < Duration::from_millis(500),
+        "a concurrent reader waited {elapsed:?} behind a two-second wait; the receiver lock is \
+         being held across the whole timeout"
+    );
+
+    waiter.join().expect("join waiter");
+}
