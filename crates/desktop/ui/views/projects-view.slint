@@ -19,6 +19,7 @@ component ProjectsHeaderCard inherits Rectangle {
     in property <string> cost-availability;
     in property <string> cost-evidence-label;
     in property <string> events;
+    in property <string> events-availability;
     in property <string> loaded-label;
     in property <string> completeness-label;
     in property <string> code-coverage-label;
@@ -73,7 +74,7 @@ component ProjectsHeaderCard inherits Rectangle {
             spacing: UiTokens.space;
             MetricValue { label: @tr("Recent tokens"); value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
             MetricValue { label: @tr("Recent cost · {0}", root.cost-evidence-label); value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Recent events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Recent events"); value: root.events; availability: root.events-availability; horizontal-stretch: 1; }
         }
     }
 }
@@ -181,7 +182,7 @@ component ProjectsTableCard inherits Rectangle {
                     Text { text: project.added-label; color: project.code-available ? UiTokens.ready : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 54px; horizontal-alignment: right; }
                     Text { text: project.removed-label; color: project.code-available ? UiTokens.degraded : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 58px; horizontal-alignment: right; }
                     Text { text: project.net-label; color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary; font-size: UiTokens.text-body; width: 52px; horizontal-alignment: right; }
-                    Text { text: project.efficiency-label; color: project.efficiency-label == "—" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
+                    Text { text: project.efficiency-label; color: project.efficiency-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: UiTokens.text-caption; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
                 }
                 Text {
                     text: @tr("Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}", project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.cost-evidence-label, project.code-status-label, project.repository-label, project.code-evidence-label, project.efficiency-reason-label);
@@ -210,6 +211,7 @@ export component ProjectsView inherits Rectangle {
     in property <string> cost-availability;
     in property <string> cost-evidence-label;
     in property <string> events;
+    in property <string> events-availability;
     in property <string> loaded-label;
     in property <string> completeness-label;
     in property <string> code-coverage-label;

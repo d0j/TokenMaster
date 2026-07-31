@@ -498,33 +498,13 @@ fn no_slint_source_infers_a_fact_from_the_unavailable_glyph() {
             }
         }
     }
-    // A closed debt rather than a clean assertion, because the defect turned out to be in four
-    // views and not one: the Dashboard header is carried now, and history, models and projects
-    // still guess. History is the expensive one -- it carries no availability at all today, so
-    // eight values need new properties threaded from the projection before its eleven lines can
-    // go. The list is closed so a fifteenth site fails immediately, and each repair lowers a
-    // number here, which is the only way this debt stays visible.
-    let mut by_view: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
-    for comparison in &comparisons {
-        let view = [
-            "dashboard-view",
-            "history-view",
-            "models-view",
-            "projects-view",
-        ]
-        .into_iter()
-        .find(|name| comparison.contains(name))
-        .unwrap_or("other");
-        *by_view.entry(view).or_default() += 1;
-    }
-    let expected: std::collections::BTreeMap<&str, usize> =
-        [("models-view", 1), ("projects-view", 2)]
-            .into_iter()
-            .collect();
-    assert_eq!(
-        by_view, expected,
-        "the glyph-comparison debt changed; it may only shrink, and `dashboard-view` must stay \
-         absent: {comparisons:#?}"
+    // Started as a closed debt of fourteen across four views and is now empty, so the rule is
+    // what it was always meant to be: a plain assertion that no view infers a fact from the
+    // text it rendered.
+    assert!(
+        comparisons.is_empty(),
+        "a view compared against the unavailable glyph instead of receiving the fact: \
+         {comparisons:#?}"
     );
 }
 

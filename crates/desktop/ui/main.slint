@@ -164,6 +164,7 @@ export component MainWindow inherits Window {
     in property <string> models-cost-availability;
     in property <string> models-cost-evidence-label;
     in property <string> models-events;
+    in property <string> models-events-availability;
     in property <string> models-loaded-label;
     in property <string> models-completeness-label;
     in property <[ProjectUsageRow]> project-usage-rows;
@@ -181,6 +182,7 @@ export component MainWindow inherits Window {
     in property <string> projects-cost-availability;
     in property <string> projects-cost-evidence-label;
     in property <string> projects-events;
+    in property <string> projects-events-availability;
     in property <string> projects-loaded-label;
     in property <string> projects-completeness-label;
     in property <string> projects-code-coverage-label;
@@ -612,6 +614,7 @@ export component MainWindow inherits Window {
                     cost-availability: root.models-cost-availability;
                     cost-evidence-label: root.models-cost-evidence-label;
                     events: root.models-events;
+                    events-availability: root.models-events-availability;
                     loaded-label: root.models-loaded-label;
                     completeness-label: root.models-completeness-label;
                 }
@@ -634,6 +637,7 @@ export component MainWindow inherits Window {
                     cost-availability: root.projects-cost-availability;
                     cost-evidence-label: root.projects-cost-evidence-label;
                     events: root.projects-events;
+                    events-availability: root.projects-events-availability;
                     loaded-label: root.projects-loaded-label;
                     completeness-label: root.projects-completeness-label;
                     code-coverage-label: root.projects-code-coverage-label;

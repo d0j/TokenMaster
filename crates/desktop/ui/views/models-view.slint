@@ -16,6 +16,7 @@ component ModelsHeaderCard inherits Rectangle {
     in property <string> cost-availability;
     in property <string> cost-evidence-label;
     in property <string> events;
+    in property <string> events-availability;
     in property <string> loaded-label;
     in property <string> completeness-label;
     in property <bool> narrow;
@@ -61,7 +62,7 @@ component ModelsHeaderCard inherits Rectangle {
             spacing: UiTokens.space;
             MetricValue { label: @tr("Total tokens"); value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
             MetricValue { label: @tr("Cost · {0}", root.cost-evidence-label); value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Events"); value: root.events; availability: root.events-availability; horizontal-stretch: 1; }
         }
     }
 }
@@ -171,6 +172,7 @@ export component ModelsView inherits Rectangle {
     in property <string> cost-availability;
     in property <string> cost-evidence-label;
     in property <string> events;
+    in property <string> events-availability;
     in property <string> loaded-label;
     in property <string> completeness-label;
     out property <bool> narrow: root.width < 984px;

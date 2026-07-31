@@ -3101,6 +3101,14 @@ fn apply_models_projection(window: &MainWindow, models: &DesktopModelsProjection
     window.set_models_cost_availability(availability_code(models.cost().availability()).into());
     window.set_models_cost_evidence_label(projection_cost_evidence(window, models.cost()).into());
     window.set_models_events(projection_optional_events(window, models.event_count()).into());
+    window.set_models_events_availability(
+        if models.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
     window.set_models_loaded_label(
         models
             .event_count()
@@ -3196,6 +3204,14 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
     window
         .set_projects_cost_evidence_label(projection_cost_evidence(window, projects.cost()).into());
     window.set_projects_events(projection_optional_events(window, projects.event_count()).into());
+    window.set_projects_events_availability(
+        if projects.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
     window.set_projects_loaded_label(
         projects
             .event_count()
@@ -3267,6 +3283,12 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
                 .net_lines()
                 .map_or_else(|| "—".to_owned(), format_signed)
                 .into(),
+            efficiency_availability: if row.cost_per_100_added_lines_micros().is_some() {
+                "known"
+            } else {
+                "unavailable"
+            }
+            .into(),
             efficiency_label: row
                 .cost_per_100_added_lines_micros()
                 .map_or_else(
