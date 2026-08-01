@@ -113,6 +113,26 @@ if ($PesterSuites.Count -lt 8) {
 foreach ($Suite in $PesterSuites) {
     Invoke-PesterChecked ("pester-" + ($Suite.BaseName -replace '\.Tests$', '')) $Suite.FullName
 }
+# Checked against the run's own record, not against this file's text. The composition guard in
+# `m0-scripts.Tests.ps1` reads source, and source can be commented out: a `#` in front of the
+# enumeration above leaves every suite name inside the comment where a regex still finds it,
+# and the gate would run zero Pester suites with the contract green. That is the third
+# appearance of one shape, and reading text is what all three had in common. `$Commands` is
+# what the receipt is built from, so a suite with no entry here did not run whatever the
+# script says -- and with `Set-StrictMode -Version Latest`, deleting the enumeration makes
+# `$PesterSuites` an error rather than an empty expectation.
+$RecordedPesterStages = @(
+    $Commands | Where-Object { $_.id -like "pester-*" -and $_.exitCode -eq 0 } |
+        ForEach-Object { $_.id }
+)
+$MissingPesterStages = @(
+    $PesterSuites |
+        ForEach-Object { "pester-" + ($_.BaseName -replace '\.Tests$', '') } |
+        Where-Object { $RecordedPesterStages -notcontains $_ }
+)
+if ($MissingPesterStages.Count -gt 0) {
+    throw "the run recorded no passing stage for: $($MissingPesterStages -join ', ')"
+}
 Invoke-Checked "fmt" $Cargo @("fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
 $PreviousRustFlags = $env:RUSTFLAGS
 try {

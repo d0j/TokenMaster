@@ -679,6 +679,51 @@ fn no_slint_source_infers_a_fact_from_the_unavailable_glyph() {
 /// labels, and six tray strings that shipped English for the life of the product. Fixing the
 /// strings without forbidding the shape leaves the third occurrence free to arrive the same
 /// way, so this asserts the shape: every menu label is an expression, not a quoted string.
+///
+/// A language switch reaches the tray from every path that changes it, or it reaches it from
+/// none that matter.
+///
+/// Two paths reproject the window for a new locale -- the interactive selector and
+/// reliable-state delivery -- and only the persisted publication relabelled. By the time that
+/// publication arrives the window already carries the selected locale, so its `locale_changed`
+/// branch is false and the sole relabel is skipped: the tray stayed in the previous language
+/// until restart on the path a user actually takes. Reported by the review bot. Both go
+/// through one window callback now, and this refuses a third reprojection that forgets.
+#[test]
+fn every_locale_reprojection_also_relabels_the_tray() {
+    let source =
+        std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui.rs"))
+            .expect("read the shell source");
+
+    let lines: Vec<String> = source.lines().map(code_of).collect();
+    let mut sites = 0_usize;
+    let mut offenders = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        // The definition, not a call.
+        if !line.contains("reapply_localized_projection(") || line.contains("fn ") {
+            continue;
+        }
+        sites += 1;
+        // The call spans several lines; the relabel follows its closing parenthesis. Twelve
+        // lines covers the widest of them with room and stops well short of the next branch.
+        let window = lines[index..lines.len().min(index + 12)].join("\n");
+        if !window.contains("invoke_relabel_tray()") && !window.contains("relabel_tray(") {
+            offenders.push(format!("ui.rs:{}", index + 1));
+        }
+    }
+    assert!(
+        sites >= 3,
+        "expected the locale reprojection call sites, found {sites}"
+    );
+    assert!(
+        offenders.is_empty(),
+        "a locale change reprojected the window and left the tray in the previous language: {}",
+        offenders.join(", ")
+    );
+}
+
+/// The Win32 tray is the one surface `@tr` cannot reach, so its strings come from the Slint
+/// tree through `DesktopTrayLabels` and the menu is rebuilt on every language switch.
 #[test]
 fn the_tray_names_no_user_visible_string_of_its_own() {
     let source = std::fs::read_to_string(

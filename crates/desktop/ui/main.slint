@@ -326,6 +326,11 @@ export component MainWindow inherits Window {
     in-out property <string> command-palette-query;
     in property <[RouteRow]> command-palette-rows;
     in property <int> command-palette-selected-ordinal: -1;
+    // The one way to the Win32 tray from anything holding this window. Two locale paths change
+    // the language -- the interactive selector and reliable-state delivery -- and the tray
+    // owner is `Rc`, so the notifier behind an `Arc` cannot hold it. A Slint callback is
+    // UI-thread-only by construction, which is exactly the thread the menu belongs to.
+    callback relabel-tray();
     callback select-route(string);
     callback open-command-palette();
     callback dismiss-command-palette();

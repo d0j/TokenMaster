@@ -187,7 +187,18 @@ Describe "TokenMaster M0 script contracts" {
         # eight, and then a substring match over this script's text, which a `#` in front of a
         # stage satisfied from inside the comment it created. A literal suite path in an
         # Invoke-PesterChecked call is that shape returning, so it is forbidden outright.
-        $Text | Should -Match '(?s)Get-ChildItem.{0,200}?\*\.Tests\.ps1'
+        #
+        # **The third shape was this test.** `(?s)Get-ChildItem.{0,200}?\*\.Tests\.ps1` matches
+        # the enumeration wherever it sits -- including inside a comment, so commenting out the
+        # whole `$PesterSuites`/`foreach` block left this green while the gate ran no Pester
+        # suite at all, and the independent floor below still counted eight files on disk.
+        # Reported by the review bot. The three anchors are at line start with no leading `#`
+        # or whitespace, so a commented line cannot satisfy them, and the third one requires
+        # the runtime guard that compares the run's own recorded stages against the suites it
+        # enumerated -- which is the check that does not read text at all.
+        $Text | Should -Match '(?m)^\$PesterSuites = @\(Get-ChildItem'
+        $Text | Should -Match '(?m)^foreach \(\$Suite in \$PesterSuites\) \{'
+        $Text | Should -Match '(?m)^if \(\$MissingPesterStages\.Count -gt 0\) \{'
         $Text | Should -Not -Match 'Invoke-PesterChecked[^\r\n]*\.Tests\.ps1'
         $Suites = @(Get-ChildItem -LiteralPath (Join-Path $ScriptsRoot "tests") `
                 -Filter "*.Tests.ps1" -File)

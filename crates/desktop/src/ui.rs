@@ -54,7 +54,7 @@ pub struct DesktopShell {
     _presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
     _history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
     _session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
-    tray: RefCell<Option<DesktopNativeTrayOwner>>,
+    tray: SharedTray,
     lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     tray_availability: Rc<Cell<DesktopTrayAvailability>>,
     state: SharedDesktopState,
@@ -66,6 +66,11 @@ pub struct DesktopShell {
 
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
 type SharedReliableState = Arc<Mutex<DesktopReliableStateProjection>>;
+/// The one tray owner, reachable from the shell and from the window callback both locale
+/// paths go through. `Rc` rather than `Arc` on purpose: a Win32 menu belongs to the UI thread,
+/// and the reliable-state notifier that also changes the locale lives behind an `Arc` shared
+/// across threads, so it reaches the tray through the window rather than by holding it.
+type SharedTray = Rc<RefCell<Option<DesktopNativeTrayOwner>>>;
 const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;
 const COMPACT_WINDOW_WIDTH: f32 = 420.0;
@@ -375,6 +380,10 @@ impl ReliableStateNotifierInner {
                     &self.state,
                     &self.in_app_notification_batch,
                 );
+                // Reaches the tray through the window because this type is behind an `Arc`
+                // shared across threads and the tray owner is `Rc`; the callback runs on the
+                // UI thread, which is the only thread a Win32 menu may be touched from.
+                window.invoke_relabel_tray();
             } else {
                 apply_reliable_state_projection(&window, &delivery.projection);
             }
@@ -634,12 +643,25 @@ impl DesktopShell {
         );
         wire_dashboard_board(&window, Arc::clone(&presentation_style), intent_sink);
         wire_system_color_scheme_observation(&window, Arc::clone(&presentation_style));
+        let tray: SharedTray = Rc::new(RefCell::new(None));
+        // The window holds a weak reference back to itself so the callback cannot keep the
+        // shell alive; the tray is empty until `show_lifecycle_surface` fills it, and
+        // `relabel_tray` on an empty slot is a no-op, so wiring it here is safe before then.
+        window.on_relabel_tray({
+            let tray = Rc::clone(&tray);
+            let weak_window = window.as_weak();
+            move || {
+                if let Some(window) = weak_window.upgrade() {
+                    relabel_tray(&tray, &window);
+                }
+            }
+        });
         Ok(Self {
             window,
             _presentation_style: presentation_style,
             _history_range_sink: history_range_sink,
             _session_page_sink: session_page_sink,
-            tray: RefCell::new(None),
+            tray,
             lifecycle_sink,
             tray_availability,
             state,
@@ -661,11 +683,7 @@ impl DesktopShell {
     /// reading in the previous language until the process restarted -- which moving it off
     /// English literals would otherwise have introduced as a new defect.
     fn relabel_tray(&self, window: &MainWindow) {
-        if let Ok(tray) = self.tray.try_borrow()
-            && let Some(owner) = tray.as_ref()
-        {
-            owner.relabel(tray_labels(window));
-        }
+        relabel_tray(&self.tray, window);
     }
 
     #[must_use]
@@ -1119,8 +1137,29 @@ fn wire_presentation_locale(
                 &reliable_state,
                 &in_app_notification_batch,
             );
+            // The path a user takes, and the one that never relabelled: the persisted
+            // publication that follows sees the window already in the selected locale, so its
+            // `locale_changed` branch is skipped and the tray kept the previous language.
+            window.invoke_relabel_tray();
         }
     });
+}
+
+/// Rebuilds the tray's text from the window, from whichever path changed the language.
+///
+/// **Two paths change it and only one used to relabel.** `publish_reliable_state` relabels
+/// under `locale_changed`, and the interactive selector does not -- so by the time the
+/// persisted publication arrives the window already carries the selected locale,
+/// `locale_changed` is false, and the sole call is skipped. The tray therefore stayed in the
+/// previous language until restart on the path a user actually takes. Reported by the review
+/// bot, which found the reliable-state path too: that notifier lives behind an `Arc` shared
+/// across threads and cannot hold an `Rc` tray, so both now go through one window callback.
+fn relabel_tray(tray: &SharedTray, window: &MainWindow) {
+    if let Ok(tray) = tray.try_borrow()
+        && let Some(owner) = tray.as_ref()
+    {
+        owner.relabel(tray_labels(window));
+    }
 }
 
 /// Reads the tray's text out of the shell in whatever language is selected now.
