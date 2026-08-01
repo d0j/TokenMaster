@@ -382,6 +382,30 @@ fn a_receipt_entry_reaches_the_file_in_one_write_so_a_killed_fixture_cannot_tear
         "receipt entry must open with a complete pid line, got {entry:?}"
     );
     assert!(entry.ends_with('\n'), "receipt entry must end a line");
+
+    // The sink above always consumes the whole buffer, so it cannot see the case the review
+    // bot named: under a short write `write_all` calls `write` again, and every extra call is
+    // another moment at which a killed fixture tears the entry or a sibling interleaves. A
+    // short write is now a reported error rather than a silent retry.
+    #[derive(Default)]
+    struct Short(usize);
+
+    impl std::io::Write for Short {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0 += 1;
+            Ok(buf.len() / 2)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut short = Short::default();
+    let error = support::write_receipt_entry(&mut short, pid, &args)
+        .expect_err("a short write must be reported, not retried");
+    assert_eq!(error.kind(), std::io::ErrorKind::WriteZero);
+    assert_eq!(short.0, 1, "a short write must not be retried");
 }
 
 fn assert_receipt_pids_exited(receipt: &str, executable: &Path) {

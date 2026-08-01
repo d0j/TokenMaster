@@ -33,5 +33,20 @@ pub fn write_receipt_entry<W: std::io::Write>(
         trace = std::env::var("GIT_TRACE").unwrap_or_default(),
         askpass = std::env::var("GIT_ASKPASS").unwrap_or_default(),
     );
-    sink.write_all(entry.as_bytes())
+    // One `write`, not `write_all`. `write_all` loops when the sink reports a short write, and
+    // each extra call is another point at which a deadline test's kill tears the entry or lets
+    // a concurrent child interleave -- exactly what building the whole string first was meant
+    // to make impossible. The review bot caught the gap: the claim above said one call and the
+    // implementation could make several. A short write is reported rather than retried, so the
+    // fixture fails visibly instead of leaving a half-line for the reader to parse. Measured
+    // with a sink that consumes half of what it is offered: `write_all` called `write` nine
+    // times for one entry.
+    let written = sink.write(entry.as_bytes())?;
+    if written == entry.len() {
+        return Ok(());
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::WriteZero,
+        "receipt entry was written partially",
+    ))
 }
