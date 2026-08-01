@@ -4652,7 +4652,15 @@ fn traversal_for_session(
     Ok(StoredTraversal {
         facts: ReplayTraversalFacts::new(
             relation.depth,
-            direct_children.min(MAX_REPLAY_FANOUT),
+            // Unclamped, and the `LIMIT 257` three lines above is the reason: it is one more
+            // than `MAX_REPLAY_FANOUT` precisely so 257 is distinguishable from exactly 256.
+            // `.min(MAX_REPLAY_FANOUT)` destroyed that distinction while `exceeds_bound` tests
+            // `direct_children > MAX_REPLAY_FANOUT` strictly, so the fan-out half of that
+            // predicate could not fire from production at all -- a session wider than the
+            // bound was classified as if it were within it instead of deferring to `Pending`.
+            // The depth half is returned unclamped and does fire, which is the asymmetry that
+            // gave this away. The value stays bounded at 257 by the query itself.
+            direct_children,
             relation.cycle,
             relation_conflict || relation.ancestor_conflict,
         ),
@@ -5181,6 +5189,59 @@ mod tests {
     type ProjectionProvenance = (Vec<u8>, i64, Option<i64>, Option<i64>, i64);
     type ReplayAppendAtomicState = (i64, i64, i64, i64, i64, i64, i64, i64);
     type CurrentAppendAtomicState = (i64, i64, i64, i64, i64, i64, i64, i64, i64, String, i64);
+
+    /// The production path can reach the bound its own predicate tests.
+    ///
+    /// `traversal_for_session` counts siblings through `LIMIT 257` -- one more than
+    /// `MAX_REPLAY_FANOUT`, so that 257 is distinguishable from exactly 256 -- and then clamped
+    /// the count with `.min(MAX_REPLAY_FANOUT)` three lines below, while `exceeds_bound` tests
+    /// `direct_children > MAX_REPLAY_FANOUT`. The clamp destroyed the one value the limit was
+    /// written to preserve, so a session wider than the bound classified as if it were within
+    /// it. `exhausted_depth_or_fanout_is_pending_not_conflict` is green because it builds
+    /// `ReplayTraversalFacts` directly: it proves the predicate and never the path.
+    #[test]
+    fn a_traversal_wider_than_the_bound_reports_a_width_the_bound_can_see() -> TestResult {
+        let seed = 7_u8;
+        let mut store = UsageStore::in_memory()?;
+        store.register_source(&registration(seed)?)?;
+        let revision = store.begin_replay_revision(&ReplayManifest::new(
+            vec![SourceKey::from_bytes([seed; 32])].into_boxed_slice(),
+        )?)?;
+        let transaction = store.connection.transaction()?;
+        let siblings = MAX_REPLAY_FANOUT + 1;
+        for index in 0..=siblings {
+            let session = if index == 0 {
+                String::from("parent")
+            } else {
+                format!("child-{index:04}")
+            };
+            let parent = (index > 0).then_some("parent");
+            transaction.execute(
+                "INSERT INTO usage_replay_session(
+                   revision_id, provider_id, profile_id, session_id, parent_session_id,
+                   relation_conflict, state, completion_state, evidence_epoch
+                 ) VALUES (?1, 'codex', 'default', ?2, ?3, 0, 'root', 'open', 0)",
+                params![revision.id().as_sql()?, session, parent],
+            )?;
+        }
+
+        let traversal = traversal_for_session(
+            &transaction,
+            revision.id(),
+            "codex",
+            "default",
+            "parent",
+            None,
+            false,
+        )?;
+
+        assert!(
+            traversal.facts.direct_children() > MAX_REPLAY_FANOUT,
+            "counted {} of {siblings} direct children, so the bound can never fire",
+            traversal.facts.direct_children()
+        );
+        Ok(())
+    }
 
     #[test]
     fn replay_session_lookups_use_the_exact_parent_index() -> TestResult {

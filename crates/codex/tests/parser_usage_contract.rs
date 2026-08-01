@@ -1,4 +1,4 @@
-use tokenmaster_accounting::{Canonicalizer, EVENT_FINGERPRINT_VERSION};
+use tokenmaster_accounting::Canonicalizer;
 use tokenmaster_codex::{
     LONG_CONTEXT_THRESHOLD, MAX_LINE_BYTES, ParseContext, ParseOutcome, ParserDiagnosticCode,
     ParserDiagnostics, ParserState, parse_line,
@@ -312,7 +312,16 @@ fn emitted_drafts_canonicalize_only_through_core_accounting() {
     let canonical = Canonicalizer::new()
         .canonicalize(&event)
         .expect("Codex draft canonicalizes through core accounting");
-    assert_eq!(canonical.fingerprint_version(), EVENT_FINGERPRINT_VERSION);
+
+    // The values that crossed, not a version accessor. `fingerprint_version()` returns
+    // `EVENT_FINGERPRINT_VERSION` by its own body, so comparing the two was an assertion that
+    // could not fail -- and it was the only one in a test whose name promises the draft
+    // reaches accounting intact. What proves the crossing is the parsed numbers arriving on
+    // the other side of it.
+    assert_eq!(canonical.model().as_str(), "gpt-5.6-sol");
+    assert_eq!(canonical.delta_usage().input(), TokenCount::Available(10));
+    assert_eq!(canonical.delta_usage().output(), TokenCount::Available(2));
+    assert_eq!(canonical.delta_usage().total(), TokenCount::Available(12));
 }
 
 #[test]
