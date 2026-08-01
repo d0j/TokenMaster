@@ -206,6 +206,46 @@ Written down because it was decided once and would otherwise be re-derived, prob
   carries the engine, the gate, the tests and the documents, and its individual messages hold
   the measurements that justify them.
 
+## Nineteen review threads sat unread while the same ground was swept by hand
+
+`required_conversation_resolution` is on, so an unresolved thread blocks the merge whatever
+the required check says. Pull request #4 carried **nineteen** of them, every one from the
+Codex bot, and they were not read for a day while this branch hunted the same classes of
+defect by sweeping the tree. The reviewer had already found several, and a share of them
+were about code written on this branch.
+
+**What it was right about**, each now fixed with a red test first and proven by breaking the
+repair back:
+
+- **A deadline synthesis this branch had half of.** The completion-wait fix stopped a receipt
+  being discarded and then accepted whatever was in the slot when the mutex came free, so work
+  finishing *after* the caller's deadline was reported as meeting it -- and the regression test
+  written for the original fix arranged exactly that case. Both slots now stamp the publication
+  instant and accept only what was published by the deadline.
+- **The tray relabel never ran on the interactive path**, which is the path a user takes. The
+  sole call sat under `locale_changed` in the persisted publication, and by then the window
+  already carried the selected locale.
+- **`derive(Debug)` on a tuple struct** was invisible to the privacy rule written the same
+  hour: 51 of 827 items unscanned, so its "zero offenders" covered 776.
+- **Two headers passed a value without its availability**, styling a missing number as an
+  ordinary one -- the fourth site of a class recorded as closed.
+- **`Instant::now() + timeout` panics**, on a surface that reports every other failure through
+  `Result`.
+- **A locale change could destroy the tray menu the user had open**, mid-`TrackPopupMenu`.
+- **The contract was corrected in two normative files and there were three.**
+- **The nonblocking-hint promise was absolute and the code is not**; the claim was narrowed to
+  what holds and the remainder recorded with its cost.
+- **The gate could be silently disabled**: commenting out the Pester enumeration left the
+  composition contract satisfied by the commented text.
+- **Five tree rules read a line at a time** in a language that does not require one.
+- **A one-write receipt claim was one `write_all`**, measured at nine calls under short writes.
+
+**The lesson is not "read the reviews".** It is that the failures cluster: eight of the
+nineteen are a guard that reads text where text can be commented, split or spelled another
+way, and three are a promise stated as an absolute that the code meets only in part. A rule
+this repository writes is now assumed blind to a second spelling until it has been broken in
+that spelling on purpose.
+
 ## How much a review finding is worth here
 
 Five outside reviews produced roughly forty findings across this branch. **Five of them did
