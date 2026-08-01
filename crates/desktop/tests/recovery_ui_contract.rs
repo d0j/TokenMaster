@@ -378,17 +378,16 @@ fn the_widgets_imported_from_the_slint_library_are_a_closed_set() {
 
     let mut seen = std::collections::BTreeSet::new();
     for (path, text) in slint_sources() {
-        for line in text.lines() {
-            let Some(rest) = line.split_once("from \"std-widgets.slint\"") else {
+        // Flattened, because an import may be written over several lines and this loop used to
+        // inspect only the one carrying `from`. A closing brace on that line with the names
+        // above it left the whole set unread and the closed set unenforced.
+        let flat = dense(&text);
+        let segments: Vec<&str> = flat.split("from\"std-widgets.slint\"").collect();
+        for segment in segments.iter().take(segments.len().saturating_sub(1)) {
+            let Some((_, names)) = segment.rsplit_once("import") else {
                 continue;
             };
-            let names = rest
-                .0
-                .trim()
-                .trim_start_matches("import")
-                .trim()
-                .trim_start_matches('{')
-                .trim_end_matches('}');
+            let names = names.trim().trim_start_matches('{').trim_end_matches('}');
             for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
                 assert!(
                     ALLOWED.contains(&name),
@@ -446,6 +445,57 @@ fn code_of(line: &str) -> String {
         }
     }
     code
+}
+
+/// One source with its comments gone, its literals emptied and every whitespace run collapsed.
+///
+/// Five rules in this file read a line at a time, and Slint requires no declaration to fit on
+/// one: `Timer` with its `{` below, an import whose closing `}` is under the `from`, a
+/// comparison split in two, an `append_menu_item` whose literal is on a later line. Every one
+/// of them walks past a rule that scans lines. The review bot reported five findings; they are
+/// one finding, and this is its answer -- match against the source as the parser sees it.
+fn flattened(text: &str) -> String {
+    text.lines()
+        .map(code_of)
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The source with its comments gone, its literals **kept**, and every whitespace character
+/// removed.
+///
+/// For the two rules whose needle lives inside a literal: the unavailable glyph and the
+/// `std-widgets.slint` import path. `code_of` empties literals, which is right for rules about
+/// what the code does and wrong for these two. Removing whitespace rather than collapsing it
+/// makes `a=="—"`, `a == "—"` and a comparison broken across two lines the same string, which
+/// is what `line.contains("== \"—\"")` could not do.
+fn dense(text: &str) -> String {
+    let mut dense = String::with_capacity(text.len());
+    for line in text.lines() {
+        let mut characters = line.chars().peekable();
+        let mut inside_literal = false;
+        while let Some(character) = characters.next() {
+            match character {
+                '\\' if inside_literal => {
+                    dense.push(character);
+                    if let Some(escaped) = characters.next() {
+                        dense.push(escaped);
+                    }
+                }
+                '"' => {
+                    inside_literal = !inside_literal;
+                    dense.push('"');
+                }
+                '/' if !inside_literal && characters.peek() == Some(&'/') => break,
+                _ if character.is_whitespace() && !inside_literal => {}
+                _ => dense.push(character),
+            }
+        }
+    }
+    dense
 }
 
 fn animates(line: &str) -> bool {
@@ -653,11 +703,14 @@ fn a_value_and_its_availability_are_passed_together() {
 fn no_slint_source_infers_a_fact_from_the_unavailable_glyph() {
     let mut comparisons = Vec::new();
     for (source, text) in slint_sources() {
-        for line in text.lines() {
-            // Deliberately on the raw line: `code_of` empties string literals, and the glyph
-            // being compared against lives inside one.
-            if line.contains("== \"—\"") || line.contains("!= \"—\"") {
-                comparisons.push(format!("{source}: {}", line.trim()));
+        // On the dense source rather than a raw line: `code_of` empties string literals and
+        // the glyph lives inside one, while `line.contains("== \"—\"")` demanded exactly one
+        // space on each side and a single line. `a=="—"`, two spaces, and a comparison split
+        // across lines all walked past it.
+        let dense = dense(&text);
+        for comparison in ["==\"—\"", "!=\"—\""] {
+            if dense.contains(comparison) {
+                comparisons.push(format!("{source}: {comparison}"));
             }
         }
     }
@@ -732,15 +785,17 @@ fn the_tray_names_no_user_visible_string_of_its_own() {
     .expect("read the tray source");
 
     let mut literals = Vec::new();
-    for line in source.lines() {
-        let code = code_of(line);
-        let Some(argument) = code.split("append_menu_item(").nth(1) else {
-            continue;
-        };
+    // Flattened, because `rustfmt` breaks a long call across lines and this loop inspected only
+    // the one carrying the opener: a label written as a literal on the following line was never
+    // seen. Reported by the review bot. Each call is then cut at its own closing parenthesis so
+    // a literal belonging to the next statement cannot be blamed on this one.
+    let flat = flattened(&source);
+    for call in flat.split("append_menu_item(").skip(1) {
+        let argument = call.split(");").next().unwrap_or(call);
         // `code_of` empties literals but keeps their quotes, so a label that was written as a
         // string still shows as `""` here and an expression does not.
         if argument.contains("\"\"") {
-            literals.push(line.trim().to_string());
+            literals.push(argument.trim().to_string());
         }
     }
     assert!(
@@ -803,14 +858,33 @@ fn an_animation_is_recognised_however_its_whitespace_is_written() {
 fn the_only_animation_in_the_slint_tree_is_the_guarded_import_dot() {
     let sources = slint_sources();
 
+    // Line by line missed the shape Slint allows and this rule exists to catch: `Timer` with
+    // its `{` on the next line, or `animate` with its target below. Each source is scanned as
+    // one flattened statement stream, and the line is recovered only to report it.
     let mut animating = Vec::new();
     for (path, text) in &sources {
         for (number, line) in text.lines().enumerate() {
-            if animates(line) {
-                let code = line.split("//").next().unwrap_or_default();
-                animating.push((path.clone(), number, code.trim().to_string()));
+            let flat = flattened(line);
+            if animates(&flat) {
+                animating.push((path.clone(), number, flat));
             }
         }
+        // The whole-source pass is what catches a declaration split across lines: if it sees
+        // more openers than the line pass found, one of them was written over a break.
+        let whole = flattened(text);
+        let split_openers = ["Timer {", "animate ", "states [", "transitions ["]
+            .iter()
+            .map(|opener| whole.matches(opener).count())
+            .sum::<usize>();
+        let line_openers = animating
+            .iter()
+            .filter(|(candidate, _, _)| candidate == path)
+            .count();
+        assert!(
+            split_openers <= line_openers,
+            "{path} writes an animation across a line break: {split_openers} in the whole \
+             source against {line_openers} found line by line"
+        );
     }
     assert_eq!(
         animating.len(),
@@ -832,10 +906,15 @@ fn the_only_animation_in_the_slint_tree_is_the_guarded_import_dot() {
         .iter()
         .find(|(candidate, _)| candidate == path)
         .expect("the animating source");
-    let guard = text
-        .lines()
-        .nth(number.saturating_sub(1))
-        .unwrap_or_default();
+    // `code_of`, not the raw line: the guard used to be read straight off the previous line, so
+    // making the binding unconditional while leaving `// root.active && !root.reduced-motion`
+    // above it satisfied this assertion from inside the comment it had become. Reported by the
+    // review bot, and it is the same shape as the Pester composition guard three files away.
+    let guard = flattened(
+        text.lines()
+            .nth(number.saturating_sub(1))
+            .unwrap_or_default(),
+    );
     assert!(
         guard.contains("root.active") && guard.contains("!root.reduced-motion"),
         "the animation must stay behind the active and reduced-motion guard, found {guard:?}"
