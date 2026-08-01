@@ -92,9 +92,16 @@ arguments:**
 pwsh -NoProfile -File scripts\verify-m0.ps1
 ```
 
-Sixteen stages: clean-root, immutable-actions, dependency-policy, eight Pester suites, `fmt`,
-`clippy`, the SQLite million-row check, the workspace tests, the release build. Anything less
-is a weaker claim wearing the same word. It needs network access for the RustSec database.
+The stages are clean-root, immutable-actions, dependency-policy, **every** Pester suite in
+`scripts/tests`, `fmt`, `clippy`, the SQLite million-row check, the workspace tests and the
+release build. Anything less is a weaker claim wearing the same word. It needs network access
+for the RustSec database.
+
+The count used to be written here — "sixteen stages, eight Pester suites" — and adding the
+ninth suite made both numbers wrong in a file that tells the next reader what green means. The
+suites are enumerated from disk by the gate itself, so a number here was never the authority
+and could only ever rot; `verify-m0.ps1` now also refuses a run in which any enumerated suite
+recorded no passing stage.
 
 **It stops at the first failing stage, so a red gate names one break and hides the rest.** Fix
 and re-run until it is green rather than reading the first failure as the only one.

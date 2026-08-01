@@ -75,9 +75,9 @@ function Invoke-PesterChecked {
     # everything. Measured on Pester 5.7.1 against a fixture whose only `It` is commented out:
     # FailedCount 0, PassedCount 0, TotalCount 0 and Result "Passed" -- so FailedCount alone
     # calls an empty stage green, and any suite that quietly stopped testing would leave every
-    # "sixteen stages" claim downstream meaning fifteen. `PassedCount -gt 0` alone is not
-    # enough either: `-Skip` on all but one test leaves that one passing. The eight suites run
-    # between 2 and 31 tests each and skip none, so both conditions cost nothing today.
+    # stage-count claim downstream meaning one fewer. `PassedCount -gt 0` alone is not enough
+    # either: `-Skip` on all but one test leaves that one passing. Every suite runs between 2
+    # and 31 tests and skips none, so both conditions cost nothing today.
     $ExitCode = if ($Result.FailedCount -eq 0 -and $Result.SkippedCount -eq 0 `
             -and $Result.PassedCount -gt 0) { 0 } else { 1 }
     # The stage's own id, not the constant "pester" every one of them used to record: the
