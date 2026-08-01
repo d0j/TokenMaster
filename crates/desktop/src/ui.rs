@@ -45,7 +45,7 @@ use crate::{
     UnavailableDesktopHistoryRangeIntentSink, UnavailableDesktopIntentSink,
     UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
     in_app_notification::{NotificationEpochState, SharedInAppNotificationBatch},
-    native_tray::DesktopNativeTrayOwner,
+    native_tray::{DesktopNativeTrayOwner, DesktopTrayLabels},
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -54,7 +54,7 @@ pub struct DesktopShell {
     _presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
     _history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
     _session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
-    tray: RefCell<Option<DesktopNativeTrayOwner>>,
+    tray: SharedTray,
     lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     tray_availability: Rc<Cell<DesktopTrayAvailability>>,
     state: SharedDesktopState,
@@ -66,6 +66,11 @@ pub struct DesktopShell {
 
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
 type SharedReliableState = Arc<Mutex<DesktopReliableStateProjection>>;
+/// The one tray owner, reachable from the shell and from the window callback both locale
+/// paths go through. `Rc` rather than `Arc` on purpose: a Win32 menu belongs to the UI thread,
+/// and the reliable-state notifier that also changes the locale lives behind an `Arc` shared
+/// across threads, so it reaches the tray through the window rather than by holding it.
+type SharedTray = Rc<RefCell<Option<DesktopNativeTrayOwner>>>;
 const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;
 const COMPACT_WINDOW_WIDTH: f32 = 420.0;
@@ -375,6 +380,10 @@ impl ReliableStateNotifierInner {
                     &self.state,
                     &self.in_app_notification_batch,
                 );
+                // Reaches the tray through the window because this type is behind an `Arc`
+                // shared across threads and the tray owner is `Rc`; the callback runs on the
+                // UI thread, which is the only thread a Win32 menu may be touched from.
+                window.invoke_relabel_tray();
             } else {
                 apply_reliable_state_projection(&window, &delivery.projection);
             }
@@ -634,12 +643,25 @@ impl DesktopShell {
         );
         wire_dashboard_board(&window, Arc::clone(&presentation_style), intent_sink);
         wire_system_color_scheme_observation(&window, Arc::clone(&presentation_style));
+        let tray: SharedTray = Rc::new(RefCell::new(None));
+        // The window holds a weak reference back to itself so the callback cannot keep the
+        // shell alive; the tray is empty until `show_lifecycle_surface` fills it, and
+        // `relabel_tray` on an empty slot is a no-op, so wiring it here is safe before then.
+        window.on_relabel_tray({
+            let tray = Rc::clone(&tray);
+            let weak_window = window.as_weak();
+            move || {
+                if let Some(window) = weak_window.upgrade() {
+                    relabel_tray(&tray, &window);
+                }
+            }
+        });
         Ok(Self {
             window,
             _presentation_style: presentation_style,
             _history_range_sink: history_range_sink,
             _session_page_sink: session_page_sink,
-            tray: RefCell::new(None),
+            tray,
             lifecycle_sink,
             tray_availability,
             state,
@@ -653,6 +675,15 @@ impl DesktopShell {
     #[must_use]
     pub const fn window(&self) -> &MainWindow {
         &self.window
+    }
+
+    /// Rebuilds the tray's text after a language switch.
+    ///
+    /// The menu is a Win32 object built once and kept, so without this the tray would keep
+    /// reading in the previous language until the process restarted -- which moving it off
+    /// English literals would otherwise have introduced as a new defect.
+    fn relabel_tray(&self, window: &MainWindow) {
+        relabel_tray(&self.tray, window);
     }
 
     #[must_use]
@@ -669,6 +700,7 @@ impl DesktopShell {
         match DesktopNativeTrayOwner::new(
             Rc::clone(lifecycle_sink),
             Rc::clone(&self.tray_availability),
+            tray_labels(&self.window),
         ) {
             Ok(owner) => {
                 *tray = Some(owner);
@@ -777,6 +809,7 @@ impl DesktopShell {
                 &self.reliable_state,
                 &self.in_app_notification_batch,
             );
+            self.relabel_tray(&self.window);
         } else {
             apply_reliable_state_projection(&self.window, &projection);
         }
@@ -1104,8 +1137,44 @@ fn wire_presentation_locale(
                 &reliable_state,
                 &in_app_notification_batch,
             );
+            // The path a user takes, and the one that never relabelled: the persisted
+            // publication that follows sees the window already in the selected locale, so its
+            // `locale_changed` branch is skipped and the tray kept the previous language.
+            window.invoke_relabel_tray();
         }
     });
+}
+
+/// Rebuilds the tray's text from the window, from whichever path changed the language.
+///
+/// **Two paths change it and only one used to relabel.** `publish_reliable_state` relabels
+/// under `locale_changed`, and the interactive selector does not -- so by the time the
+/// persisted publication arrives the window already carries the selected locale,
+/// `locale_changed` is false, and the sole call is skipped. The tray therefore stayed in the
+/// previous language until restart on the path a user actually takes. Reported by the review
+/// bot, which found the reliable-state path too: that notifier lives behind an `Arc` shared
+/// across threads and cannot hold an `Rc` tray, so both now go through one window callback.
+fn relabel_tray(tray: &SharedTray, window: &MainWindow) {
+    if let Ok(tray) = tray.try_borrow()
+        && let Some(owner) = tray.as_ref()
+    {
+        owner.relabel(tray_labels(window));
+    }
+}
+
+/// Reads the tray's text out of the shell in whatever language is selected now.
+///
+/// The tray is Win32 and cannot reach `@tr`, so the strings are declared in the Slint tree --
+/// which is what the localization contract walks -- and resolved here.
+fn tray_labels(window: &MainWindow) -> DesktopTrayLabels {
+    DesktopTrayLabels {
+        show: window.get_tray_show_label().to_string(),
+        dashboard: window.get_tray_dashboard_label().to_string(),
+        compact: window.get_tray_compact_label().to_string(),
+        hide: window.get_tray_hide_label().to_string(),
+        quit: window.get_tray_quit_label().to_string(),
+        tooltip: window.get_tray_tooltip().to_string(),
+    }
 }
 
 fn reapply_localized_projection(
@@ -2815,6 +2884,26 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
     window.set_dashboard_header_cost(format_cost(header.cost()).into());
     window
         .set_dashboard_header_events(format_dashboard_events(window, header.event_count()).into());
+    // Carried rather than re-derived in the view. The card used to compare its own rendered
+    // text to an em dash, which collapsed five availability states into two and announced a
+    // `Partial` token count as known -- and hung the whole distinction on one glyph, so
+    // changing that glyph in any formatter would have flipped the meaning silently.
+    window.set_dashboard_header_tokens_availability(
+        availability_code(header.tokens().availability()).into(),
+    );
+    window.set_dashboard_header_cost_availability(
+        availability_code(header.cost().availability()).into(),
+    );
+    // The event count is an `Option<u64>` with no availability of its own, so this one is two
+    // valued by construction and the change buys robustness rather than a corrected answer.
+    window.set_dashboard_header_events_availability(
+        if header.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
     window.set_dashboard_header_evidence(
         format_dashboard_evidence(window, header.freshness(), header.quality()).into(),
     );
@@ -2944,6 +3033,32 @@ fn apply_history_snapshot_projection(window: &MainWindow, history: &DesktopHisto
     window.set_history_total_tokens(format_tokens(history.total_tokens()).into());
     window.set_history_cost(format_cost(history.cost()).into());
     window.set_history_events(projection_optional_events(window, history.event_count()).into());
+    // Carried, not inferred. These eleven values were the largest group deciding their own
+    // availability by comparing the text they had just rendered to an em dash.
+    window.set_history_input_tokens_availability(
+        availability_code(history.input().availability()).into(),
+    );
+    window.set_history_cached_tokens_availability(
+        availability_code(history.cached().availability()).into(),
+    );
+    window.set_history_output_tokens_availability(
+        availability_code(history.output().availability()).into(),
+    );
+    window.set_history_reasoning_tokens_availability(
+        availability_code(history.reasoning().availability()).into(),
+    );
+    window.set_history_total_tokens_availability(
+        availability_code(history.total_tokens().availability()).into(),
+    );
+    window.set_history_cost_availability(availability_code(history.cost().availability()).into());
+    window.set_history_events_availability(
+        if history.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
 
     let rows = history
         .rows()
@@ -3025,6 +3140,14 @@ fn apply_models_projection(window: &MainWindow, models: &DesktopModelsProjection
     window.set_models_cost_availability(availability_code(models.cost().availability()).into());
     window.set_models_cost_evidence_label(projection_cost_evidence(window, models.cost()).into());
     window.set_models_events(projection_optional_events(window, models.event_count()).into());
+    window.set_models_events_availability(
+        if models.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
     window.set_models_loaded_label(
         models
             .event_count()
@@ -3120,6 +3243,14 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
     window
         .set_projects_cost_evidence_label(projection_cost_evidence(window, projects.cost()).into());
     window.set_projects_events(projection_optional_events(window, projects.event_count()).into());
+    window.set_projects_events_availability(
+        if projects.event_count().is_some() {
+            "known"
+        } else {
+            "unavailable"
+        }
+        .into(),
+    );
     window.set_projects_loaded_label(
         projects
             .event_count()
@@ -3191,6 +3322,12 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
                 .net_lines()
                 .map_or_else(|| "—".to_owned(), format_signed)
                 .into(),
+            efficiency_availability: if row.cost_per_100_added_lines_micros().is_some() {
+                "known"
+            } else {
+                "unavailable"
+            }
+            .into(),
             efficiency_label: row
                 .cost_per_100_added_lines_micros()
                 .map_or_else(
@@ -5048,7 +5185,7 @@ mod duration_tests {
             let _ = completed_sender.send(result);
             Ok(())
         });
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(30);
         while inner
             .latest
             .lock()

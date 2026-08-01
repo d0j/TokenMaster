@@ -15,7 +15,7 @@ mod platform {
     // state keeps a stable address; GWLP_USERDATA is cleared before any native handle or
     // the box is destroyed; and no Rust panic is permitted to cross window_proc.
     use std::{
-        cell::Cell,
+        cell::{Cell, RefCell},
         ffi::c_void,
         panic::{AssertUnwindSafe, catch_unwind},
         rc::Rc,
@@ -36,8 +36,8 @@ mod platform {
             System::LibraryLoader::GetModuleHandleW,
             UI::{
                 Shell::{
-                    NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
-                    Shell_NotifyIconW,
+                    NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
+                    NOTIFYICONDATAW, Shell_NotifyIconW,
                 },
                 WindowsAndMessaging::{
                     AppendMenuW, BringWindowToTop, CreateIconIndirect, CreatePopupMenu,
@@ -67,7 +67,6 @@ mod platform {
     const COMMAND_HIDE: u32 = 0x103;
     const COMMAND_QUIT: u32 = 0x104;
     const CLASS_NAME: PCWSTR = w!("TokenMasterNativeTrayWindow");
-    const TOOLTIP: &str = "TokenMaster - local usage intelligence";
 
     static OWNER_ACTIVE: AtomicBool = AtomicBool::new(false);
     static CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
@@ -80,7 +79,17 @@ mod platform {
     struct Inner {
         hwnd: HWND,
         icon: HICON,
-        menu: HMENU,
+        // Replaceable, because the menu is a Win32 object built once and kept, and a language
+        // switch has to rebuild it rather than leave the tray reading in the previous one.
+        menu: Cell<HMENU>,
+        /// Set while `TrackPopupMenu` runs its nested message loop on the copied handle. A
+        /// locale change dispatched into that loop would otherwise reach `relabel`, which
+        /// replaces the handle and destroys the previous one -- the very menu still being
+        /// tracked. Relabelling waits instead; the pending labels are applied when the popup
+        /// closes, which also avoids swapping the menu under the user mid-interaction.
+        tracking: Cell<bool>,
+        pending_labels: RefCell<Option<super::DesktopTrayLabels>>,
+        labels: RefCell<super::DesktopTrayLabels>,
         sink: Rc<dyn DesktopLifecycleIntentSink>,
         availability: Rc<Cell<DesktopTrayAvailability>>,
         registered: Cell<bool>,
@@ -147,6 +156,7 @@ mod platform {
         pub(super) fn new(
             sink: Rc<dyn DesktopLifecycleIntentSink>,
             availability: Rc<Cell<DesktopTrayAvailability>>,
+            labels: super::DesktopTrayLabels,
         ) -> Result<Self, DesktopNativeTrayError> {
             let reservation = OwnerReservation::acquire()?;
             register_window_class()?;
@@ -181,7 +191,7 @@ mod platform {
                     return Err(error);
                 }
             };
-            let menu = match create_menu() {
+            let menu = match create_menu(&labels) {
                 Ok(menu) => menu,
                 Err(error) => {
                     unsafe {
@@ -194,7 +204,10 @@ mod platform {
             let inner = Box::new(Inner {
                 hwnd,
                 icon,
-                menu,
+                menu: Cell::new(menu),
+                tracking: Cell::new(false),
+                pending_labels: RefCell::new(None),
+                labels: RefCell::new(labels),
                 sink,
                 availability,
                 registered: Cell::new(false),
@@ -207,19 +220,19 @@ mod platform {
             if installed != callback_state as isize {
                 unsafe {
                     SetWindowLongPtrW(inner.hwnd, GWLP_USERDATA, 0);
-                    let _ = DestroyMenu(inner.menu);
+                    let _ = DestroyMenu(inner.menu.get());
                     let _ = DestroyIcon(inner.icon);
                     let _ = DestroyWindow(inner.hwnd);
                 }
                 return Err(DesktopNativeTrayError);
             }
 
-            let tip = HSTRING::from(TOOLTIP);
+            let tip = HSTRING::from(inner.labels.borrow().tooltip.as_str());
             let data = notify_icon_data(inner.hwnd, inner.icon, &tip);
             if !unsafe { Shell_NotifyIconW(NIM_ADD, &data) }.as_bool() {
                 unsafe {
                     SetWindowLongPtrW(inner.hwnd, GWLP_USERDATA, 0);
-                    let _ = DestroyMenu(inner.menu);
+                    let _ = DestroyMenu(inner.menu.get());
                     let _ = DestroyIcon(inner.icon);
                     let _ = DestroyWindow(inner.hwnd);
                 }
@@ -229,6 +242,42 @@ mod platform {
             inner.availability.set(DesktopTrayAvailability::Available);
             reservation.commit();
             Ok(Self { inner })
+        }
+
+        /// Rebuilds the menu and re-sends the tooltip in the language now selected.
+        ///
+        /// A failure leaves the existing menu in place: a tray reading in the previous
+        /// language is a defect, and a tray with no menu at all is a worse one, so the old
+        /// handle is destroyed only once its replacement exists.
+        pub(super) fn relabel(&self, labels: super::DesktopTrayLabels) {
+            self.inner.relabel(labels);
+        }
+    }
+
+    impl Inner {
+        fn relabel(&self, labels: super::DesktopTrayLabels) {
+            // `show_menu` copied this handle and is inside `TrackPopupMenu`'s nested message
+            // loop with it. Replacing and destroying it here invalidates the menu the user is
+            // looking at, or leaks it if Windows refuses to destroy an active one.
+            if self.tracking.get() {
+                *self.pending_labels.borrow_mut() = Some(labels);
+                return;
+            }
+            let Ok(menu) = create_menu(&labels) else {
+                return;
+            };
+            let previous = self.menu.replace(menu);
+            unsafe {
+                let _ = DestroyMenu(previous);
+            }
+            if self.registered.get() {
+                let tip = HSTRING::from(labels.tooltip.as_str());
+                let data = notify_icon_data(self.hwnd, self.icon, &tip);
+                unsafe {
+                    let _ = Shell_NotifyIconW(NIM_MODIFY, &data);
+                }
+            }
+            *self.labels.borrow_mut() = labels;
         }
     }
 
@@ -243,7 +292,7 @@ mod platform {
                     let data = tray_identity(self.inner.hwnd);
                     let _ = Shell_NotifyIconW(NIM_DELETE, &data);
                 }
-                let _ = DestroyMenu(self.inner.menu);
+                let _ = DestroyMenu(self.inner.menu.get());
                 let _ = DestroyWindow(self.inner.hwnd);
                 let _ = DestroyIcon(self.inner.icon);
             }
@@ -293,7 +342,7 @@ mod platform {
 
         if message == taskbar_created_message() && message != 0 {
             if let Some(inner) = unsafe { inner_from_window(hwnd) } {
-                let tip = HSTRING::from(TOOLTIP);
+                let tip = HSTRING::from(inner.labels.borrow().tooltip.as_str());
                 let data = notify_icon_data(hwnd, inner.icon, &tip);
                 let restored = unsafe { Shell_NotifyIconW(NIM_ADD, &data) }.as_bool();
                 inner.set_available(restored);
@@ -323,9 +372,13 @@ mod platform {
         if unsafe { GetCursorPos(&raw mut cursor) }.is_err() {
             return;
         }
-        let Some(menu) = (unsafe { inner_from_window(hwnd) }).map(|inner| inner.menu) else {
+        let Some(tracked) = (unsafe { inner_from_window(hwnd) }) else {
             return;
         };
+        let menu = tracked.menu.get();
+        // Held for exactly the nested message loop below, so a locale change dispatched into
+        // it defers instead of destroying the handle this call is tracking.
+        tracked.tracking.set(true);
         let _ = unsafe { SetForegroundWindow(hwnd) };
         let command = unsafe {
             TrackPopupMenu(
@@ -339,6 +392,13 @@ mod platform {
             )
         }
         .0 as u32;
+        if let Some(inner) = unsafe { inner_from_window(hwnd) } {
+            inner.tracking.set(false);
+            let pending = inner.pending_labels.borrow_mut().take();
+            if let Some(labels) = pending {
+                inner.relabel(labels);
+            }
+        }
         let _ = unsafe { PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0)) };
         let Some(intent) = command_intent(command) else {
             return;
@@ -413,16 +473,16 @@ mod platform {
         message
     }
 
-    fn create_menu() -> Result<HMENU, DesktopNativeTrayError> {
+    fn create_menu(labels: &super::DesktopTrayLabels) -> Result<HMENU, DesktopNativeTrayError> {
         let menu = unsafe { CreatePopupMenu() }.map_err(|_| DesktopNativeTrayError)?;
         let result = (|| {
-            append_menu_item(menu, COMMAND_SHOW, "Show")?;
-            append_menu_item(menu, COMMAND_DASHBOARD, "Open Dashboard")?;
-            append_menu_item(menu, COMMAND_COMPACT, "Open Compact")?;
-            append_menu_item(menu, COMMAND_HIDE, "Hide")?;
+            append_menu_item(menu, COMMAND_SHOW, &labels.show)?;
+            append_menu_item(menu, COMMAND_DASHBOARD, &labels.dashboard)?;
+            append_menu_item(menu, COMMAND_COMPACT, &labels.compact)?;
+            append_menu_item(menu, COMMAND_HIDE, &labels.hide)?;
             unsafe { AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()) }
                 .map_err(|_| DesktopNativeTrayError)?;
-            append_menu_item(menu, COMMAND_QUIT, "Quit")
+            append_menu_item(menu, COMMAND_QUIT, &labels.quit)
         })();
         if result.is_err() {
             unsafe {
@@ -662,6 +722,68 @@ mod platform {
             assert_eq!(&pixels[center..center + 4], &[255, 255, 255, 255]);
         }
 
+        /// A locale change arriving while the context menu is open waits for it to close.
+        ///
+        /// `show_menu` copies the handle and enters `TrackPopupMenu`'s nested message loop with
+        /// it. A relabel dispatched into that loop replaces the handle and destroys the
+        /// previous one -- the menu the user is looking at -- or leaks it if Windows refuses to
+        /// destroy an active menu. Reported by the review bot against this file's own new
+        /// `relabel`.
+        #[test]
+        fn a_relabel_during_the_popup_waits_instead_of_destroying_the_tracked_menu() {
+            let availability = Rc::new(Cell::new(DesktopTrayAvailability::Available));
+            let inner = Inner {
+                hwnd: HWND::default(),
+                icon: HICON::default(),
+                menu: Cell::new(HMENU::default()),
+                tracking: Cell::new(true),
+                pending_labels: RefCell::new(None),
+                labels: RefCell::new(crate::native_tray::DesktopTrayLabels::default()),
+                sink: Rc::new(PanickingSink),
+                availability: Rc::clone(&availability),
+                registered: Cell::new(false),
+            };
+            let next = crate::native_tray::DesktopTrayLabels {
+                show: String::from("show-next"),
+                dashboard: String::from("dashboard-next"),
+                compact: String::from("compact-next"),
+                hide: String::from("hide-next"),
+                quit: String::from("quit-next"),
+                tooltip: String::from("tooltip-next"),
+            };
+
+            inner.relabel(next);
+
+            assert_eq!(inner.menu.get(), HMENU::default(), "the tracked menu moved");
+            assert!(
+                inner.labels.borrow().show.is_empty(),
+                "labels applied early"
+            );
+            assert_eq!(
+                inner
+                    .pending_labels
+                    .borrow()
+                    .as_ref()
+                    .map(|labels| labels.show.clone()),
+                Some(String::from("show-next")),
+                "the deferred labels were dropped instead of held"
+            );
+
+            // What `show_menu` does when the popup closes.
+            inner.tracking.set(false);
+            let pending = inner.pending_labels.borrow_mut().take();
+            match pending {
+                Some(labels) => inner.relabel(labels),
+                None => panic!("the deferred labels were not held"),
+            }
+
+            assert_eq!(inner.labels.borrow().show, "show-next");
+            assert!(inner.pending_labels.borrow().is_none());
+            unsafe {
+                let _ = super::DestroyMenu(inner.menu.get());
+            }
+        }
+
         #[test]
         fn native_callback_panic_is_contained_and_fails_closed() {
             let availability = Rc::new(Cell::new(DesktopTrayAvailability::Available));
@@ -669,7 +791,10 @@ mod platform {
             let inner = Inner {
                 hwnd: HWND::default(),
                 icon: HICON::default(),
-                menu: HMENU::default(),
+                menu: Cell::new(HMENU::default()),
+                tracking: Cell::new(false),
+                pending_labels: RefCell::new(None),
+                labels: RefCell::new(crate::native_tray::DesktopTrayLabels::default()),
                 sink: Rc::new(PanickingSink),
                 availability: Rc::clone(&availability),
                 registered: Cell::new(false),
@@ -690,7 +815,10 @@ mod platform {
             let inner = Inner {
                 hwnd: HWND::default(),
                 icon: HICON::default(),
-                menu: HMENU::default(),
+                menu: Cell::new(HMENU::default()),
+                tracking: Cell::new(false),
+                pending_labels: RefCell::new(None),
+                labels: RefCell::new(crate::native_tray::DesktopTrayLabels::default()),
                 sink: sink.clone(),
                 availability: Rc::clone(&availability),
                 registered: Cell::new(true),
@@ -728,9 +856,12 @@ mod platform {
         pub(super) fn new(
             _sink: Rc<dyn DesktopLifecycleIntentSink>,
             _availability: Rc<Cell<DesktopTrayAvailability>>,
+            _labels: super::DesktopTrayLabels,
         ) -> Result<Self, DesktopNativeTrayError> {
             Err(DesktopNativeTrayError)
         }
+
+        pub(super) fn relabel(&self, _labels: super::DesktopTrayLabels) {}
     }
 
     pub(super) fn activate_window(
@@ -740,18 +871,42 @@ mod platform {
     }
 }
 
+/// The tray's user-visible text, resolved by the shell and handed in.
+///
+/// The tray is Win32, so it cannot reach `@tr` itself, and for the life of the product it
+/// simply held English literals -- outside the localization contract by construction rather
+/// than by oversight, the same way eight Activity labels once were. The strings are declared
+/// in the Slint tree now, which is what the contract walks, and arrive here already resolved.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct DesktopTrayLabels {
+    pub(crate) show: String,
+    pub(crate) dashboard: String,
+    pub(crate) compact: String,
+    pub(crate) hide: String,
+    pub(crate) quit: String,
+    pub(crate) tooltip: String,
+}
+
 pub(crate) struct DesktopNativeTrayOwner {
-    _platform: platform::NativeTrayOwner,
+    platform: platform::NativeTrayOwner,
 }
 
 impl DesktopNativeTrayOwner {
     pub(crate) fn new(
         sink: Rc<dyn DesktopLifecycleIntentSink>,
         availability: Rc<Cell<DesktopTrayAvailability>>,
+        labels: DesktopTrayLabels,
     ) -> Result<Self, DesktopNativeTrayError> {
-        platform::NativeTrayOwner::new(sink, availability).map(|platform| Self {
-            _platform: platform,
-        })
+        platform::NativeTrayOwner::new(sink, availability, labels).map(|platform| Self { platform })
+    }
+
+    /// Rebuilds the menu and the tooltip in the current language.
+    ///
+    /// The menu is a Win32 object built once and kept, so without this a language switch would
+    /// leave the tray reading in the previous one until the process restarted -- a defect the
+    /// move off English literals would otherwise have introduced.
+    pub(crate) fn relabel(&self, labels: DesktopTrayLabels) {
+        self.platform.relabel(labels);
     }
 }
 

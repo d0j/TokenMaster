@@ -271,6 +271,50 @@ fn override_and_stale_partial_unknown_facts_are_not_coerced() {
     assert_eq!(profile.lead_times().len(), 1);
 }
 
+/// A reading stamped in the future is not evidence that is merely getting old.
+///
+/// The other two freshness helpers in this crate answer `Unavailable` for exactly this
+/// condition -- `map_sample_freshness` in `quota.rs` and the git helper in `git_output.rs` --
+/// and one archive answering two ways about the same clock is one answer too many. `Aging`
+/// says degraded but usable, which is a claim this evidence cannot support.
+#[test]
+fn a_reading_from_after_the_query_is_unavailable_rather_than_merely_aging() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("benefit-clock-rollback.sqlite3");
+    let requested_scope = scope("rollback-account");
+    let mut writer = UsageStore::open(&path).expect("writer");
+    writer
+        .apply_benefit_observation(&observation(
+            requested_scope.clone(),
+            1,
+            OBSERVED_AT_MS,
+            BenefitInventoryCompleteness::Complete,
+            vec![lot(
+                1,
+                BenefitKind::UsageCredit,
+                4,
+                BenefitState::Available,
+                BenefitExpiry::unknown(),
+                BenefitDetailKind::ProviderAggregate,
+            )],
+        ))
+        .expect("observation");
+    drop(writer);
+
+    let snapshot = QueryService::open(&path, FixedClock(OBSERVED_AT_MS - 1_000))
+        .expect("query service")
+        .benefit_inventory(BenefitCurrentRequest::new(requested_scope))
+        .expect("benefit snapshot");
+
+    assert_eq!(snapshot.header().freshness(), QueryFreshness::Unavailable);
+    assert!(
+        snapshot
+            .header()
+            .warnings()
+            .contains(&BenefitWarningCode::ClockDiscontinuity)
+    );
+}
+
 #[test]
 fn change_history_is_revision_and_scope_bound_without_consuming_failed_generations() {
     let directory = TempDir::new().expect("temporary directory");

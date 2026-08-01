@@ -3074,6 +3074,7 @@ impl ApplicationRuntimeNotifier {
         }
     }
 
+    /// Blocking publication, for the single startup call whose result the caller checks.
     fn publish(&self) -> Result<(), ApplicationError> {
         let Some(bundle) = self.bundle.upgrade() else {
             self.pending.store(false, Ordering::Release);
@@ -3086,6 +3087,42 @@ impl ApplicationRuntimeNotifier {
                 return Err(ApplicationError::internal());
             }
         };
+        self.publish_into(&mut slot)
+    }
+
+    /// Publication for the completion hint, which never waits for the slot.
+    ///
+    /// `WorkerCompletionNotifier` requires it: "Implementations must not block." This notifier
+    /// is handed to all four engine workers, and `run_worker` calls it on the worker's own
+    /// thread between publishing a receipt and starting the follow-up. The slot it wants is
+    /// held deliberately across a manual backup for as long as `MANDATORY_BACKUP_TIMEOUT`,
+    /// five minutes, so a blocking acquire parks every worker that finishes a refresh during a
+    /// backup and the interface holds stale numbers for the whole of it.
+    ///
+    /// Dropping a publication is what "lossy" means here rather than a compromise: `pending`
+    /// records that one was skipped and the next completion publishes again.
+    ///
+    /// **Only the outer slot is try-acquired, and that is not the whole promise.** Reported by
+    /// the review bot: `publish_into` reaches `publish_runtime`, whose `live.snapshot()`,
+    /// `quota.snapshot` and `reminder.snapshot` each take a mutex blockingly, so a contended
+    /// reminder acknowledgement can still stall this call. The difference from the slot is the
+    /// hold time -- those are snapshot-width critical sections, while the slot is held across a
+    /// five-minute manual backup -- so this is a bounded wait rather than a park, but it is a
+    /// wait. Closing it needs try variants through `crates/runtime`; until then the contract
+    /// says what is true rather than the absolute it first claimed.
+    fn publish_hint(&self) {
+        let Some(bundle) = self.bundle.upgrade() else {
+            self.pending.store(false, Ordering::Release);
+            return;
+        };
+        let Ok(mut slot) = bundle.try_lock() else {
+            self.pending.store(true, Ordering::Release);
+            return;
+        };
+        let _ = self.publish_into(&mut slot);
+    }
+
+    fn publish_into(&self, slot: &mut ApplicationBundleSlot) -> Result<(), ApplicationError> {
         if slot.generation != self.bundle_generation {
             self.pending.store(false, Ordering::Release);
             return Ok(());
@@ -3113,7 +3150,7 @@ impl ApplicationRuntimeNotifier {
 
 impl WorkerCompletionNotifier for ApplicationRuntimeNotifier {
     fn completion_ready(&self, _completion: WorkerCompletion) {
-        let _ = self.publish();
+        self.publish_hint();
     }
 }
 

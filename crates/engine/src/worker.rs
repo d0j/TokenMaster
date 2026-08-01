@@ -3,11 +3,11 @@ use std::{
     cell::Cell,
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{
-        Arc, Mutex, MutexGuard, Once,
-        mpsc::{Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError, sync_channel},
+        Arc, Condvar, Mutex, MutexGuard, Once,
+        mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
     },
     thread::{Builder, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -140,6 +140,10 @@ pub enum WorkerErrorCode {
     CapacityExceeded,
     StaleRequest,
     Unavailable,
+    /// A caller argument this API cannot represent -- today, a timeout whose deadline
+    /// overflows `Instant`. It is a refusal rather than a panic because every other failure on
+    /// this surface arrives through `Result`.
+    InvalidValue,
     Internal,
 }
 
@@ -151,6 +155,7 @@ impl fmt::Display for WorkerErrorCode {
             Self::CapacityExceeded => "capacity_exceeded",
             Self::StaleRequest => "stale_request",
             Self::Unavailable => "unavailable",
+            Self::InvalidValue => "invalid_value",
             Self::Internal => "internal",
         })
     }
@@ -178,6 +183,75 @@ enum Wake {
     Work,
 }
 
+/// The one completion receipt a reader can collect, and the wait that does not hold it.
+///
+/// This was a `sync_channel(1)` whose `Receiver` lived behind a mutex, because a `std`
+/// `Receiver` is not `Sync`. Waiting on it therefore held that mutex for the caller's whole
+/// timeout, and the same mutex is taken by `try_completion` and by the worker thread itself
+/// when it evicts a stale receipt. Measured: a reader arriving behind a two-second wait was
+/// blocked for 1.91 of those seconds. Slicing the wait did not help -- the platform mutex is
+/// not fair, so a waiter that releases and immediately reacquires is handed it straight back.
+///
+/// A condition variable is the primitive that fixes it: `wait_timeout` releases the mutex
+/// while it waits and reacquires only to return. A one-slot queue with manual eviction is
+/// also just a slot whose newest value wins, so saying that directly is simpler than the
+/// channel was.
+///
+/// **Lock order is slot then state, never the reverse.** `publish_latest` is the only place
+/// that holds both; every other path takes one.
+struct SlotState {
+    latest: Option<WorkerCompletion>,
+    /// When `latest` was written, on the same monotonic clock a waiter's deadline comes from.
+    /// The publisher owns this mutex across the whole of `publish_latest`, so a waiter that
+    /// observes a receipt after its deadline cannot tell whether the work met that deadline.
+    /// `wait_for_reconstructed_reconciliation` passes its remaining mandatory-backup budget
+    /// here and treats a receipt as success, so accepting whatever is present lets
+    /// reconstruction succeed after its own deadline.
+    latest_at: Option<Instant>,
+    closed: bool,
+}
+
+struct CompletionSlot {
+    state: Mutex<SlotState>,
+    ready: Condvar,
+}
+
+impl CompletionSlot {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(SlotState {
+                latest: None,
+                latest_at: None,
+                closed: false,
+            }),
+            ready: Condvar::new(),
+        }
+    }
+
+    fn lock(&self) -> Result<MutexGuard<'_, SlotState>, WorkerError> {
+        self.state
+            .lock()
+            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))
+    }
+
+    /// Marks the slot closed and wakes every waiter, so a worker that has stopped producing
+    /// ends their wait instead of leaving them to their timeout. The channel got this from
+    /// disconnection; a slot has to say it.
+    ///
+    /// `closed` lives in the same mutex as `latest` because a waiter checks both and then
+    /// waits, and a condition variable only guarantees the wakeup is not lost when the
+    /// predicate is read under the very lock it waits on. Held apart, this sequence loses it:
+    /// the waiter reads `closed` false and releases that second lock, the worker sets it and
+    /// notifies, and only then does the waiter register -- after the notification, sleeping
+    /// out its whole timeout for a receipt that can never arrive.
+    fn close(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.closed = true;
+        }
+        self.ready.notify_all();
+    }
+}
+
 struct WorkerState {
     coordinator: RefreshCoordinator,
     pending_start: Option<RefreshPermit>,
@@ -189,7 +263,7 @@ pub struct RefreshWorker {
     clock: Arc<dyn Clock>,
     state: Arc<Mutex<WorkerState>>,
     wake_sender: SyncSender<Wake>,
-    result_receiver: Arc<Mutex<Receiver<WorkerCompletion>>>,
+    completions: Arc<CompletionSlot>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -235,11 +309,10 @@ impl RefreshWorker {
             superseded_results: 0,
         }));
         let (wake_sender, wake_receiver) = sync_channel(1);
-        let (result_sender, result_receiver) = sync_channel(1);
-        let result_receiver = Arc::new(Mutex::new(result_receiver));
+        let completions = Arc::new(CompletionSlot::new());
         let worker_state = state.clone();
         let worker_clock = clock.clone();
-        let worker_result_receiver = result_receiver.clone();
+        let worker_completions = completions.clone();
         let thread = Builder::new()
             .name(String::from("tokenmaster-refresh"))
             .spawn(move || {
@@ -250,8 +323,7 @@ impl RefreshWorker {
                         worker_clock,
                         worker_state,
                         wake_receiver,
-                        result_sender,
-                        worker_result_receiver,
+                        worker_completions.clone(),
                         notifier,
                         execute,
                     );
@@ -260,6 +332,11 @@ impl RefreshWorker {
                 {
                     fault_and_abandon(&recovery_state);
                 }
+                // Whatever ended the thread -- shutdown or a panic already contained above --
+                // nothing further will be published. The channel this replaced said that by
+                // disconnecting; a slot has to say it, or a waiter sits out its whole timeout
+                // for a receipt that can no longer arrive.
+                worker_completions.close();
             })
             .map_err(|_| WorkerError::new(WorkerErrorCode::Unavailable))?;
 
@@ -267,7 +344,7 @@ impl RefreshWorker {
             clock,
             state,
             wake_sender,
-            result_receiver,
+            completions,
             thread: Some(thread),
         })
     }
@@ -306,29 +383,64 @@ impl RefreshWorker {
         })
     }
 
+    /// Takes whatever is in the slot, with no deadline to miss.
+    ///
+    /// The publication stamp is cleared with the receipt so a later timed wait cannot compare
+    /// against a stamp whose receipt is gone.
     pub fn try_completion(&self) -> Result<Option<WorkerCompletion>, WorkerError> {
-        let receiver = self
-            .result_receiver
-            .lock()
-            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
-        match receiver.try_recv() {
-            Ok(completion) => Ok(Some(completion)),
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(None),
+        let mut slot = self.completions.lock()?;
+        let completion = slot.latest.take();
+        if completion.is_some() {
+            slot.latest_at = None;
         }
+        Ok(completion)
     }
 
+    /// Waits for a completion without holding the slot while it waits.
+    ///
+    /// `Condvar::wait_timeout` releases the mutex for the duration of the wait and reacquires
+    /// it only to return, which is the whole reason this is a condition variable and not a
+    /// channel behind a lock. The previous shape held that lock for the caller's entire
+    /// timeout, and `try_completion` -- sixty-one call sites -- and the worker thread's own
+    /// eviction path both need it. Slicing the wait was tried first and measured: a competing
+    /// reader still waited 1.91 seconds of a two-second wait, because the platform mutex hands
+    /// itself straight back to a thread that releases and reacquires.
     pub fn wait_for_completion(
         &self,
         timeout: Duration,
     ) -> Result<Option<WorkerCompletion>, WorkerError> {
-        let receiver = self
-            .result_receiver
-            .lock()
-            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
-        match receiver.recv_timeout(timeout) {
-            Ok(completion) => Ok(Some(completion)),
-            Err(RecvTimeoutError::Timeout) => Ok(None),
-            Err(RecvTimeoutError::Disconnected) => Err(WorkerError::new(WorkerErrorCode::Closed)),
+        // Checked: `Instant + Duration` panics on overflow, and a caller expressing "wait
+        // effectively forever" as `Duration::MAX` would crash a public API that reports every
+        // other failure through `Result`. The `recv_timeout` this replaced accepted it.
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or_else(|| WorkerError::new(WorkerErrorCode::InvalidValue))?;
+        let mut state = self.completions.lock()?;
+        loop {
+            // Taken only when it was published by the deadline. A receipt written after it is
+            // left in the slot for whoever asks next rather than reported as work that met a
+            // budget it missed.
+            if state
+                .latest_at
+                .is_some_and(|published| published <= deadline)
+                && let Some(completion) = state.latest.take()
+            {
+                state.latest_at = None;
+                return Ok(Some(completion));
+            }
+            if state.closed {
+                return Err(WorkerError::new(WorkerErrorCode::Closed));
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(None);
+            }
+            let (guard, _timed_out) = self
+                .completions
+                .ready
+                .wait_timeout(state, remaining)
+                .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
+            state = guard;
         }
     }
 
@@ -410,8 +522,7 @@ fn run_worker<F>(
     clock: Arc<dyn Clock>,
     state: Arc<Mutex<WorkerState>>,
     wake_receiver: Receiver<Wake>,
-    result_sender: SyncSender<WorkerCompletion>,
-    result_receiver: Arc<Mutex<Receiver<WorkerCompletion>>>,
+    completions: Arc<CompletionSlot>,
     notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
     mut execute: F,
 ) where
@@ -504,7 +615,7 @@ fn run_worker<F>(
                         }
                         Err(_) => return,
                     };
-                    let _ = publish_latest(&state, &result_sender, &result_receiver, completion);
+                    let _ = publish_latest(&state, &completions, completion);
                     if let Ok(mut worker_state) = state.lock() {
                         worker_state.phase = WorkerPhase::Faulted;
                     }
@@ -538,7 +649,7 @@ fn run_worker<F>(
                 }
                 Err(_) => return,
             };
-            if publish_latest(&state, &result_sender, &result_receiver, completion).is_err() {
+            if publish_latest(&state, &completions, completion).is_err() {
                 return;
             }
             notify_completion(notifier.as_deref(), completion);
@@ -568,37 +679,38 @@ fn notify_completion(
     }
 }
 
+/// Publishes the newest completion receipt, replacing any the reader has not collected.
+///
+/// One slot, newest wins. When a receipt is displaced the worker's superseded counter rises
+/// and the receipt being published carries the new count, which is the behaviour the previous
+/// one-slot channel produced by evicting and retrying -- said here in one step instead of a
+/// send-evict-resend loop.
+///
+/// This is the only place that holds the slot and the state together, and it takes them in
+/// that order. Nothing takes them the other way round.
 fn publish_latest(
     state: &Arc<Mutex<WorkerState>>,
-    sender: &SyncSender<WorkerCompletion>,
-    receiver: &Arc<Mutex<Receiver<WorkerCompletion>>>,
+    completions: &Arc<CompletionSlot>,
     mut completion: WorkerCompletion,
 ) -> Result<(), WorkerError> {
-    loop {
-        match sender.try_send(completion) {
-            Ok(()) => return Ok(()),
-            Err(TrySendError::Disconnected(_)) => {
-                return Err(WorkerError::new(WorkerErrorCode::Closed));
-            }
-            Err(TrySendError::Full(returned)) => {
-                completion = returned;
-                let removed = receiver
-                    .lock()
-                    .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?
-                    .try_recv()
-                    .is_ok();
-                if removed {
-                    let mut state = lock_state(state)?;
-                    state.superseded_results = state
-                        .superseded_results
-                        .checked_add(1)
-                        .filter(|value| *value <= i64::MAX as u64)
-                        .ok_or_else(|| WorkerError::new(WorkerErrorCode::CapacityExceeded))?;
-                    completion = completion.with_superseded_results(state.superseded_results);
-                }
-            }
-        }
+    let mut slot = completions.lock()?;
+    if slot.closed {
+        return Err(WorkerError::new(WorkerErrorCode::Closed));
     }
+    if slot.latest.is_some() {
+        let mut state = lock_state(state)?;
+        state.superseded_results = state
+            .superseded_results
+            .checked_add(1)
+            .filter(|value| *value <= i64::MAX as u64)
+            .ok_or_else(|| WorkerError::new(WorkerErrorCode::CapacityExceeded))?;
+        completion = completion.with_superseded_results(state.superseded_results);
+    }
+    slot.latest = Some(completion);
+    slot.latest_at = Some(Instant::now());
+    drop(slot);
+    completions.ready.notify_all();
+    Ok(())
 }
 
 fn lock_state(state: &Arc<Mutex<WorkerState>>) -> Result<MutexGuard<'_, WorkerState>, WorkerError> {
@@ -649,4 +761,80 @@ fn install_worker_panic_redaction() {
             }
         }));
     });
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod completion_slot_tests {
+    use super::*;
+
+    /// A receipt is accepted for the deadline it met, not for the moment it was noticed.
+    ///
+    /// `publish_latest` owns this mutex for its whole body, so a waiter whose timer expires
+    /// meanwhile cannot reacquire until the publisher is done. Comparing the publication stamp
+    /// against the caller's deadline is what separates a receipt that met the budget from one
+    /// written after it: `wait_for_reconstructed_reconciliation` passes its remaining
+    /// mandatory-backup budget here and treats a receipt as success, so without the stamp
+    /// reconstruction succeeds on evidence that arrived too late.
+    fn observed(publish_after: Duration) -> Option<WorkerCompletion> {
+        let slot = Arc::new(CompletionSlot::new());
+        let completion = WorkerCompletion {
+            request_id: RefreshRequestId::new(1).expect("request id"),
+            outcome: RefreshOutcome::Completed,
+            kind: WorkerCompletionKind::Executed,
+            superseded_results: 0,
+            follow_up_started: false,
+            follow_up_abandoned: false,
+            pending_deadline_exceeded: false,
+            pending_capacity_exceeded: false,
+        };
+        let holder = Arc::clone(&slot);
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(10));
+            let mut state = holder.state.lock().expect("slot");
+            std::thread::sleep(publish_after);
+            state.latest = Some(completion);
+            state.latest_at = Some(Instant::now());
+            std::thread::sleep(Duration::from_millis(200));
+            drop(state);
+            holder.ready.notify_all();
+        });
+
+        let deadline = Instant::now() + Duration::from_millis(60);
+        let mut state = slot.state.lock().expect("slot");
+        let seen = loop {
+            if state
+                .latest_at
+                .is_some_and(|published| published <= deadline)
+                && let Some(value) = state.latest.take()
+            {
+                break Some(value);
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break None;
+            }
+            let (guard, _) = slot.ready.wait_timeout(state, remaining).expect("wait");
+            state = guard;
+        };
+        drop(state);
+        writer.join().expect("writer thread");
+        seen
+    }
+
+    #[test]
+    fn a_receipt_published_before_the_deadline_survives_being_seen_after_it() {
+        assert!(
+            observed(Duration::from_millis(20)).is_some(),
+            "a receipt written before the deadline was discarded for arriving late"
+        );
+    }
+
+    #[test]
+    fn a_receipt_published_after_the_deadline_is_not_reported_as_success() {
+        assert!(
+            observed(Duration::from_millis(180)).is_none(),
+            "work that finished after the deadline was reported as meeting it"
+        );
+    }
 }

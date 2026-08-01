@@ -208,7 +208,9 @@ hooks must therefore be installed before the first worker and not replaced durin
 lifetime. The engine rejects `panic=abort` at compile time rather than silently losing
 fault containment. Rationale: this closes the last P1-C ownership/backpressure/privacy
 gap without an async runtime, per-hint allocation, unbounded result queue, or
-provider/UI coupling.
+provider/UI coupling. ADR-095 later replaces the latest-result channel named here with
+a condition-variable slot, for a measured reason; every other guarantee in this entry
+stands.
 
 ## ADR-016 — Separate banked reset inventory with capability-gated activation
 
@@ -381,9 +383,12 @@ Decision: keep Rust 1.97, Slint 1.17, bundled SQLite, the built-in Codex adapter
 the provider-neutral architecture. After P2 query/data work, deliver the complete
 desktop UI in P3, presentation/localization in P4, and the read-only CLI/MCP automation
 surface in P5. P6 produces the canonical signed `x86_64-pc-windows-msvc` portable ZIP.
-The current GNU lane remains development/M0 evidence until an explicit dual-lane P6
-comparison passes; the workspace-global forced target is then replaced by explicit
-build-script target selection. No automatic updater or installer ships in 1.0.
+The GNU lane this entry deferred to a dual-lane P6 comparison no longer exists:
+`rust-toolchain.toml` pins `x86_64-pc-windows-msvc` as both host and target, so there is
+no second lane and the comparison cannot be run rather than being merely unfinished. The
+workspace-global forced target in `.cargo/config.toml` therefore outlived the reason it
+was scheduled for replacement, and whether it still earns its place is an open question
+and not a consequence of that comparison. No automatic updater or installer ships in 1.0.
 
 The Slint desktop distribution follows the Royalty-free License 2.0 attribution route
 with Help/About and public-download attribution, dependency notices, license policy,
@@ -428,7 +433,8 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v14 and bundled SQLite, applies WAL/query-only/
+connection. It requires the exact current schema, `USAGE_SCHEMA_VERSION`, and bundled
+SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -1030,7 +1036,8 @@ and a reusable UI/CLI/MCP projection boundary without inheriting runtime authori
 
 Decision: P3 uses a new frontend leaf package, `tokenmaster-desktop`. The historical
 `tokenmaster-m0` package remains an architecture/resource probe and is neither renamed,
-promoted, nor added as a production dependency. The production Slint package selects
+promoted, nor added as a production dependency. **It was removed entirely at P0.1**, so the
+separation this clause protected is now structural rather than maintained. The production Slint package selects
 only `winit-software`; the probe opts into FemtoVG explicitly for its diagnostic
 fallback. One `DesktopState` maps the current `ProductSnapshot` into exactly 11 fixed
 route rows and rejects equal or older product generations. Slint receives only copied
@@ -1588,7 +1595,10 @@ prevent cancellation receipts from contradicting durable mutation.
 
 Decision: P3-D.0 uses three release-mode developer contracts and one strict receipt,
 separate from M0 and product release. Backup throughput runs automatic, normal, and
-compact pipelines against deterministic 8 MiB and 96 MiB schema-13 freelist fixtures.
+compact pipelines against deterministic 8 MiB and 96 MiB freelist fixtures built at whatever
+`USAGE_SCHEMA_VERSION` is compiled, because the fixture calls `UsageStore::open`, which
+migrates. The number the fixture kind used to carry named the schema of the day it was
+written and had been wrong for two migrations by the time anyone read it.
 The fixture's intentionally random Git installation salt is normalized only in test so
 its byte length and SHA-256 are reproducible. Streaming evidence uses an absolute 64 MiB
 private-growth ceiling plus 16 MiB large-database headroom rather than comparing two
@@ -1936,7 +1946,11 @@ asset. It emits only Show, Hide, OpenCompact, OpenDashboard, and Quit through th
 single-install `Rc` router with no event queue. One hidden top-level tool window owns
 the icon and fixed menu on the Slint/winit UI thread. An atomic reservation rejects a
 second owner. The production Desktop dependency no longer enables Slint
-`system-tray`; that feature is scoped only to the separate M0 probe.
+`system-tray`; that feature is scoped only to the separate M0 probe. **That probe package
+was removed at P0.1 and is no longer a workspace member**, so what holds the property today is
+simply that `crates/desktop/Cargo.toml` declares no `system-tray` feature -- and nothing
+asserts it. The sentence is left as the decision it was; this is where the reader is told the
+crate it names is gone.
 
 The application shows the main window before deferred tray installation and runs the
 event loop until explicit Quit. Explorer `TaskbarCreated` triggers one checked re-add.
@@ -2130,8 +2144,16 @@ state, or unbounded privacy surface.
 
 ## ADR-087 — Aggregate full rhythm through the shared recent History envelope
 
-Decision: an opted-in recent History request produces two fixed distributions: 24
-local-hour buckets and seven Monday-Sunday buckets. The request is limited to 30 civil
+Decision: an opted-in recent History request produces **three** fixed distributions: 24
+local-hour buckets, seven Monday-Sunday buckets, and the 168 weekday-by-hour cells the two
+marginals cannot reconstruct -- the busiest hour beside the busiest weekday does not say
+Tuesday at 03:00. `load_rhythm` runs all three as grouped passes and checks each against the
+overview, so three views that do not sum alike are three answers and at most one is right.
+**Two is what the Activity projection takes**, and that is the sentence below rather than
+this one: the grid reaches the query layer as `UsageRhythmCell` and stops there, because no
+drawn place for a heatmap exists yet. This clause said "two" for both and was read at two
+different layers by two different readers, which is how this area came to be recorded wrong
+in three directions. The request is limited to 30 civil
 days; query planning walks time without retaining minute rows, compresses local
 occurrences, and rejects more than 768 occurrences or 2,304 aligned rollup segments.
 Each bucket carries the existing aggregate token/event/activity algebra plus elapsed
@@ -2285,3 +2307,71 @@ Rationale: parsing already consumed bytes once, but rebuilding every partial dig
 from the chunk boundary made B event-bounded batches perform quadratic prefix reads.
 An in-memory continuation makes normal proof work linear while a bounded reconstruction
 preserves restart and mutation safety.
+
+## ADR-095 — Wait for a worker completion on a condition variable, not a channel
+
+Decision: `RefreshWorker` publishes completions into one mutex-guarded latest-only slot
+signalled by a condition variable, replacing the capacity-one completion channel ADR-015
+specified. The closed flag and the pending completion live in one state behind one mutex,
+so a waiter reads the predicate under the very lock its wait registers on. A worker thread
+that ends closes the slot and wakes every waiter instead of leaving each to its own
+deadline. `publish_latest` is the only path that holds both the slot and the worker state,
+and it takes them in that order. Supersession accounting, boundedness, path-free values,
+panic containment, and every other guarantee in ADR-015 are unchanged.
+
+Rationale: a `std` `Receiver` is not `Sync`, so it sat behind a mutex, and waiting on it
+meant holding that mutex — the same one every `try_completion` reader takes and the worker
+takes to evict a superseded receipt. A reader arriving behind a two-second wait was measured
+blocked for 1.91 of those seconds, and in the application path the wait is whatever remains
+until a deadline. Slicing it into twenty-millisecond attempts left the same 1.91 seconds,
+because the platform mutex is not fair and a thread that releases and reacquires is handed it
+straight back: the defect is holding the lock across a wait at all, not holding it for long.
+`Condvar::wait_timeout` releases the mutex for the duration of the wait, and a one-slot queue
+with manual eviction was already a newest-wins slot, so naming it one removed a
+send-evict-resend loop as well.
+
+## ADR-096 — Evict ambiguous benefit lots for capacity, never retire them on a schedule
+
+Decision: an ambiguous benefit lot is retained for as long as there is room, and is removed
+only when a **complete** observation needs the room. Removal is recorded as its own change
+kind, `EvictedAmbiguous`, distinct from `RetiredTerminal`. Ordering is deterministic: oldest
+conservative expiry first, unknown expiry last, ties broken by opaque lot identity. On a
+partial observation the capacity error stands, because it is no longer permanent -- the next
+complete observation evicts against the same un-advanced state. No lot is retired on a miss
+count or a wall clock.
+
+Rationale: the retention is not the defect, the permanence is. `reconcile` returns
+`CapacityExceeded` without advancing state, so once the cap is reached every later
+reconciliation fails identically and the inventory cannot recover by itself. On a complete
+observation every retained-but-unobserved lot is ambiguous by construction, and the incoming
+observation is itself capped at the same limit, so evicting ambiguous lots alone always makes
+room. Retaining an ambiguous lot while room exists is what "we stopped seeing it" honestly
+means, and the set is bounded by the cap rather than by a guess.
+
+Three alternatives were rejected for reasons the code states rather than taste. Retiring after
+N consecutive misses needs new persisted per-lot state and makes the constant mean different
+things on a fast poller and a sleeping laptop, while converting unknown into gone on our own
+schedule with no provider evidence. Retiring on the lot's declared expiry looks principled and
+is not available: `BenefitExpiry::conservative_utc_ms` returns `earliest_at_ms` for a bounded
+expiry, so a "certainly expired" test built on it would retire lots that may still be alive,
+and lots whose expiry is unknown would accumulate to the cap regardless. Reusing
+`RetiredTerminal` avoids a schema revision by telling the lie the invariant forbids: that is
+the provider-confirmed end of a lot's story, and eviction is our own capacity decision about
+something still unknown; the two must stay distinguishable wherever either is shown, and a
+kind label is shown alone.
+
+Silent eviction is not an option: current inventory is a projection over immutable change
+points, the store checks scope row counts against captured rows, and revision continuity on
+reappearance rides the newest-change-per-lot cursor, so a lot cannot leave the current set
+without a change row.
+
+Reminders are unaffected, by inspection rather than assumption: `schedule_reminders` skips
+every lot whose state is not `Available`, so an ambiguous lot already schedules nothing and
+eviction cannot drop anything the user is owed.
+
+Cost, stated because it decides the sequencing: the new change kind is a schema revision with
+an exact migration, plus the `CHECK` constraint, the kind text maps on both the write and read
+sides, and the hydration query that restores a reappearing lot's revision chain. This is a
+migration ladder, and the delivery plan's own abort rule keeps one of those from holding the
+first release hostage, so the decision is settled here and the implementation is scheduled
+after the tag.

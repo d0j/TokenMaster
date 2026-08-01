@@ -283,7 +283,8 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v14 and bundled SQLite identity,
+writable open/migration path. It requires exactly `USAGE_SCHEMA_VERSION` and bundled
+SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
@@ -391,7 +392,8 @@ batch capped at 401 targets and 512 returned price keys. Breakdown and session b
 retain at most 256 targets and the same global 512-key detail cap with exact per-target
 omitted counts. No result issues one SQL query per visible point or session.
 
-The joined product status capture is one exact scalar read model over schema v14. One
+The joined product status capture is one exact scalar read model over an archive at
+exactly `USAGE_SCHEMA_VERSION`. One
 short deferred transaction binds usage publication/dataset/aggregate state, independent
 quota and benefit revisions, and independent Git publication state. It returns only
 owned counts, checked revisions, quality/freshness inputs, aggregate progress, and
@@ -928,7 +930,7 @@ bounded refresh completes; retry reuses the promoted archive and never reruns co
 archive replacement.
 
 Task 17 closes the bounded data-plane evidence without adding a production schema or
-public payload. The release-only fixtures normalize the schema-13 installation salt to
+public payload. The release-only fixtures normalize the current-schema installation salt to
 a fixed test value and bind exact byte length plus SHA-256 for 8 MiB and 96 MiB
 freelist databases. Package I/O remains 64 KiB, the Zstd decoder window remains at most
 8 MiB, and sampled private growth remains within 64 MiB with more than 16 MiB headroom

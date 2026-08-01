@@ -344,6 +344,70 @@ fn assert_fixture_processes_exited(fixture: &Fixture) {
     );
 }
 
+#[test]
+fn a_receipt_entry_reaches_the_file_in_one_write_so_a_killed_fixture_cannot_tear_a_line() {
+    #[derive(Default)]
+    struct Counting(Vec<Vec<u8>>);
+
+    impl std::io::Write for Counting {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.push(buf.to_vec());
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let pid = std::process::id();
+    let args = vec![
+        "rev-parse".to_string(),
+        "--path-format=absolute".to_string(),
+    ];
+    let mut sink = Counting::default();
+    support::write_receipt_entry(&mut sink, pid, &args).expect("receipt entry");
+
+    // Deadline tests kill this fixture on purpose. `writeln!` issues one write per piece of
+    // its format string, so a process stopped between "pid=" and the digits leaves a torn
+    // line in the file forever -- measured at six writes for the first two lines alone.
+    assert_eq!(
+        sink.0.len(),
+        1,
+        "a receipt entry must reach the file in exactly one write"
+    );
+    let entry = String::from_utf8(sink.0.concat()).expect("receipt entry is utf-8");
+    assert!(
+        entry.starts_with(&format!("pid={pid}\n")),
+        "receipt entry must open with a complete pid line, got {entry:?}"
+    );
+    assert!(entry.ends_with('\n'), "receipt entry must end a line");
+
+    // The sink above always consumes the whole buffer, so it cannot see the case the review
+    // bot named: under a short write `write_all` calls `write` again, and every extra call is
+    // another moment at which a killed fixture tears the entry or a sibling interleaves. A
+    // short write is now a reported error rather than a silent retry.
+    #[derive(Default)]
+    struct Short(usize);
+
+    impl std::io::Write for Short {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0 += 1;
+            Ok(buf.len() / 2)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut short = Short::default();
+    let error = support::write_receipt_entry(&mut short, pid, &args)
+        .expect_err("a short write must be reported, not retried");
+    assert_eq!(error.kind(), std::io::ErrorKind::WriteZero);
+    assert_eq!(short.0, 1, "a short write must not be retried");
+}
+
 fn assert_receipt_pids_exited(receipt: &str, executable: &Path) {
     for pid in receipt
         .lines()

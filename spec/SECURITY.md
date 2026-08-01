@@ -170,9 +170,11 @@ The absence of network, browser-automation, and async-client crates is enforced 
 `deny.toml`'s `[bans]` list through `scripts/verify-dependency-policy.ps1`, which the
 quality gate runs. Source-level endpoint, cookie, shell, and socket authority is
 carried by the crate's own contracts rather than a separate script that scans
-their strings. The current gate covers 76 production dependency packages,
-43 production files, and three current release libraries with zero forbidden
-matches. This proves the quota core remains offline and separate from provider I/O.
+their strings. What the gate covered on any given run is not restated here:
+`verify-dependency-policy.ps1` runs `cargo-deny` over the locked workspace with all
+features and writes `reports/dependency-policy.json`, whose commit, policy and lock
+digests are the answer for that commit. This proves the quota core remains offline and
+separate from provider I/O.
 
 The implemented Codex quota transport uses only an exact caller-resolved native
 executable plus fixed `app-server --stdio` arguments. It performs no PATH search,
@@ -195,10 +197,9 @@ fallback is permitted.
 The production dependency closure is constrained by `deny.toml`'s `[bans]` list,
 enforced on every gate run. The single fixed command and argument construction, and the
 absence of browser, cookie, private-endpoint, credential-file, shell, socket, and
-logging authority, are carried by the Codex transport's own contracts rather than the release
-library, and scans its strings. The current gate covers 72 production dependency
-packages, 22 production library source files, and one release library with zero
-forbidden matches. A separate isolated Windows gate repeatedly exercises success,
+logging authority, are carried by the Codex transport's own contracts rather than a
+separate script that scans its strings, exactly as above. A separate isolated Windows gate
+repeatedly exercises success,
 JSON-RPC failure, and forced timeout; private memory and handle/thread/USER/GDI
 topology return to a stable plateau and no task-owned child remains.
 
@@ -718,8 +719,13 @@ watcher ownership, joins the scheduler closure and its worker reference, then ca
 and joins the worker. Combined Windows evidence requires handles and threads to return
 to baseline; fixed snapshots and Debug expose no source/archive paths or inner errors.
 
-The deterministic worker uses only capacity-one standard-library wake/result
-channels and the constant-state coordinator. External clock and execution callbacks
+The deterministic worker uses one capacity-one standard-library wake channel, a
+latest-only completion slot behind a mutex and condition variable, and the
+constant-state coordinator. The result half was a capacity-one channel whose
+non-`Sync` `Receiver` had to live behind a mutex, so waiting on it held that mutex for
+the caller's whole timeout; the slot's `wait_timeout` releases it by construction. A
+completion is accepted only when it was published by the waiting caller's deadline, so
+work that finished late is a timeout rather than a success. External clock and execution callbacks
 run outside the worker mutex. Stale cancellation cannot affect a newer request;
 shutdown and `Drop` cancel the exact active permit and join the owned thread. Caught
 callback panic publishes only fixed `failed`/`panicked` state, abandons the single
@@ -729,7 +735,7 @@ installed on first spawn: non-worker panics retain the prior application hook, w
 worker panic payload/location output is suppressed. Application code MUST compose its
 custom hook before worker creation and MUST NOT replace the hook while workers exist.
 No panic payload, wrapped error, path, checkpoint, or provider content enters the
-completion channel, snapshot, archive, or diagnostics. `tokenmaster-engine` fails
+completion slot, snapshot, archive, or diagnostics. `tokenmaster-engine` fails
 compilation under `panic=abort`; only unwind builds can provide the required contained
 fault transition.
 
@@ -1080,7 +1086,10 @@ The sole state/store package bridge gives source errors precedence over destinat
 errors and irreversibly discards the unpublished stage on replacement, truncation,
 append, cancellation, codec, seal, or destination failure.
 
-Maintenance owns one capacity-one worker and one capacity-one scheduler wake channel.
+Maintenance owns one capacity-one scheduler wake channel and one latest-only completion
+slot behind a mutex and condition variable, the same shape the deterministic worker uses
+and with the same deadline rule: a completion published after the caller's deadline is a
+timeout, not a success.
 Ten thousand hints retain one active request and one merged follow-up, not attacker-
 proportional queue nodes. Only one shared scheduler timeout exists. Worker panics are
 contained behind the existing thread-local redaction pattern; `Debug`, completion,
@@ -1312,8 +1321,8 @@ and atomically promotes under the fixed writer guard. Resume treats journal back
 absence as valid only for that reconstruction mode.
 
 The reconstructed archive is not healthy authority by itself. Application forces one
-bounded recovery-urgency source refresh and waits through the worker's condition-based
-completion channel before starting healthy backup maintenance. Failure or timeout
+bounded recovery-urgency source refresh and waits on the worker's condition-based
+completion slot before starting healthy backup maintenance. Failure or timeout
 returns to safe mode with no fabricated data. The durable UI receipt is path-free and
 must explicitly state that quota, reset-credit, reminder, and Git history are
 non-reconstructible and unavailable. It never exposes quarantined bytes, filenames,

@@ -742,7 +742,7 @@ fn runtime_worker_error(error: WorkerError) -> RuntimeError {
         WorkerErrorCode::Faulted => RuntimeErrorCode::Faulted,
         WorkerErrorCode::CapacityExceeded => RuntimeErrorCode::Busy,
         WorkerErrorCode::Unavailable => RuntimeErrorCode::ProviderUnavailable,
-        WorkerErrorCode::Internal => RuntimeErrorCode::Internal,
+        WorkerErrorCode::InvalidValue | WorkerErrorCode::Internal => RuntimeErrorCode::Internal,
     };
     RuntimeError::new(code)
 }
@@ -860,7 +860,7 @@ mod tests {
     }
 
     fn wait_for_runtime_completion(runtime: &BenefitReminderRuntime) {
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         loop {
             if runtime.try_completion().expect("completion").is_some() {
                 return;

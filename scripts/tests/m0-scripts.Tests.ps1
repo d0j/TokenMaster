@@ -35,8 +35,12 @@ Describe "TokenMaster M0 script contracts" {
     # only elapses when something is already broken.
     It "gives every test hang bound at least thirty seconds" {
         $offenders = @()
+        # Every `.rs` under `crates`, not only the ones under a `tests` directory. The filter
+        # that used to sit here made this check blind to sixteen bounds below thirty seconds
+        # living in `#[cfg(test)]` modules inside `src` -- and one of them, a two-second wait
+        # in `notification_tests.rs`, decided a gate run twice. It passed alone in 0.01 s and
+        # timed out under the gate's own load, which is what a short bound on a spin does.
         Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'crates') -Recurse -File -Filter '*.rs' |
-            Where-Object { $_.FullName -match '\\tests\\' } |
             ForEach-Object {
                 $text = Get-Content -LiteralPath $_.FullName -Raw
                 foreach ($match in [regex]::Matches(
@@ -48,6 +52,44 @@ Describe "TokenMaster M0 script contracts" {
                 }
             }
         $offenders -join '; ' | Should -BeExactly ''
+    }
+
+    # Every type that holds a path writes its own `Debug` and renders `[redacted]`; a derived
+    # one would print the absolute path, and the product invariant forbids exposing those.
+    # What made this worth pinning is that the assertions written to catch it could not:
+    # `Debug` escapes a backslash as two, so about thirty checks comparing a raw Windows path
+    # against `format!("{value:?}")` ask whether `C:\Users` appears in text spelling it
+    # `C:\\Users`, which it never can. This rule guards the property those checks only
+    # appeared to guard. The floor is the second half of it: a scan that silently stops
+    # matching reports zero offenders and reads exactly like a clean tree.
+    It "keeps every path-holding type out of a derived Debug" {
+        $offenders = @()
+        $scanned = 0
+        $derive = '#\[derive\([^)]*\bDebug\b[^)]*\)\]\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\([^)]*\))?\s+)?'
+        # Two spellings, and the first version of this rule saw only the first. A tuple struct
+        # has no braces at all -- `#[derive(Debug)] struct Private(PathBuf);` -- so a pattern
+        # requiring `{` reported zero offenders across 51 such items while never looking at one.
+        # The Codex reviewer caught that, and it is the same single-shape blindness this rule
+        # exists to guard against.
+        $shapes = @(
+            $derive + '(?:struct|enum)\s+(\w+)[^{;]*\{(?<body>[^}]*)\}'
+            $derive + 'struct\s+(\w+)\s*(?:<[^>]*>)?\s*\((?<body>[^;]*)\)\s*;'
+        )
+        $pathy = '(?:PathBuf|OsString|&(?:''\w+\s+)?(?:Path|OsStr))\b'
+        Get-ChildItem -LiteralPath (Join-Path $RepositoryRoot 'crates') -Recurse -File -Filter '*.rs' |
+            ForEach-Object {
+                $text = Get-Content -LiteralPath $_.FullName -Raw
+                foreach ($shape in $shapes) {
+                    foreach ($match in [regex]::Matches($text, $shape)) {
+                        $scanned++
+                        if ($match.Groups['body'].Value -match $pathy) {
+                            $offenders += "$($_.Name): $($match.Groups[1].Value)"
+                        }
+                    }
+                }
+            }
+        $offenders -join '; ' | Should -BeExactly ''
+        $scanned | Should -BeGreaterThan 800
     }
 
     # A push touching only one of these files changed what the build produces while
@@ -138,15 +180,29 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match '(?i)\bgo\.exe\b|\bnode\.exe\b|\bpython\.exe\b'
     }
 
-    It "verification runs the surviving script contracts" {
+    It "verification enumerates its Pester suites instead of naming them" {
         $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
-        $Text | Should -Match 'm0-scripts\.Tests\.ps1'
-        $Text | Should -Match 'immutable-actions\.Tests\.ps1'
-        $Text | Should -Match 'release-artifact-workflow\.Tests\.ps1'
-        $Text | Should -Match 'dependency-policy\.Tests\.ps1'
-        $Text | Should -Match 'audit-clean-root\.Tests\.ps1'
-        $Text | Should -Match 'product-package\.Tests\.ps1'
-        $Text | Should -Match 'validate-p3e-interactive\.Tests\.ps1'
+        # Every suite on disk is run by construction now, so what is guarded here is that it
+        # stays that way. Two shapes failed before: a hand-written list that named seven of
+        # eight, and then a substring match over this script's text, which a `#` in front of a
+        # stage satisfied from inside the comment it created. A literal suite path in an
+        # Invoke-PesterChecked call is that shape returning, so it is forbidden outright.
+        #
+        # **The third shape was this test.** `(?s)Get-ChildItem.{0,200}?\*\.Tests\.ps1` matches
+        # the enumeration wherever it sits -- including inside a comment, so commenting out the
+        # whole `$PesterSuites`/`foreach` block left this green while the gate ran no Pester
+        # suite at all, and the independent floor below still counted eight files on disk.
+        # Reported by the review bot. The three anchors are at line start with no leading `#`
+        # or whitespace, so a commented line cannot satisfy them, and the third one requires
+        # the runtime guard that compares the run's own recorded stages against the suites it
+        # enumerated -- which is the check that does not read text at all.
+        $Text | Should -Match '(?m)^\$PesterSuites = @\(Get-ChildItem'
+        $Text | Should -Match '(?m)^foreach \(\$Suite in \$PesterSuites\) \{'
+        $Text | Should -Match '(?m)^if \(\$MissingPesterStages\.Count -gt 0\) \{'
+        $Text | Should -Not -Match 'Invoke-PesterChecked[^\r\n]*\.Tests\.ps1'
+        $Suites = @(Get-ChildItem -LiteralPath (Join-Path $ScriptsRoot "tests") `
+                -Filter "*.Tests.ps1" -File)
+        $Suites.Count | Should -BeGreaterOrEqual 8
         $Text | Should -Match 'validate-immutable-actions\.ps1'
         $Text | Should -Match 'verify-dependency-policy\.ps1'
     }

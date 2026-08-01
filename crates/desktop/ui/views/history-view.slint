@@ -17,6 +17,13 @@ component HistoryHeaderCard inherits Rectangle {
     in property <string> total-tokens;
     in property <string> cost;
     in property <string> events;
+    in property <string> input-tokens-availability;
+    in property <string> cached-tokens-availability;
+    in property <string> output-tokens-availability;
+    in property <string> reasoning-tokens-availability;
+    in property <string> total-tokens-availability;
+    in property <string> cost-availability;
+    in property <string> events-availability;
     in property <string> range-preset;
     in property <bool> range-pending;
     callback request-range-1();
@@ -107,29 +114,29 @@ component HistoryHeaderCard inherits Rectangle {
         Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: UiTokens.text-body; }
         HorizontalLayout {
             spacing: UiTokens.space;
-            MetricValue { label: @tr("Total tokens"); value: root.total-tokens; availability: root.total-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Cost"); value: root.cost; availability: root.cost == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Total tokens"); value: root.total-tokens; availability: root.total-tokens-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Cost"); value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Events"); value: root.events; availability: root.events-availability; horizontal-stretch: 1; }
         }
         if root.narrow: VerticalLayout {
             spacing: UiTokens.space-xs;
             HorizontalLayout {
                 spacing: UiTokens.space;
-                MetricValue { label: @tr("Input"); value: root.input-tokens; availability: root.input-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-                MetricValue { label: @tr("Cached"); value: root.cached-tokens; availability: root.cached-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+                MetricValue { label: @tr("Input"); value: root.input-tokens; availability: root.input-tokens-availability; horizontal-stretch: 1; }
+                MetricValue { label: @tr("Cached"); value: root.cached-tokens; availability: root.cached-tokens-availability; horizontal-stretch: 1; }
             }
             HorizontalLayout {
                 spacing: UiTokens.space;
-                MetricValue { label: @tr("Output"); value: root.output-tokens; availability: root.output-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-                MetricValue { label: @tr("Reasoning"); value: root.reasoning-tokens; availability: root.reasoning-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+                MetricValue { label: @tr("Output"); value: root.output-tokens; availability: root.output-tokens-availability; horizontal-stretch: 1; }
+                MetricValue { label: @tr("Reasoning"); value: root.reasoning-tokens; availability: root.reasoning-tokens-availability; horizontal-stretch: 1; }
             }
         }
         if !root.narrow: HorizontalLayout {
             spacing: UiTokens.space;
-            MetricValue { label: @tr("Input"); value: root.input-tokens; availability: root.input-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Cached"); value: root.cached-tokens; availability: root.cached-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Output"); value: root.output-tokens; availability: root.output-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Reasoning"); value: root.reasoning-tokens; availability: root.reasoning-tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Input"); value: root.input-tokens; availability: root.input-tokens-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Cached"); value: root.cached-tokens; availability: root.cached-tokens-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Output"); value: root.output-tokens; availability: root.output-tokens-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Reasoning"); value: root.reasoning-tokens; availability: root.reasoning-tokens-availability; horizontal-stretch: 1; }
         }
     }
 }
@@ -288,6 +295,13 @@ export component HistoryView inherits Rectangle {
     in property <string> total-tokens;
     in property <string> cost;
     in property <string> events;
+    in property <string> input-tokens-availability;
+    in property <string> cached-tokens-availability;
+    in property <string> output-tokens-availability;
+    in property <string> reasoning-tokens-availability;
+    in property <string> total-tokens-availability;
+    in property <string> cost-availability;
+    in property <string> events-availability;
     in property <string> range-preset: "recent_30_days";
     in property <bool> range-pending: false;
     callback request-range-1();
@@ -319,6 +333,13 @@ export component HistoryView inherits Rectangle {
                 total-tokens: root.total-tokens;
                 cost: root.cost;
                 events: root.events;
+                input-tokens-availability: root.input-tokens-availability;
+                cached-tokens-availability: root.cached-tokens-availability;
+                output-tokens-availability: root.output-tokens-availability;
+                reasoning-tokens-availability: root.reasoning-tokens-availability;
+                total-tokens-availability: root.total-tokens-availability;
+                cost-availability: root.cost-availability;
+                events-availability: root.events-availability;
                 range-preset: root.range-preset;
                 range-pending: root.range-pending;
                 request-range-1 => { root.request-range-1(); }

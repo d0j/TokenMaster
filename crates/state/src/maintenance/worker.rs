@@ -99,6 +99,13 @@ struct WorkerState {
     pending_start: Option<MaintenancePermit>,
     phase: MaintenanceWorkerPhase,
     latest_completion: Option<MaintenanceCompletion>,
+    /// When `latest_completion` was written, on the same monotonic clock a waiter's deadline
+    /// comes from. A waiter cannot tell the two cases apart without it: the publisher holds
+    /// this mutex across its whole finish block, so an observation made after the deadline
+    /// says nothing about whether the work finished before it. Accepting whatever is present
+    /// reports late work as successful and skips the mandatory-backup timeout path; refusing
+    /// whatever is observed late discards a receipt that did meet the deadline.
+    latest_completion_at: Option<Instant>,
     latest_guard_completion: Option<MaintenanceCompletion>,
     waited_root: Option<MaintenanceRequestId>,
     successful_count: u64,
@@ -182,6 +189,7 @@ impl MaintenanceWorker {
             pending_start: None,
             phase: MaintenanceWorkerPhase::Running,
             latest_completion: None,
+            latest_completion_at: None,
             latest_guard_completion: None,
             waited_root: None,
             successful_count: 0,
@@ -233,6 +241,9 @@ impl MaintenanceWorker {
             if let Some(completion) = state.latest_completion.filter(|completion| {
                 completion.root_request_id() == root_request_id
                     && completion.outcome() != MaintenanceOutcome::RetryScheduled
+                    && state
+                        .latest_completion_at
+                        .is_some_and(|published| published <= deadline)
             }) {
                 if state.waited_root == Some(root_request_id) {
                     state.waited_root = None;
@@ -264,12 +275,21 @@ impl MaintenanceWorker {
                 .wait_timeout(state, remaining)
                 .map_err(|_| StateError::internal_invariant())?;
             state = next;
-            if wait.timed_out() {
-                if state.waited_root == Some(root_request_id) {
-                    state.waited_root = None;
-                }
-                return Ok(None);
-            }
+            // A timeout is not an answer, it is a reason to look again. `run_worker` publishes
+            // `latest_completion` and signals while still holding this mutex, so a waiter whose
+            // timer has expired must reacquire it before `wait_timeout` can return -- and the
+            // window in which the wait reports timed-out while the completion is already
+            // published is the width of the worker's whole finish block. Returning `Ok(None)`
+            // there discarded a receipt the caller had already been handed: `submit_and_wait`
+            // turns it into `unavailable` and `wait_for_mandatory_backup` reads that as a failed
+            // mandatory backup, refusing a migration while a `Published` completion for that
+            // exact root sits in the state -- unclaimable, because the same branch cleared
+            // `waited_root` on its way out.
+            //
+            // So the loop simply goes round. The top re-reads the completion, the fault and the
+            // stop, and `remaining.is_zero()` immediately below performs the identical give-up
+            // with the identical cleanup, one iteration later.
+            let _ = wait;
         }
     }
 
@@ -488,6 +508,7 @@ fn run_worker<F>(
                 worker.failure_count = failure_count;
             }
             worker.latest_completion = Some(completion);
+            worker.latest_completion_at = Some(Instant::now());
             if completion.purpose().blocks_mutation() {
                 worker.latest_guard_completion = Some(completion);
             }
@@ -558,4 +579,123 @@ fn install_panic_redaction() {
             }
         }));
     });
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    /// A timeout is not an answer when the answer arrived during it.
+    ///
+    /// `run_worker` publishes `latest_completion` and signals while still holding this mutex,
+    /// so a waiter whose timer has expired must reacquire it before `wait_timeout` can return.
+    /// The window in which the wait reports timed-out while the completion is already published
+    /// is therefore the width of the worker's whole finish block. The race is made
+    /// deterministic here by holding the guard from a third thread past the caller's deadline,
+    /// which is exactly what that finish block does to a waiter.
+    #[test]
+    fn a_completion_published_during_the_timeout_is_not_discarded() {
+        let worker = MaintenanceWorker::spawn(MaintenanceSourceState::Healthy, true, |permit| {
+            permit.begin_publication().expect("publication boundary");
+            MaintenanceExecution::Published { bytes: 64 }
+        })
+        .expect("spawn maintenance worker");
+
+        let root = match worker.submit(MaintenancePurpose::Manual) {
+            MaintenanceAdmission::Started(permit) => permit.root_request_id(),
+            admission => panic!("unexpected admission: {admission:?}"),
+        };
+        let completion = worker
+            .wait_for_completion(root, Duration::from_secs(30))
+            .expect("first wait")
+            .expect("a published completion");
+
+        // Cleared so the predicate is false when the caller enters, then republished by a
+        // holder that keeps the guard well past the caller's deadline.
+        clear_completion(&worker);
+
+        // The ordering is the whole test, and two earlier versions of it got this wrong in
+        // opposite directions. Notifying *before* the deadline makes the condition variable
+        // report the wait as notified rather than timed out, so the branch under test is never
+        // entered. Publishing *after* the deadline proves the opposite of the intended claim:
+        // that late work is accepted, which is its own defect and is the test below. What is
+        // wanted here is a completion written **before** the deadline and only observable
+        // after it, which is what the worker's finish block produces when it wins the race
+        // with a waiter's timer: it publishes, then keeps the mutex through the rest of the
+        // block while the waiter's timer expires against a mutex it cannot reacquire.
+        let observed = race(&worker, completion, Duration::from_millis(20));
+        assert_eq!(
+            observed,
+            Some(completion),
+            "a completion published before the deadline was discarded for being seen after it"
+        );
+    }
+
+    /// The deadline is a claim about when the work finished, not about when it was noticed.
+    ///
+    /// Accepting whatever happens to be published by the time the mutex comes free reports a
+    /// pre-migration backup as successful after `MANDATORY_BACKUP_TIMEOUT`, so
+    /// `wait_for_mandatory_backup` lets a migration proceed on evidence that arrived too late
+    /// instead of taking its timeout path. The publication stamp is what separates this from
+    /// the case above; without it the two are the same observation.
+    #[test]
+    fn a_completion_published_after_the_deadline_is_not_reported_as_success() {
+        let worker = MaintenanceWorker::spawn(MaintenanceSourceState::Healthy, true, |permit| {
+            permit.begin_publication().expect("publication boundary");
+            MaintenanceExecution::Published { bytes: 64 }
+        })
+        .expect("spawn maintenance worker");
+
+        let root = match worker.submit(MaintenancePurpose::Manual) {
+            MaintenanceAdmission::Started(permit) => permit.root_request_id(),
+            admission => panic!("unexpected admission: {admission:?}"),
+        };
+        let completion = worker
+            .wait_for_completion(root, Duration::from_secs(30))
+            .expect("first wait")
+            .expect("a published completion");
+
+        clear_completion(&worker);
+
+        let observed = race(&worker, completion, Duration::from_millis(180));
+        assert_eq!(
+            observed, None,
+            "work that finished after the deadline was reported as meeting it"
+        );
+    }
+
+    fn clear_completion(worker: &MaintenanceWorker) {
+        let mut state = worker.submitter.state.lock().expect("state");
+        state.latest_completion = None;
+        state.latest_completion_at = None;
+    }
+
+    /// Holds the state mutex across a 60 ms caller deadline and writes the completion at
+    /// `publish_after`, notifying only on release so the caller's wait really does time out.
+    fn race(
+        worker: &MaintenanceWorker,
+        completion: MaintenanceCompletion,
+        publish_after: Duration,
+    ) -> Option<MaintenanceCompletion> {
+        let state = Arc::clone(&worker.submitter.state);
+        let signal = Arc::clone(&worker.submitter.completion);
+        let root = completion.root_request_id();
+        let holder = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(10));
+            let mut held = state.lock().expect("state");
+            std::thread::sleep(publish_after);
+            held.latest_completion = Some(completion);
+            held.latest_completion_at = Some(Instant::now());
+            std::thread::sleep(Duration::from_millis(200));
+            drop(held);
+            signal.notify_all();
+        });
+
+        let observed = worker
+            .wait_for_completion(root, Duration::from_millis(60))
+            .expect("second wait");
+        holder.join().expect("holder thread");
+        observed
+    }
 }

@@ -56,18 +56,24 @@ fails the parent. The existing +8 handle and +1 thread/USER/GDI bounds remain ma
 raising them to absorb unrelated process churn is invalid evidence.
 
 The canonical Windows 1.0 artifact is a signed `x86_64-pc-windows-msvc` portable ZIP.
-The existing GNU target is a development and M0 evidence lane only until P6 completes
-an explicit dual-lane functional/resource/package comparison. The release build does
-not inherit a workspace-global target implicitly.
+That is the only target there is: `rust-toolchain.toml` pins both the host triple and the
+target list to it and no GNU lane remains, so the dual-lane comparison this paragraph once
+deferred to P6 has no second lane to compare. The release build does not inherit a
+workspace-global target implicitly.
 
 Before packaging, the executable must be the exact canonical MSVC release output and
-pass executable inspection for x64 machine type, Windows GUI subsystem, and absence of
-dynamic Visual C++/Universal CRT imports. This binary-portability receipt does not prove
-package provenance, deterministic contents, signing, clean-room behavior, or release
-acceptance.
+pass executable inspection for x64 machine type, Windows GUI subsystem, and imports
+bounded to Windows-owned runtime libraries plus exactly the set the package carries.
+"Absence of dynamic Visual C++/Universal CRT imports" is what this clause used to say and
+would now reject every genuine build: the move to Skia forced the dynamic CRT, so three
+runtime libraries ship beside the executable deliberately. `validate-msvc-product-binary.ps1`
+holds the shipped set and `Get-ProductPackageExpectedFile` holds the package contents. This
+binary-portability receipt does not prove package provenance, deterministic contents,
+signing, clean-room behavior, or release acceptance.
 
 The unsigned package producer now binds a clean commit to the repository-owned canonical
-MSVC target, a closed nine-file portable stage, deterministic ZIP ordering/timestamps,
+MSVC target, the closed portable stage `Get-ProductPackageExpectedFile` names, deterministic
+ZIP ordering/timestamps,
 per-file SHA-256 manifest, generated dependency notices/license texts, and CycloneDX
 SBOM. Its local extracted-package smoke is development evidence only. The ignored
 artifact and receipt must be regenerated after every commit; neither is signing,

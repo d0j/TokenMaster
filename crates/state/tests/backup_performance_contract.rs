@@ -322,13 +322,13 @@ fn deterministic_backup_profiles_are_streaming_bounded_and_single_threaded() {
     let receipt = json!({
         "schema": "tokenmaster.p3d0.backup-performance.v1",
         "fixture_small": {
-            "kind": "schema13-freelist-v1",
+            "kind": "current-schema-freelist-v1",
             "target_mib": SMALL_FIXTURE_MIB,
             "archive_bytes": small.archive_bytes,
             "sha256": hex(&small.fixture_sha256),
         },
         "fixture_large": {
-            "kind": "schema13-freelist-v1",
+            "kind": "current-schema-freelist-v1",
             "target_mib": LARGE_FIXTURE_MIB,
             "archive_bytes": large.archive_bytes,
             "sha256": hex(&large.fixture_sha256),

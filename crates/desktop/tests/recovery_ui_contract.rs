@@ -293,21 +293,632 @@ fn recovery_ui_source_keeps_authority_bounded_and_accessible() {
             "missing UI contract: {required}"
         );
     }
-    for forbidden in [
-        "path",
-        "filename",
-        "file-name",
-        "Timer {",
-        "animate ",
-        "animation-",
-        "std::fs",
-        "rusqlite",
+    // Retention and authority are checked across the whole tree by
+    // `no_slint_source_can_name_a_path_or_reach_past_the_bridge`, and animation keywords by
+    // `animates`. What stays here is the required list above: it asserts these five views'
+    // own contract, which is a different question from a tree-wide rule.
+}
+
+/// Every Slint source, read from disk with line endings normalised.
+///
+/// From disk rather than a list of `include_str!` names, for the reason the localization
+/// contract gives: a list has to be remembered, and forgetting is the failure being guarded
+/// against. Two rules in this file were written against five names while the tree held
+/// twenty-five, and both were blind to the file that mattered.
+fn slint_sources() -> Vec<(String, String)> {
+    fn collect(directory: &std::path::Path, sources: &mut Vec<(String, String)>) {
+        for entry in std::fs::read_dir(directory).expect("read ui directory") {
+            let path = entry.expect("directory entry").path();
+            if path.is_dir() {
+                collect(&path, sources);
+            } else if path.extension().is_some_and(|value| value == "slint") {
+                let text = std::fs::read_to_string(&path).expect("read slint source");
+                sources.push((path.display().to_string(), text.replace("\r\n", "\n")));
+            }
+        }
+    }
+
+    let mut sources = Vec::new();
+    collect(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("ui"),
+        &mut sources,
+    );
+    assert!(
+        sources.len() > 20,
+        "expected the whole Slint tree, found {} files",
+        sources.len()
+    );
+    sources
+}
+
+/// The retention half of the rule above, which stayed on five files when the animation half
+/// moved to the whole tree.
+///
+/// Twenty views had no guard against an absolute path reaching the interface, and that is
+/// where the deferred Live Sessions and project-alias work is heading -- both want to name the
+/// repository a row belongs to. The invariant is the first one in `CLAUDE.md`: never persist
+/// or expose absolute user paths.
+#[test]
+fn no_slint_source_can_name_a_path_or_reach_past_the_bridge() {
+    for (source, text) in slint_sources() {
+        for line in text.lines() {
+            let code = code_of(line);
+            for forbidden in ["path", "filename", "file-name", "std::fs", "rusqlite"] {
+                assert!(
+                    !code.contains(forbidden),
+                    "forbidden UI authority or retention {forbidden:?} in {source}: {:?}",
+                    line.trim()
+                );
+            }
+        }
+    }
+}
+
+/// The whole-tree animation scan reads first-party sources only, and the animation a refactor
+/// would reach for lives in the Slint crate: `std-widgets`' `Spinner` is built on `SpinnerBase`,
+/// whose source reads `animation-tick()`. Seventeen of the twenty-five views already import
+/// from `std-widgets.slint`, so adding `Spinner` to one of them is a single word, and the
+/// first-party scan would find zero animations rather than a second one.
+///
+/// The set is closed in the same way the msgid arrays and `Get-ProductPackageExpectedFile`
+/// are: a new widget has to be added here deliberately, and one that animates cannot arrive
+/// by accident.
+#[test]
+fn the_widgets_imported_from_the_slint_library_are_a_closed_set() {
+    const ALLOWED: [&str; 8] = [
+        "AboutSlint",
+        "Button",
+        "CheckBox",
+        "ComboBox",
+        "LineEdit",
+        "Palette",
+        "ScrollView",
+        "SpinBox",
+    ];
+
+    let mut seen = std::collections::BTreeSet::new();
+    for (path, text) in slint_sources() {
+        // Flattened, because an import may be written over several lines and this loop used to
+        // inspect only the one carrying `from`. A closing brace on that line with the names
+        // above it left the whole set unread and the closed set unenforced.
+        let flat = dense(&text);
+        let segments: Vec<&str> = flat.split("from\"std-widgets.slint\"").collect();
+        for segment in segments.iter().take(segments.len().saturating_sub(1)) {
+            let Some((_, names)) = segment.rsplit_once("import") else {
+                continue;
+            };
+            let names = names.trim().trim_start_matches('{').trim_end_matches('}');
+            for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+                assert!(
+                    ALLOWED.contains(&name),
+                    "{name:?} is imported from std-widgets in {path} and is not in the closed \
+                     set; a widget from the Slint library can animate without any first-party \
+                     source saying so"
+                );
+                seen.insert(name.to_string());
+            }
+        }
+    }
+    assert!(
+        seen.len() >= 6,
+        "expected the product's std-widgets imports, found {seen:?}"
+    );
+}
+
+/// True when a line of Slint code declares an animation or a repainting timer.
+///
+/// Written as a predicate rather than a list of byte sequences because the first version of
+/// this check was a list, and a list matches spacing as well as spelling: it forbade
+/// `Timer {` and `animate ` with exactly one space, so `Timer{` or `animate` followed by a
+/// tab would have walked past it. Every keyword here is matched independently of the
+/// whitespace around its opening delimiter.
+///
+/// `animate` must be followed by whitespace and never by more letters, which is what keeps a
+/// property named `animated` from reading as an animation. `animation` shares no prefix with
+/// `animate`, so `animation-tick()` is caught only by its own arm.
+/// The code of one line: string literals emptied and any trailing comment dropped.
+///
+/// Both keyword rules in this file were fooled by text rather than by code. A `//` inside a
+/// string literal -- a URL is enough -- truncated the line before it was scanned, so anything
+/// after it was never read. And the word "path" inside a translated sentence that promises
+/// paths are *not* retained read as a property carrying one, which is what the tree-wide
+/// retention rule hit on its first run.
+///
+/// Emptying literals before matching answers both at once: nothing a user reads can satisfy a
+/// rule about what the code does, and nothing a user reads can hide code from it either.
+fn code_of(line: &str) -> String {
+    let mut code = String::with_capacity(line.len());
+    let mut characters = line.chars().peekable();
+    let mut inside_literal = false;
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' if inside_literal => {
+                characters.next();
+            }
+            '"' => {
+                inside_literal = !inside_literal;
+                code.push('"');
+            }
+            '/' if !inside_literal && characters.peek() == Some(&'/') => break,
+            _ if inside_literal => {}
+            _ => code.push(character),
+        }
+    }
+    code
+}
+
+/// One source with its comments gone, its literals emptied and every whitespace run collapsed.
+///
+/// Five rules in this file read a line at a time, and Slint requires no declaration to fit on
+/// one: `Timer` with its `{` below, an import whose closing `}` is under the `from`, a
+/// comparison split in two, an `append_menu_item` whose literal is on a later line. Every one
+/// of them walks past a rule that scans lines. The review bot reported five findings; they are
+/// one finding, and this is its answer -- match against the source as the parser sees it.
+fn flattened(text: &str) -> String {
+    text.lines()
+        .map(code_of)
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The source with its comments gone, its literals **kept**, and every whitespace character
+/// removed.
+///
+/// For the two rules whose needle lives inside a literal: the unavailable glyph and the
+/// `std-widgets.slint` import path. `code_of` empties literals, which is right for rules about
+/// what the code does and wrong for these two. Removing whitespace rather than collapsing it
+/// makes `a=="—"`, `a == "—"` and a comparison broken across two lines the same string, which
+/// is what `line.contains("== \"—\"")` could not do.
+fn dense(text: &str) -> String {
+    let mut dense = String::with_capacity(text.len());
+    for line in text.lines() {
+        let mut characters = line.chars().peekable();
+        let mut inside_literal = false;
+        while let Some(character) = characters.next() {
+            match character {
+                '\\' if inside_literal => {
+                    dense.push(character);
+                    if let Some(escaped) = characters.next() {
+                        dense.push(escaped);
+                    }
+                }
+                '"' => {
+                    inside_literal = !inside_literal;
+                    dense.push('"');
+                }
+                '/' if !inside_literal && characters.peek() == Some(&'/') => break,
+                _ if character.is_whitespace() && !inside_literal => {}
+                _ => dense.push(character),
+            }
+        }
+    }
+    dense
+}
+
+fn animates(line: &str) -> bool {
+    let code = code_of(line);
+    let code = code.as_str();
+    if code.contains("animation-") {
+        return true;
+    }
+    for (keyword, opener) in [("Timer", '{'), ("states", '['), ("transitions", '[')] {
+        let mut rest = code;
+        while let Some(at) = rest.find(keyword) {
+            rest = &rest[at + keyword.len()..];
+            let after = rest.trim_start();
+            if after.is_empty() || after.starts_with(opener) {
+                return true;
+            }
+        }
+    }
+    let mut rest = code;
+    while let Some(at) = rest.find("animate") {
+        rest = &rest[at + "animate".len()..];
+        if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Every brace block in one Slint source, as (opening token, direct content).
+///
+/// Nested blocks are stripped from the content, so a child's bindings never count as its
+/// parent's -- which is the whole point when the parent is the construction under test and
+/// the child is a `MetricValue` that does carry the property the parent forgot to pass.
+fn blocks(text: &str) -> Vec<(String, String)> {
+    let code: String = text
+        .lines()
+        .map(|line| code_of(line) + "\n")
+        .collect::<String>();
+    let bytes: Vec<char> = code.chars().collect();
+    let mut result = Vec::new();
+    for (index, character) in bytes.iter().enumerate() {
+        if *character != '{' {
+            continue;
+        }
+        let header: String = bytes[..index]
+            .iter()
+            .rev()
+            .take_while(|value| **value != '\n' && **value != ';' && **value != '}')
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let mut depth = 0_usize;
+        let mut direct = String::new();
+        for value in &bytes[index..] {
+            match value {
+                '{' => {
+                    depth += 1;
+                    if depth == 1 {
+                        continue;
+                    }
+                }
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            if depth == 1 {
+                direct.push(*value);
+            }
+        }
+        result.push((header.trim().to_owned(), direct));
+    }
+    result
+}
+
+/// The component a block header names, whether it declares one or constructs one.
+///
+/// `export component ModelsView inherits Rectangle` and `if root.models-visible: ModelsView`
+/// both resolve to `ModelsView`; an `inherits` clause resolves to the declared name, not the
+/// base, which is what makes a declaration and its constructions share one key.
+fn component_name(header: &str) -> Option<String> {
+    let head = header.split(" inherits ").next().unwrap_or(header);
+    let token = head
+        .rsplit([' ', ':', '\t'])
+        .find(|value| !value.is_empty())?;
+    token
+        .chars()
+        .next()
+        .is_some_and(|value| value.is_ascii_uppercase())
+        .then(|| token.to_owned())
+}
+
+/// The property names a block binds directly, ignoring anything a nested block binds.
+fn direct_bindings(direct: &str) -> std::collections::BTreeSet<String> {
+    direct
+        .split(';')
+        .filter_map(|statement| {
+            let (name, _) = statement.split_once(':')?;
+            let name = name.trim();
+            (!name.is_empty()
+                && name
+                    .chars()
+                    .all(|value| value.is_ascii_alphanumeric() || value == '-' || value == '_'))
+            .then(|| name.to_owned())
+        })
+        .collect()
+}
+
+/// A value and its availability travel together, or the interface styles a missing number as
+/// an ordinary one.
+///
+/// `ModelsView` and `ProjectsView` each computed `events-availability` correctly and then built
+/// their header card passing `events` alone, so the header rendered the unavailable dash in the
+/// ordinary primary colour -- the one thing the missing-value invariant forbids. Every
+/// neighbouring pair in the same construction, `total-tokens`/`total-availability` and
+/// `cost`/`cost-availability`, was forwarded together, so the defect was a single absent line in
+/// a column of correct ones and invisible to a reader.
+///
+/// This is the fourth site of one shape. The rule is the shape: wherever a component declares a
+/// pair, every construction that passes the value passes the availability with it.
+#[test]
+fn a_value_and_its_availability_are_passed_together() {
+    let sources = slint_sources();
+    // Component name -> the availability bases that component itself declares. Resolving the
+    // component matters: `history-view` declares `total-tokens-availability` while the Models
+    // and Projects headers pair the same `total-tokens` value with `total-availability`, so a
+    // tree-wide set of base names would demand a property those components do not have.
+    let mut declared: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        std::collections::BTreeMap::new();
+    for (_, text) in &sources {
+        for (header, direct) in blocks(text) {
+            let Some(name) = component_name(&header) else {
+                continue;
+            };
+            for statement in direct.split(';') {
+                let statement = statement.trim();
+                let Some(rest) = statement.strip_prefix("in property") else {
+                    continue;
+                };
+                let Some((_, property)) = rest.split_once('>') else {
+                    continue;
+                };
+                if let Some(base) = property.trim().strip_suffix("-availability") {
+                    declared
+                        .entry(name.clone())
+                        .or_default()
+                        .insert(base.to_owned());
+                }
+            }
+        }
+    }
+    assert!(
+        declared.len() >= 3,
+        "expected components declaring availability pairs, found {declared:?}"
+    );
+
+    let mut offenders = Vec::new();
+    for (source, text) in &sources {
+        for (header, direct) in blocks(text) {
+            let Some(name) = component_name(&header) else {
+                continue;
+            };
+            let Some(pairs) = declared.get(&name) else {
+                continue;
+            };
+            let bound = direct_bindings(&direct);
+            // The declaration itself binds nothing; only constructions of it are checked.
+            if direct.contains("in property") {
+                continue;
+            }
+            for base in pairs {
+                let availability = format!("{base}-availability");
+                if bound.contains(base) && !bound.contains(&availability) {
+                    offenders.push(format!(
+                        "{source}: {name} passes {base} without {availability}"
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "an availability was left behind:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// No view may decide a fact by looking at the text it just rendered.
+///
+/// The Dashboard header carried `availability: root.tokens == "—" ? "unavailable" : "known"`,
+/// which collapsed five availability states into two -- a `Partial` count announced itself as
+/// known -- and hung the whole distinction on one glyph, so changing the em dash in any Rust
+/// formatter would have flipped the meaning of the product's most prominent card with every
+/// test still green. The projection already computed the fact; the card threw it away and
+/// guessed it back from typography.
+///
+/// The rule is the shape, not those three lines: an em dash is a rendering, and a rendering is
+/// not evidence. Every value that needs its availability receives it, the way the trend card
+/// one row below always did.
+#[test]
+fn no_slint_source_infers_a_fact_from_the_unavailable_glyph() {
+    let mut comparisons = Vec::new();
+    for (source, text) in slint_sources() {
+        // On the dense source rather than a raw line: `code_of` empties string literals and
+        // the glyph lives inside one, while `line.contains("== \"—\"")` demanded exactly one
+        // space on each side and a single line. `a=="—"`, two spaces, and a comparison split
+        // across lines all walked past it.
+        let dense = dense(&text);
+        for comparison in ["==\"—\"", "!=\"—\""] {
+            if dense.contains(comparison) {
+                comparisons.push(format!("{source}: {comparison}"));
+            }
+        }
+    }
+    // Started as a closed debt of fourteen across four views and is now empty, so the rule is
+    // what it was always meant to be: a plain assertion that no view infers a fact from the
+    // text it rendered.
+    assert!(
+        comparisons.is_empty(),
+        "a view compared against the unavailable glyph instead of receiving the fact: \
+         {comparisons:#?}"
+    );
+}
+
+/// The tray's labels must arrive as data, never as literals in its own source.
+///
+/// The localization contract asserts a closed msgid set and that each entry appears as `@tr`
+/// in the Slint tree, so a user-visible string emitted from Rust escapes it **by
+/// construction** rather than by oversight. That has now happened twice: eight Activity
+/// labels, and six tray strings that shipped English for the life of the product. Fixing the
+/// strings without forbidding the shape leaves the third occurrence free to arrive the same
+/// way, so this asserts the shape: every menu label is an expression, not a quoted string.
+///
+/// A language switch reaches the tray from every path that changes it, or it reaches it from
+/// none that matter.
+///
+/// Two paths reproject the window for a new locale -- the interactive selector and
+/// reliable-state delivery -- and only the persisted publication relabelled. By the time that
+/// publication arrives the window already carries the selected locale, so its `locale_changed`
+/// branch is false and the sole relabel is skipped: the tray stayed in the previous language
+/// until restart on the path a user actually takes. Reported by the review bot. Both go
+/// through one window callback now, and this refuses a third reprojection that forgets.
+#[test]
+fn every_locale_reprojection_also_relabels_the_tray() {
+    let source =
+        std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui.rs"))
+            .expect("read the shell source");
+
+    let lines: Vec<String> = source.lines().map(code_of).collect();
+    let mut sites = 0_usize;
+    let mut offenders = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        // The definition, not a call.
+        if !line.contains("reapply_localized_projection(") || line.contains("fn ") {
+            continue;
+        }
+        sites += 1;
+        // The call spans several lines; the relabel follows its closing parenthesis. Twelve
+        // lines covers the widest of them with room and stops well short of the next branch.
+        let window = lines[index..lines.len().min(index + 12)].join("\n");
+        if !window.contains("invoke_relabel_tray()") && !window.contains("relabel_tray(") {
+            offenders.push(format!("ui.rs:{}", index + 1));
+        }
+    }
+    assert!(
+        sites >= 3,
+        "expected the locale reprojection call sites, found {sites}"
+    );
+    assert!(
+        offenders.is_empty(),
+        "a locale change reprojected the window and left the tray in the previous language: {}",
+        offenders.join(", ")
+    );
+}
+
+/// The Win32 tray is the one surface `@tr` cannot reach, so its strings come from the Slint
+/// tree through `DesktopTrayLabels` and the menu is rebuilt on every language switch.
+#[test]
+fn the_tray_names_no_user_visible_string_of_its_own() {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/native_tray.rs"),
+    )
+    .expect("read the tray source");
+
+    let mut literals = Vec::new();
+    // Flattened, because `rustfmt` breaks a long call across lines and this loop inspected only
+    // the one carrying the opener: a label written as a literal on the following line was never
+    // seen. Reported by the review bot. Each call is then cut at its own closing parenthesis so
+    // a literal belonging to the next statement cannot be blamed on this one.
+    let flat = flattened(&source);
+    for call in flat.split("append_menu_item(").skip(1) {
+        let argument = call.split(");").next().unwrap_or(call);
+        // `code_of` empties literals but keeps their quotes, so a label that was written as a
+        // string still shows as `""` here and an expression does not.
+        if argument.contains("\"\"") {
+            literals.push(argument.trim().to_string());
+        }
+    }
+    assert!(
+        literals.is_empty(),
+        "tray menu labels must be passed in, not written here: {literals:#?}"
+    );
+}
+
+/// The tree scan below can only prove what the tree happens to contain, and today it contains
+/// exactly one animation written one way. These are the spellings it does not contain -- the
+/// ones a list of byte sequences would have missed -- checked against the predicate directly
+/// so the guarantee does not depend on someone writing them into a view first.
+#[test]
+fn an_animation_is_recognised_however_its_whitespace_is_written() {
+    for animating in [
+        "Timer { interval: 1s; }",
+        "Timer{ interval: 1s; }",
+        "Timer   { interval: 1s; }",
+        "animate width { duration: 200ms; }",
+        "animate\twidth { duration: 200ms; }",
+        "opacity: animation-tick() / 1s;",
+        "states [ shown when root.visible: { opacity: 1.0; } ]",
+        "states[ shown when root.visible: { opacity: 1.0; } ]",
+        "transitions [ in-out shown: { animate opacity {} } ]",
+        // The keyword may be the last thing on its line, with the property and the block on
+        // the next. An empty remainder is not "no whitespace after the keyword".
+        "        animate",
+        "    states",
+        "    transitions",
+        // A `//` inside a string literal must not truncate the line before it is scanned.
+        "property <string> u: \"https://x\"; animate width { duration: 100ms; }",
     ] {
         assert!(
-            !combined.contains(forbidden),
-            "forbidden UI authority or retention: {forbidden}"
+            animates(animating),
+            "not recognised as animating: {animating:?}"
         );
     }
+
+    for still in [
+        "in property <bool> animated;",
+        "text: @tr(\"Timer\");",
+        "width: 7px;",
+        "// animate width { duration: 200ms; }",
+        "property <int> states-count: 3;",
+    ] {
+        assert!(!animates(still), "wrongly read as animating: {still:?}");
+    }
+}
+
+/// The forbidden list in the test above reads five Slint files by name, and the one file in
+/// the tree that animates is not among them -- so the rule that exists to keep an idle
+/// animation out of the product could never have seen the only animation in the product.
+/// It entered once already and was found by measuring a core at 97.7%, not by this gate.
+///
+/// Enumerated from disk for the same reason the localization contract is: a list of files
+/// has to be remembered, and forgetting is the failure being guarded against. The single
+/// exception is pinned by content rather than by file name, so moving `ImportActivityDot`
+/// somewhere else keeps it legal and adding a second animation anywhere does not.
+#[test]
+fn the_only_animation_in_the_slint_tree_is_the_guarded_import_dot() {
+    let sources = slint_sources();
+
+    // Line by line missed the shape Slint allows and this rule exists to catch: `Timer` with
+    // its `{` on the next line, or `animate` with its target below. Each source is scanned as
+    // one flattened statement stream, and the line is recovered only to report it.
+    let mut animating = Vec::new();
+    for (path, text) in &sources {
+        for (number, line) in text.lines().enumerate() {
+            let flat = flattened(line);
+            if animates(&flat) {
+                animating.push((path.clone(), number, flat));
+            }
+        }
+        // The whole-source pass is what catches a declaration split across lines: if it sees
+        // more openers than the line pass found, one of them was written over a break.
+        let whole = flattened(text);
+        let split_openers = ["Timer {", "animate ", "states [", "transitions ["]
+            .iter()
+            .map(|opener| whole.matches(opener).count())
+            .sum::<usize>();
+        let line_openers = animating
+            .iter()
+            .filter(|(candidate, _, _)| candidate == path)
+            .count();
+        assert!(
+            split_openers <= line_openers,
+            "{path} writes an animation across a line break: {split_openers} in the whole \
+             source against {line_openers} found line by line"
+        );
+    }
+    assert_eq!(
+        animating.len(),
+        1,
+        "exactly one animation is allowed in the tree, found {animating:#?}"
+    );
+
+    let (path, number, line) = &animating[0];
+    assert!(
+        line.contains("animation-tick()"),
+        "the allowed animation is the import dot's tick, found {line:?} in {path}"
+    );
+
+    // The guard is the whole reason this one is allowed: `animation-tick()` schedules a
+    // repaint for as long as its binding is evaluated, and Slint 1.17 instantiates the
+    // contents of an `if` eagerly, so an unguarded read burns a core whether or not the
+    // window is even visible. The condition must sit on the binding that reads the tick.
+    let (_, text) = sources
+        .iter()
+        .find(|(candidate, _)| candidate == path)
+        .expect("the animating source");
+    // `code_of`, not the raw line: the guard used to be read straight off the previous line, so
+    // making the binding unconditional while leaving `// root.active && !root.reduced-motion`
+    // above it satisfied this assertion from inside the comment it had become. Reported by the
+    // review bot, and it is the same shape as the Pester composition guard three files away.
+    let guard = flattened(
+        text.lines()
+            .nth(number.saturating_sub(1))
+            .unwrap_or_default(),
+    );
+    assert!(
+        guard.contains("root.active") && guard.contains("!root.reduced-motion"),
+        "the animation must stay behind the active and reduced-motion guard, found {guard:?}"
+    );
 }
 
 #[test]

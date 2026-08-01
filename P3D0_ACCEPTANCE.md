@@ -78,7 +78,7 @@ only the mandatory `--release` commands above can pass their P3-D.0 gates.
 
 | ID | Required evidence | Passing rule |
 |---|---|---|
-| `P3D0-PERF-01` | Automatic, normal, and compact end-to-end snapshot/package/verify measurements for deterministic small and large schema-13 fixtures | Every mode passes its declared throughput floor and verification |
+| `P3D0-PERF-01` | Automatic, normal, and compact end-to-end snapshot/package/verify measurements for deterministic small and large current-schema fixtures | Every mode passes its declared throughput floor and verification |
 | `P3D0-PERF-02` | Compression thread and decoder-window observations | No compression-created thread; one sampler thread is the only allowed measurement delta; decoder window is at most 8 MiB |
 | `P3D0-PERF-03` | Small/large private-memory high water, including a 96 MiB deterministic large fixture | Every run remains within a fixed 64 MiB private-growth envelope and the large database exceeds measured growth by more than 16 MiB; no database-sized allocation |
 | `P3D0-SCHED-01` | 10,000 maintenance triggers | One active operation and at most one aggregate follow-up; no request-sized queue |
@@ -98,7 +98,7 @@ or any child process is a failure.
 ## Deterministic fixture identity
 
 `backup_performance_contract` emits the exact length and SHA-256 of both
-`schema13-freelist-v1` fixtures. A valid receipt MUST copy those values from the same
+`current-schema-freelist-v1` fixtures. A valid receipt MUST copy those values from the same
 run and MUST reject duplicate kinds, missing sizes, zero lengths, malformed hashes, or
 hash changes between command attempts. Fixture files and absolute temporary paths MUST
 not be retained in the receipt.

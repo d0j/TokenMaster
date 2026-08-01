@@ -861,9 +861,42 @@ pub(crate) fn map_store_error(error: StoreError) -> QueryError {
     QueryError::new(code)
 }
 
+/// Whether a page the store returned has the shape the request asked for.
+///
+/// Two claims, and a page that breaks either is a corrupt archive rather than a short read:
+/// it may never exceed the requested size, and if it says there is more then it must be full,
+/// because a short page with a continuation would drop the rows between them. The benefit
+/// change page asserted both inline and the session page asserted neither -- one predicate
+/// tested once is how the two stop disagreeing.
+///
+/// A capture with private fields cannot be built outside the store crate, so this is where
+/// the logic is provable rather than at either call site.
+pub(crate) const fn page_shape_is_intact(
+    returned: usize,
+    page_size: usize,
+    has_more: bool,
+) -> bool {
+    returned <= page_size && (!has_more || returned == page_size)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_page_may_not_exceed_its_size_and_a_continued_page_must_be_full() {
+        assert!(page_shape_is_intact(0, 4, false));
+        assert!(page_shape_is_intact(3, 4, false));
+        assert!(page_shape_is_intact(4, 4, false));
+        assert!(page_shape_is_intact(4, 4, true));
+
+        // Over the requested size.
+        assert!(!page_shape_is_intact(5, 4, false));
+        assert!(!page_shape_is_intact(5, 4, true));
+        // Short, yet claiming a continuation: the rows between are gone.
+        assert!(!page_shape_is_intact(3, 4, true));
+        assert!(!page_shape_is_intact(0, 4, true));
+    }
 
     #[test]
     fn legacy_and_partial_quality_remain_explicit() -> Result<(), QueryError> {

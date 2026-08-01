@@ -331,7 +331,13 @@ pub(crate) fn map_page_capture(
         scopes: request.scopes.clone(),
         inner: inner.clone(),
     });
-    if capture.has_more() != next_cursor.is_some() {
+    if capture.has_more() != next_cursor.is_some()
+        || !service::page_shape_is_intact(
+            capture.sessions().len(),
+            request.page_size.get(),
+            capture.has_more(),
+        )
+    {
         return Err(QueryError::new(QueryErrorCode::CorruptArchive));
     }
     Ok(UsageSessionPage {

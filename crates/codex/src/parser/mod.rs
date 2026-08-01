@@ -22,11 +22,16 @@ use wire::{RawLine, RawResult, RawText, RawUsage};
 pub const MAX_LINE_BYTES: usize = 16 << 20;
 pub const LONG_CONTEXT_THRESHOLD: u64 = 272_000;
 
-const RELEVANCE_MARKERS: [&[u8]; 9] = [
+// `response_item` earns its place the hard way: `tool_update` carries a fallback for a
+// `response_item` whose payload has a name but no recognized `type`, and without the marker
+// that fallback was unreachable through `parse_line` -- the line was discarded here first,
+// leaving the tool uncounted with no diagnostic beyond the aggregate `Irrelevant`.
+const RELEVANCE_MARKERS: [&[u8]; 10] = [
     b"token_count",
     b"turn_context",
     b"session_meta",
     b"sessionMeta",
+    b"response_item",
     b"\"usage\"",
     b"function_call",
     b"tool_call",

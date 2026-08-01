@@ -68,6 +68,18 @@ export component MainWindow inherits Window {
     out property <string> presentation-layout-key: root.presentation-layout-id == 2 ? "workbench" : (root.presentation-layout-id == 1 ? "control_center" : "refined");
     in-out property <int> presentation-locale-id: 0;
     out property <string> presentation-locale-key: root.presentation-locale-id == 2 ? "pseudo" : (root.presentation-locale-id == 1 ? "ru" : "en");
+    // The Win32 tray cannot reach `@tr` itself, so its text is declared here -- inside the
+    // tree the localization contract walks -- and handed to it already resolved. Held as
+    // English literals in Rust for the life of the product, these were outside that contract
+    // by construction, the same way eight Activity labels once were.
+    out property <string> tray-show-label: @tr("Show");
+    out property <string> tray-dashboard-label: @tr("Open Dashboard");
+    out property <string> tray-compact-label: @tr("Open Compact");
+    out property <string> tray-hide-label: @tr("Hide");
+    out property <string> tray-quit-label: @tr("Quit");
+    // Composed rather than a sixth msgid: the product name is not translated, and the phrase
+    // beside it is already in both catalogues for the shell header.
+    out property <string> tray-tooltip: "TokenMaster — " + @tr("Local usage intelligence");
     in-out property <int> presentation-effective-color-scheme-id: 2;
     out property <string> presentation-effective-color-scheme-key: root.presentation-effective-color-scheme-id == 1 ? "light" : "dark";
     out property <int> observed-system-color-scheme-id: Palette.color-scheme == ColorScheme.light ? 1 : (Palette.color-scheme == ColorScheme.dark ? 2 : 0);
@@ -102,6 +114,9 @@ export component MainWindow inherits Window {
     in property <string> dashboard-header-tokens;
     in property <string> dashboard-header-cost;
     in property <string> dashboard-header-events;
+    in property <string> dashboard-header-tokens-availability;
+    in property <string> dashboard-header-cost-availability;
+    in property <string> dashboard-header-events-availability;
     in property <string> dashboard-header-evidence;
     in property <bool> dashboard-initial-import-in-progress;
     in property <bool> dashboard-import-progress-known: false;
@@ -128,6 +143,13 @@ export component MainWindow inherits Window {
     in property <string> history-total-tokens;
     in property <string> history-cost;
     in property <string> history-events;
+    in property <string> history-input-tokens-availability;
+    in property <string> history-cached-tokens-availability;
+    in property <string> history-output-tokens-availability;
+    in property <string> history-reasoning-tokens-availability;
+    in property <string> history-total-tokens-availability;
+    in property <string> history-cost-availability;
+    in property <string> history-events-availability;
     in property <string> history-range-preset: "recent_30_days";
     in property <bool> history-range-pending: false;
     in property <[ModelUsageRow]> model-usage-rows;
@@ -142,6 +164,7 @@ export component MainWindow inherits Window {
     in property <string> models-cost-availability;
     in property <string> models-cost-evidence-label;
     in property <string> models-events;
+    in property <string> models-events-availability;
     in property <string> models-loaded-label;
     in property <string> models-completeness-label;
     in property <[ProjectUsageRow]> project-usage-rows;
@@ -159,6 +182,7 @@ export component MainWindow inherits Window {
     in property <string> projects-cost-availability;
     in property <string> projects-cost-evidence-label;
     in property <string> projects-events;
+    in property <string> projects-events-availability;
     in property <string> projects-loaded-label;
     in property <string> projects-completeness-label;
     in property <string> projects-code-coverage-label;
@@ -302,6 +326,11 @@ export component MainWindow inherits Window {
     in-out property <string> command-palette-query;
     in property <[RouteRow]> command-palette-rows;
     in property <int> command-palette-selected-ordinal: -1;
+    // The one way to the Win32 tray from anything holding this window. Two locale paths change
+    // the language -- the interactive selector and reliable-state delivery -- and the tray
+    // owner is `Rc`, so the notifier behind an `Arc` cannot hold it. A Slint callback is
+    // UI-thread-only by construction, which is exactly the thread the menu belongs to.
+    callback relabel-tray();
     callback select-route(string);
     callback open-command-palette();
     callback dismiss-command-palette();
@@ -489,6 +518,9 @@ export component MainWindow inherits Window {
                     header-tokens: root.dashboard-header-tokens;
                     header-cost: root.dashboard-header-cost;
                     header-events: root.dashboard-header-events;
+                    header-tokens-availability: root.dashboard-header-tokens-availability;
+                    header-cost-availability: root.dashboard-header-cost-availability;
+                    header-events-availability: root.dashboard-header-events-availability;
                     header-evidence: root.dashboard-header-evidence;
                     initial-import-in-progress: root.dashboard-initial-import-in-progress;
                     import-progress-known: root.dashboard-import-progress-known;
@@ -521,6 +553,13 @@ export component MainWindow inherits Window {
                     total-tokens: root.history-total-tokens;
                     cost: root.history-cost;
                     events: root.history-events;
+                    input-tokens-availability: root.history-input-tokens-availability;
+                    cached-tokens-availability: root.history-cached-tokens-availability;
+                    output-tokens-availability: root.history-output-tokens-availability;
+                    reasoning-tokens-availability: root.history-reasoning-tokens-availability;
+                    total-tokens-availability: root.history-total-tokens-availability;
+                    cost-availability: root.history-cost-availability;
+                    events-availability: root.history-events-availability;
                     range-preset: root.history-range-preset;
                     range-pending: root.history-range-pending;
                     request-range-1 => { root.request-history-range-1(); }
@@ -580,6 +619,7 @@ export component MainWindow inherits Window {
                     cost-availability: root.models-cost-availability;
                     cost-evidence-label: root.models-cost-evidence-label;
                     events: root.models-events;
+                    events-availability: root.models-events-availability;
                     loaded-label: root.models-loaded-label;
                     completeness-label: root.models-completeness-label;
                 }
@@ -602,6 +642,7 @@ export component MainWindow inherits Window {
                     cost-availability: root.projects-cost-availability;
                     cost-evidence-label: root.projects-cost-evidence-label;
                     events: root.projects-events;
+                    events-availability: root.projects-events-availability;
                     loaded-label: root.projects-loaded-label;
                     completeness-label: root.projects-completeness-label;
                     code-coverage-label: root.projects-code-coverage-label;

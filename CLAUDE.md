@@ -92,9 +92,16 @@ arguments:**
 pwsh -NoProfile -File scripts\verify-m0.ps1
 ```
 
-Sixteen stages: clean-root, immutable-actions, dependency-policy, eight Pester suites, `fmt`,
-`clippy`, the SQLite million-row check, the workspace tests, the release build. Anything less
-is a weaker claim wearing the same word. It needs network access for the RustSec database.
+The stages are clean-root, immutable-actions, dependency-policy, **every** Pester suite in
+`scripts/tests`, `fmt`, `clippy`, the SQLite million-row check, the workspace tests and the
+release build. Anything less is a weaker claim wearing the same word. It needs network access
+for the RustSec database.
+
+The count used to be written here — "sixteen stages, eight Pester suites" — and adding the
+ninth suite made both numbers wrong in a file that tells the next reader what green means. The
+suites are enumerated from disk by the gate itself, so a number here was never the authority
+and could only ever rot; `verify-m0.ps1` now also refuses a run in which any enumerated suite
+recorded no passing stage.
 
 **It stops at the first failing stage, so a red gate names one break and hides the rest.** Fix
 and re-run until it is green rather than reading the first failure as the only one.
@@ -127,6 +134,12 @@ Each of these cost real time.
   between them. A slow suite is its own parallel cases and the child processes they spawn.
 - **Resource contracts are load-sensitive.** A red one is checked by re-running it alone
   before it is believed, and the reason is recorded beside its constants.
+- **The gate fails if the working tree changes while it runs, anywhere.** The
+  dependency-policy stage captures state before and after and compares `Commit` and `Dirty`
+  among others, so an edit to a document no stage reads still throws `dependency policy inputs
+  changed while the check was running`. "No stage reads `docs/`" is true and irrelevant: what
+  is compared is whether the tree moved at all. Commit or stash first, then start the gate,
+  then keep hands off until it answers.
 
 ## Landing work
 

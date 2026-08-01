@@ -71,26 +71,68 @@ function Invoke-PesterChecked {
     Write-M0StageBegin $Id
     $Started = [DateTimeOffset]::UtcNow
     $Result = Invoke-Pester $Path -PassThru
-    $ExitCode = if ($Result.FailedCount -eq 0) { 0 } else { 1 }
+    # A suite that ran nothing is not a suite that passed, and neither is one that skipped
+    # everything. Measured on Pester 5.7.1 against a fixture whose only `It` is commented out:
+    # FailedCount 0, PassedCount 0, TotalCount 0 and Result "Passed" -- so FailedCount alone
+    # calls an empty stage green, and any suite that quietly stopped testing would leave every
+    # stage-count claim downstream meaning one fewer. `PassedCount -gt 0` alone is not enough
+    # either: `-Skip` on all but one test leaves that one passing. Every suite runs between 2
+    # and 31 tests and skips none, so both conditions cost nothing today.
+    $ExitCode = if ($Result.FailedCount -eq 0 -and $Result.SkippedCount -eq 0 `
+            -and $Result.PassedCount -gt 0) { 0 } else { 1 }
+    # The stage's own id, not the constant "pester" every one of them used to record: the
+    # receipt could not distinguish seven Pester stages from eight, which is the same blindness
+    # the composition guard had.
     $Commands.Add([ordered]@{
-        id = "pester"
+        id = $Id
         startedUtc = $Started.ToString("O")
         exitCode = $ExitCode
+        passed = $Result.PassedCount
+        skipped = $Result.SkippedCount
     })
     if ($ExitCode -ne 0) {
-        throw "Invoke-Pester failed for $Path"
+        throw ("Invoke-Pester failed for {0}: {1} passed, {2} failed, {3} skipped, {4} total" -f `
+                $Path, $Result.PassedCount, $Result.FailedCount, $Result.SkippedCount, `
+                $Result.TotalCount)
     }
     Write-M0StagePass $Id
 }
 
-Invoke-PesterChecked "pester-m0-scripts" (Join-Path $PSScriptRoot "tests\m0-scripts.Tests.ps1")
-Invoke-PesterChecked "pester-immutable-actions" (Join-Path $PSScriptRoot "tests\immutable-actions.Tests.ps1")
-Invoke-PesterChecked "pester-release-artifact-workflow" (Join-Path $PSScriptRoot "tests\release-artifact-workflow.Tests.ps1")
-Invoke-PesterChecked "pester-dependency-policy" (Join-Path $PSScriptRoot "tests\dependency-policy.Tests.ps1")
-Invoke-PesterChecked "pester-secret-scan" (Join-Path $PSScriptRoot "tests\secret-scan.Tests.ps1")
-Invoke-PesterChecked "pester-clean-root" (Join-Path $PSScriptRoot "tests\audit-clean-root.Tests.ps1")
-Invoke-PesterChecked "pester-product-package" (Join-Path $PSScriptRoot "tests\product-package.Tests.ps1")
-Invoke-PesterChecked "pester-p3e-interactive" (Join-Path $PSScriptRoot "tests\validate-p3e-interactive.Tests.ps1")
+# Enumerated from disk rather than listed, because the list is what failed. The guard that
+# pinned this composition asserted each suite's file name appeared somewhere in this script's
+# text -- so putting a `#` in front of a stage left the name inside that very comment, the
+# guard green, and the gate quietly running seven suites while printing fifteen stages. A
+# suite that exists is now run by construction, and a ninth added tomorrow needs nobody to
+# remember it. The floor is a separate guard: an enumeration that finds nothing must not pass
+# as a gate that ran everything.
+$PesterSuites = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "tests") `
+        -Filter "*.Tests.ps1" -File | Sort-Object -Property Name)
+if ($PesterSuites.Count -lt 8) {
+    throw "expected at least eight Pester suites, found $($PesterSuites.Count)"
+}
+foreach ($Suite in $PesterSuites) {
+    Invoke-PesterChecked ("pester-" + ($Suite.BaseName -replace '\.Tests$', '')) $Suite.FullName
+}
+# Checked against the run's own record, not against this file's text. The composition guard in
+# `m0-scripts.Tests.ps1` reads source, and source can be commented out: a `#` in front of the
+# enumeration above leaves every suite name inside the comment where a regex still finds it,
+# and the gate would run zero Pester suites with the contract green. That is the third
+# appearance of one shape, and reading text is what all three had in common. `$Commands` is
+# what the receipt is built from, so a suite with no entry here did not run whatever the
+# script says -- and with `Set-StrictMode -Version Latest`, deleting the enumeration makes
+# `$PesterSuites` an error rather than an empty expectation.
+$RecordedPesterStages = @(
+    $Commands | Where-Object { $_.id -like "pester-*" -and $_.exitCode -eq 0 } |
+        ForEach-Object { $_.id }
+)
+$MissingPesterStages = @(
+    $PesterSuites |
+        ForEach-Object { "pester-" + ($_.BaseName -replace '\.Tests$', '') } |
+        Where-Object { $RecordedPesterStages -notcontains $_ }
+)
+if ($MissingPesterStages.Count -gt 0) {
+    throw "the run recorded no passing stage for: $($MissingPesterStages -join ', ')"
+}
 Invoke-Checked "fmt" $Cargo @("fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
 $PreviousRustFlags = $env:RUSTFLAGS
 try {

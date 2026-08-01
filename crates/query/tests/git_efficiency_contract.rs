@@ -173,6 +173,39 @@ fn stale_usage_publication_disables_only_efficiency() {
     );
 }
 
+/// A stale snapshot cannot support a definite claim about what is not in it.
+///
+/// Both conditions hold at once here: the repository's project is absent from the usage
+/// snapshot, and the snapshot itself is stale. The absence is only knowable from evidence
+/// already known to be untrustworthy, so the honest answer is the staleness -- the same one
+/// the sibling test above gets for a project that *is* present.
+#[test]
+fn an_unmatched_project_reports_stale_usage_rather_than_a_definite_absence() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("unmatched-stale.sqlite3");
+    seed_current_usage(&path, "other-project", 10_000);
+    seed_repository(&path, 1, 2, "tokenmaster", summary(DAY_INDEX, 200, 20));
+    let connection = rusqlite::Connection::open(&path).expect("fixture connection");
+    let completed_at_ms = WALL_TIME_MS - tokenmaster_query::QUERY_STALE_MIN_AGE_MS - 1;
+    connection
+        .execute_batch(&format!(
+            "UPDATE usage_scan_set
+             SET started_at_ms = {started_at_ms}, completed_at_ms = {completed_at_ms}
+             WHERE scan_set_id = 1;
+             UPDATE usage_scan
+             SET started_at_ms = {started_at_ms}, completed_at_ms = {completed_at_ms}
+             WHERE scan_id = 1;",
+            started_at_ms = completed_at_ms - 1_000
+        ))
+        .expect("age usage publication");
+
+    let snapshot = service(&path).git_output(request(32)).expect("Git output");
+    assert_eq!(
+        snapshot.payload().repositories()[0].efficiency(),
+        &GitEfficiency::Unavailable(GitEfficiencyUnavailableReason::UsageStale)
+    );
+}
+
 #[test]
 fn truncated_daily_history_keeps_totals_but_disables_range_efficiency() {
     let directory = TempDir::new().expect("temporary directory");

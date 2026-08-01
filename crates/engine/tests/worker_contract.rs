@@ -13,6 +13,27 @@ use tokenmaster_engine::{
     WorkerErrorCode, WorkerPhase,
 };
 
+/// Parks an execute closure until the test releases it, bounded.
+///
+/// The bound is the contract rather than tidiness, and it is written once here because six
+/// closures need it for the same reason. Every `release` channel in this file is declared
+/// before its worker, so unwinding drops the worker first: `RefreshWorker::drop` calls
+/// `shutdown`, whose `cancel` only raises a cooperative flag these closures never read, and
+/// then **joins**. With an unbounded `recv` the sender is still alive in the panicking frame,
+/// so the join never returns, the panic never completes, and the harness names no test.
+///
+/// Measured on the sibling scheduler contract, which had the identical shape and was this
+/// repository's open P4 exit blocker: with the unbounded receive an injected failure left the
+/// process running at 180.2 seconds, CPU 0, three threads, nothing named; bounded, the same
+/// failure was reported in 30.00 seconds. The asserts here are deterministic today, so this
+/// is a latent hang rather than a live one -- which is exactly how the other one looked until
+/// a timing race made it live.
+fn await_release(release_rx: &Receiver<()>, what: &str) {
+    release_rx
+        .recv_timeout(Duration::from_secs(30))
+        .unwrap_or_else(|error| panic!("{what}: {error}"));
+}
+
 #[derive(Default)]
 struct TestClock(AtomicU64);
 
@@ -102,7 +123,7 @@ fn completion_wait_is_bounded_and_returns_the_exact_published_receipt() {
     let (release_tx, release_rx) = sync_channel(1);
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         entered_tx.send(permit.id()).expect("signal active task");
-        release_rx.recv().expect("release active task");
+        await_release(&release_rx, "release active task");
         RefreshOutcome::Completed
     })
     .expect("spawn worker");
@@ -145,7 +166,7 @@ fn cloned_submitter_keeps_one_worker_capacity_and_closes_after_shutdown() {
     let (release_tx, release_rx) = sync_channel(1);
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         entered_tx.send(permit.id()).expect("active task");
-        release_rx.recv().expect("release task");
+        await_release(&release_rx, "release task");
         RefreshOutcome::Completed
     })
     .expect("worker");
@@ -197,7 +218,7 @@ fn ten_thousand_hints_use_one_follow_up_and_latest_only_result_slot() {
         let call = task_calls.fetch_add(1, Ordering::AcqRel) + 1;
         if call == 1 {
             entered_tx.send(permit.id()).expect("signal first task");
-            release_rx.recv().expect("release first task");
+            await_release(&release_rx, "release first task");
             RefreshOutcome::Failed
         } else {
             RefreshOutcome::Completed
@@ -347,7 +368,7 @@ fn panic_faults_worker_abandons_follow_up_and_exposes_no_payload() {
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         task_calls.fetch_add(1, Ordering::AcqRel);
         entered_tx.send(permit.id()).expect("signal active task");
-        release_rx.recv().expect("release active task");
+        await_release(&release_rx, "release active task");
         panic!("fixed test panic")
     })
     .expect("spawn worker");
@@ -412,7 +433,7 @@ fn stale_cancel_cannot_touch_newer_work_and_shutdown_is_idempotent() {
     let (release_tx, release_rx) = sync_channel(1);
     let mut worker = RefreshWorker::spawn(clock, move |permit| {
         entered_tx.send(permit.id()).expect("signal task");
-        release_rx.recv().expect("release task");
+        await_release(&release_rx, "release task");
         RefreshOutcome::Completed
     })
     .expect("spawn worker");
@@ -525,7 +546,7 @@ fn expired_pending_work_is_reported_without_a_second_callback() {
     let mut worker = RefreshWorker::spawn(clock.clone(), move |permit| {
         task_calls.fetch_add(1, Ordering::AcqRel);
         entered_tx.send(permit.id()).expect("signal active task");
-        release_rx.recv().expect("release active task");
+        await_release(&release_rx, "release active task");
         RefreshOutcome::Completed
     })
     .expect("spawn worker");
@@ -780,4 +801,64 @@ fn notifier_panic_does_not_fault_worker_or_lose_completion_receipt() {
         WorkerPhase::Running
     );
     assert_eq!(worker.shutdown().expect("shutdown"), WorkerPhase::Stopped);
+}
+
+/// A caller waiting for a completion must not lock every other reader out for its whole wait.
+///
+/// The receiver is not `Sync`, so it sits behind a mutex and waiting on it holds that mutex.
+/// The same one is taken by `try_completion` -- sixty-one call sites -- and by the worker
+/// thread itself, which reaches for the receiver to evict a stale result when the one-slot
+/// result queue is full. A wait that keeps the lock for its full timeout therefore stalls the
+/// worker, and production reaches this with a timeout of whatever remains until a deadline.
+///
+/// Red before the fix: the second thread here blocked for the whole two seconds. It now
+/// returns within a slice, because the wait releases the lock between attempts.
+#[test]
+fn a_long_wait_does_not_lock_out_a_concurrent_reader() {
+    let clock = Arc::new(TestClock::default());
+    let worker = Arc::new(
+        RefreshWorker::spawn(clock, |_permit| RefreshOutcome::Completed).expect("spawn worker"),
+    );
+
+    let waiting = worker.clone();
+    let waiter = std::thread::spawn(move || {
+        // Nothing will ever be published, so this runs to its own timeout.
+        let _ = waiting.wait_for_completion(Duration::from_secs(2));
+    });
+
+    // Give the waiter time to be inside the wait rather than racing to reach it.
+    std::thread::sleep(Duration::from_millis(100));
+
+    let started = Instant::now();
+    let seen = worker.try_completion().expect("poll completions");
+    let elapsed = started.elapsed();
+
+    assert!(seen.is_none(), "no completion was published");
+    assert!(
+        elapsed < Duration::from_millis(500),
+        "a concurrent reader waited {elapsed:?} behind a two-second wait; the receiver lock is \
+         being held across the whole timeout"
+    );
+
+    waiter.join().expect("join waiter");
+}
+
+/// A timeout too large to express is refused, not a panic.
+///
+/// `Instant::now() + timeout` panics on overflow, and a caller writing `Duration::MAX` for
+/// "wait effectively forever" would take the whole process down through a surface that reports
+/// every other failure through `Result`. The `recv_timeout` this wait replaced accepted the
+/// value, so the panic arrived with the condition variable.
+#[test]
+fn an_unrepresentable_timeout_is_refused_instead_of_panicking() {
+    let clock = Arc::new(TestClock::default());
+    let mut worker = RefreshWorker::spawn(clock, move |_permit| RefreshOutcome::Completed)
+        .expect("spawn worker");
+
+    let error = worker
+        .wait_for_completion(Duration::MAX)
+        .expect_err("an unrepresentable deadline must be refused");
+
+    assert_eq!(error.code(), WorkerErrorCode::InvalidValue);
+    worker.shutdown().expect("shutdown worker");
 }

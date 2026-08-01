@@ -204,12 +204,17 @@ generation and root count. Missing roots create no watch. Scheduler/watcher erro
 stable path-free codes.
 
 `RefreshWorker` owns exactly one dedicated thread, one capacity-one wake channel, and
-one capacity-one latest-only completion channel. Admission mutates the shared
+one capacity-one latest-only completion slot. Admission mutates the shared
 constant-state coordinator directly; a coalesced hint allocates no command node and
 wakes no additional worker. If the completion slot is occupied, publication removes
 only that older completion, increments a checked fixed supersession counter, and
-publishes the newer fixed result without blocking. Completion and snapshot values
-contain only request identity, phase/outcome/kind, aggregate flags, and counters.
+publishes the newer fixed result without blocking. Waiting on the slot holds no lock
+that admission, publication, or a concurrent reader acquires, so a wait of any length
+delays none of them. A worker thread that ends closes the slot and wakes every waiter
+at once instead of leaving each to its own deadline; the closed flag and the pending
+completion are read under the one lock the wait registers on, so no wakeup is lost.
+Completion and snapshot values contain only request identity, phase/outcome/kind,
+aggregate flags, and counters.
 
 Worker phases are `running`, `shutting_down`, `stopped`, or `faulted`. Callback and
 worker-boundary panics are contained, expose no panic payload through worker results,
@@ -249,7 +254,8 @@ internal failures use stable path-free codes. The facade clock supplies one exac
 monotonic sample; frontends do not supply publication time.
 
 `UsageReadStore` is the only archive-read implementation behind that facade. It opens
-an existing exact schema-v14 archive read-only, applies query-only/defensive/no-checkpoint
+an existing archive at exactly `USAGE_SCHEMA_VERSION` read-only, applies
+query-only/defensive/no-checkpoint
 policy, performs no migration, and returns owned data after one short deferred read
 transaction. Continuation requires its dataset identity. Current and immutable legacy
 pages use composite keyset seek and at most one lookahead row; progress interruption is
@@ -348,7 +354,7 @@ P3 wraps the synchronous facade with one bounded worker rather than calling SQLi
 a Slint callback.
 
 `QueryService::product_data_status` is the joined scalar entry point for product
-composition. It maps one schema-v14 `UsageReadStore::capture_product_data_status`
+composition. It maps one `UsageReadStore::capture_product_data_status`
 transaction into `ProductDataStatusEnvelope`, allocates a public generation only after
 capture and mapping succeed, and exposes separate usage, aggregate, quota, benefit,
 and Git revisions/states plus at most 16 stable warnings. The capture uses a maximum
@@ -380,8 +386,19 @@ local directory and archive filename under the exact installed/portable marker p
 Its errors and `Debug` output are stable and path-free.
 
 `RefreshWorker::spawn_notified` accepts one optional
-`Arc<dyn WorkerCompletionNotifier>`. After publishing the capacity-one completion
-receipt and outside worker locks, it sends one copied lossy completion hint. Notifier
+`Arc<dyn WorkerCompletionNotifier>`. After publishing the latest-only completion
+receipt and outside worker locks, it sends one copied lossy completion hint. The hint is
+delivered on the worker's own thread between publishing the receipt and starting the
+follow-up, so an implementation MUST NOT wait on any lock a caller can hold across an
+operation: those it may only try-acquire, and a publication skipped for contention is
+dropped rather than queued, which is what makes the hint lossy. The application bundle
+slot is such a lock -- a manual backup holds it for as long as `MANDATORY_BACKUP_TIMEOUT`,
+five minutes -- and `publish_hint` try-acquires it. **This is weaker than the absolute it
+first stated, and the difference is recorded rather than hidden:** the runtime snapshots
+the publication then takes acquire short-lived mutexes blockingly, so the hint can still
+wait on one for the width of a snapshot. Making that path try-only as well needs try
+variants through `crates/runtime`, which is open work, not a property this clause may
+claim. Notifier
 panic is caught/redacted and cannot fault the worker or remove the receipt. Live,
 nested Git, quota, and reminder runtimes expose additive `start_notified` constructors;
 their existing `start` constructors retain identical no-notifier behavior.

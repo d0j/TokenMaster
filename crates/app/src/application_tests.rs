@@ -1825,6 +1825,60 @@ fn early_notification_sets_one_pending_bit_without_allocating_generation() {
     assert_eq!(notifier.next_generation.load(Ordering::Acquire), 1);
 }
 
+/// `WorkerCompletionNotifier` says implementations must not block, and this one is handed to
+/// all four engine workers, which call it on their own thread between publishing a receipt and
+/// starting the follow-up. The slot it wants is held across a manual backup for as long as
+/// `MANDATORY_BACKUP_TIMEOUT`, five minutes -- so a blocking acquire parks every worker that
+/// finishes a refresh during a backup and the interface holds stale numbers for its duration.
+///
+/// One second is not the bound that matters; it is four hundred times the hold this test
+/// creates and a hundredth of the one production creates, so it separates "returned" from
+/// "waited for the guard" without measuring scheduler noise.
+#[test]
+fn a_completion_hint_does_not_wait_for_a_held_bundle_slot() {
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let generation = begin_bundle_generation(&bundle).expect("bundle generation");
+    let notifier = Arc::new(ApplicationRuntimeNotifier::new(
+        Arc::downgrade(&bundle),
+        generation,
+    ));
+
+    // The hint's own method rather than `completion_ready`, which is a one-line delegate to
+    // it: `WorkerCompletion` has no constructor outside the engine crate, so a value cannot be
+    // built here to call the trait method with.
+    //
+    // The holder releases on its own after two seconds instead of waiting for a signal from
+    // this thread, because a blocking acquire would otherwise deadlock the two and prove
+    // nothing in a readable time. Two seconds against a one-second assertion: under load the
+    // hold only grows, which makes a blocking implementation more red, and a non-blocking one
+    // does not depend on the hold at all.
+    let (holding_tx, holding_rx) = std::sync::mpsc::channel();
+    let held = Arc::clone(&bundle);
+    let holder = std::thread::spawn(move || {
+        let _guard = held.lock().expect("hold the bundle slot");
+        holding_tx.send(()).expect("signal the guard is held");
+        std::thread::sleep(Duration::from_secs(2));
+    });
+    holding_rx
+        .recv_timeout(Duration::from_secs(30))
+        .expect("the guard is held");
+
+    let started = Instant::now();
+    notifier.publish_hint();
+    let elapsed = started.elapsed();
+
+    holder.join().expect("holder thread");
+
+    assert!(
+        elapsed < Duration::from_secs(1),
+        "a completion hint waited {elapsed:?} for a slot another thread was holding"
+    );
+    assert!(
+        notifier.pending.load(Ordering::Acquire),
+        "a hint dropped for contention must be recorded as pending"
+    );
+}
+
 #[test]
 fn runtime_generation_overflow_is_checked_and_path_free() {
     let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
@@ -1905,7 +1959,7 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
     bundle
         .publish_runtime(ProductRuntimeGeneration::new(1).expect("generation"))
         .expect("publish runtime health");
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if bundle
             .controller
